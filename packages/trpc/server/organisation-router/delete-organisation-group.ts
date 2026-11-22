@@ -1,6 +1,7 @@
 import { ORGANISATION_MEMBER_ROLE_PERMISSIONS_MAP } from '@documenso/lib/constants/organisations';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { getMemberOrganisationRole } from '@documenso/lib/server-only/team/get-member-roles';
+import { reassignEnvelopesAfterAccessLoss } from '@documenso/lib/server-only/team/reassign-envelopes-after-access-loss';
 import { buildOrganisationWhereQuery, isOrganisationRoleWithinUserHierarchy } from '@documenso/lib/utils/organisations';
 import { prisma } from '@documenso/prisma';
 import { OrganisationGroupType } from '@prisma/client';
@@ -76,10 +77,22 @@ export const deleteOrganisationGroupRoute = authenticatedProcedure
       });
     }
 
-    await prisma.organisationGroup.delete({
-      where: {
-        id: groupId,
-        organisationId: organisation.id,
-      },
+    // Solid Ten: members who lose their last path to a team hand its envelopes to the owner.
+    await prisma.$transaction(async (tx) => {
+      const userIds = (
+        await tx.organisationGroupMember.findMany({
+          where: { groupId },
+          select: { organisationMember: { select: { userId: true } } },
+        })
+      ).map(({ organisationMember }) => organisationMember.userId);
+
+      await tx.organisationGroup.delete({
+        where: {
+          id: groupId,
+          organisationId: organisation.id,
+        },
+      });
+
+      await reassignEnvelopesAfterAccessLoss(tx, { organisationId: organisation.id, userIds });
     });
   });

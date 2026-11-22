@@ -3,6 +3,10 @@ import { disableTwoFactorAuthentication } from '@documenso/lib/server-only/2fa/d
 import { enableTwoFactorAuthentication } from '@documenso/lib/server-only/2fa/enable-2fa';
 import { setupTwoFactorAuthentication } from '@documenso/lib/server-only/2fa/setup-2fa';
 import { viewBackupCodes } from '@documenso/lib/server-only/2fa/view-backup-codes';
+import {
+  assertCredentialChangeStepUp,
+  revokeOtherUserSessions,
+} from '@documenso/lib/server-only/auth/credential-step-up';
 import { prisma } from '@documenso/prisma';
 import { sValidator } from '@hono/standard-validator';
 import { Hono } from 'hono';
@@ -21,7 +25,10 @@ export const twoFactorRoute = new Hono<HonoAuthContext>()
    * Setup two factor authentication.
    */
   .post('/setup', async (c) => {
-    const { user } = await getSession(c);
+    const { user, session } = await getSession(c);
+
+    // Solid Ten Sign (AUD-C10 follow-up): a credential change needs a recent sign-in.
+    await assertCredentialChangeStepUp({ session, userId: user.id, checkTwoFactor: false });
 
     const result = await setupTwoFactorAuthentication({
       user,
@@ -40,7 +47,10 @@ export const twoFactorRoute = new Hono<HonoAuthContext>()
   .post('/enable', sValidator('json', ZEnableTwoFactorRequestSchema), async (c) => {
     const requestMetadata = c.get('requestMetadata');
 
-    const { user: sessionUser } = await getSession(c);
+    const { user: sessionUser, session } = await getSession(c);
+
+    // Solid Ten Sign (AUD-C10 follow-up): a credential change needs a recent sign-in.
+    await assertCredentialChangeStepUp({ session, userId: sessionUser.id, checkTwoFactor: false });
 
     const user = await prisma.user.findFirst({
       where: {
@@ -66,6 +76,9 @@ export const twoFactorRoute = new Hono<HonoAuthContext>()
       requestMetadata,
     });
 
+    // Solid Ten Sign (AUD-C10): a 2FA change ends the user's other sign-ins.
+    await revokeOtherUserSessions({ userId: user.id, currentSessionId: session.id });
+
     return c.json({
       success: true,
       recoveryCodes: result.recoveryCodes,
@@ -78,7 +91,10 @@ export const twoFactorRoute = new Hono<HonoAuthContext>()
   .post('/disable', sValidator('json', ZDisableTwoFactorRequestSchema), async (c) => {
     const requestMetadata = c.get('requestMetadata');
 
-    const { user: sessionUser } = await getSession(c);
+    const { user: sessionUser, session } = await getSession(c);
+
+    // Solid Ten Sign (AUD-C10 follow-up): a credential change needs a recent sign-in.
+    await assertCredentialChangeStepUp({ session, userId: sessionUser.id, checkTwoFactor: false });
 
     const user = await prisma.user.findFirst({
       where: {
@@ -106,6 +122,9 @@ export const twoFactorRoute = new Hono<HonoAuthContext>()
       requestMetadata,
     });
 
+    // Solid Ten Sign (AUD-C10): a 2FA change ends the user's other sign-ins.
+    await revokeOtherUserSessions({ userId: user.id, currentSessionId: session.id });
+
     return c.text('OK', 201);
   })
 
@@ -113,7 +132,10 @@ export const twoFactorRoute = new Hono<HonoAuthContext>()
    * View backup codes.
    */
   .post('/view-recovery-codes', sValidator('json', ZViewTwoFactorRecoveryCodesRequestSchema), async (c) => {
-    const { user: sessionUser } = await getSession(c);
+    const { user: sessionUser, session } = await getSession(c);
+
+    // Solid Ten Sign (AUD-C10 follow-up): a credential change needs a recent sign-in.
+    await assertCredentialChangeStepUp({ session, userId: sessionUser.id, checkTwoFactor: false });
 
     const user = await prisma.user.findFirst({
       where: {

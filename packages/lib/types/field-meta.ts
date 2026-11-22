@@ -1,7 +1,8 @@
 import { FieldType } from '@prisma/client';
 import { z } from 'zod';
-
+import { FIELD_FILE_KINDS, FIELD_FILE_MAX_FILES_LIMIT } from '../constants/field-file';
 import { DEFAULT_SIGNATURE_TEXT_FONT_SIZE } from '../constants/pdf';
+import { ZFieldConditionSchema, ZFieldFormulaSchema, ZFieldKeySchema } from './field-logic';
 
 export const FIELD_DEFAULT_GENERIC_VERTICAL_ALIGN = 'middle';
 export const FIELD_DEFAULT_GENERIC_ALIGN = 'left';
@@ -93,6 +94,8 @@ export const ZBaseFieldMeta = z.object({
   readOnly: z.boolean().optional(),
   fontSize: z.number().min(8).max(96).default(DEFAULT_FIELD_FONT_SIZE).optional(),
   overflow: ZFieldOverflowMode.optional(),
+  fieldKey: ZFieldKeySchema.optional(),
+  condition: ZFieldConditionSchema.optional(),
 });
 
 export type TBaseFieldMeta = z.infer<typeof ZBaseFieldMeta>;
@@ -154,6 +157,11 @@ export const ZNumberFieldMeta = ZBaseFieldMeta.extend({
   lineHeight: ZFieldMetaLineHeight.nullish(),
   letterSpacing: ZFieldMetaLetterSpacing.nullish(),
   verticalAlign: ZFieldMetaVerticalAlign.nullish(),
+  formula: ZFieldFormulaSchema.optional(),
+  formulaEmptySourcesAsZero: z
+    .boolean()
+    .optional()
+    .describe('With a formula: count empty sources as 0 instead of leaving the result empty. Default false.'),
 });
 
 export type TNumberFieldMeta = z.infer<typeof ZNumberFieldMeta>;
@@ -207,6 +215,19 @@ export const ZSignatureFieldMeta = ZBaseFieldMeta.extend({
 
 export type TSignatureFieldMeta = z.infer<typeof ZSignatureFieldMeta>;
 
+/**
+ * Solid Ten: an "Attach a file" field. The files are stored with the envelope, never in
+ * the PDF; the field shows their names.
+ */
+export const ZFileFieldMeta = ZBaseFieldMeta.extend({
+  type: z.literal('file'),
+  maxFiles: z.coerce.number().int().min(1).max(FIELD_FILE_MAX_FILES_LIMIT).optional(),
+  allowedFileTypes: z.array(z.enum(FIELD_FILE_KINDS)).min(1).optional(),
+  visibleToAllRecipients: z.boolean().optional(),
+});
+
+export type TFileFieldMeta = z.infer<typeof ZFileFieldMeta>;
+
 export const ZFieldMetaNotOptionalSchema = z.discriminatedUnion('type', [
   ZSignatureFieldMeta,
   ZInitialsFieldMeta,
@@ -218,6 +239,7 @@ export const ZFieldMetaNotOptionalSchema = z.discriminatedUnion('type', [
   ZRadioFieldMeta,
   ZCheckboxFieldMeta,
   ZDropdownFieldMeta,
+  ZFileFieldMeta,
 ]);
 
 export type TFieldMetaNotOptionalSchema = z.infer<typeof ZFieldMetaNotOptionalSchema>;
@@ -322,6 +344,10 @@ export const ZFieldAndMetaSchema = z.discriminatedUnion('type', [
     type: z.literal(FieldType.DROPDOWN),
     fieldMeta: ZDropdownFieldMeta.optional(),
   }),
+  z.object({
+    type: z.literal(FieldType.FILE),
+    fieldMeta: ZFileFieldMeta.optional(),
+  }),
 ]);
 
 export type TFieldAndMeta = z.infer<typeof ZFieldAndMetaSchema>;
@@ -408,6 +434,16 @@ export const FIELD_SIGNATURE_META_DEFAULT_VALUES: TSignatureFieldMeta = {
   overflow: DEFAULT_SIGNATURE_OVERFLOW_MODE,
 };
 
+export const FIELD_FILE_META_DEFAULT_VALUES: TFileFieldMeta = {
+  type: 'file',
+  fontSize: DEFAULT_FIELD_FONT_SIZE,
+  label: '',
+  required: false,
+  readOnly: false,
+  maxFiles: 1,
+  visibleToAllRecipients: false,
+};
+
 export const FIELD_META_DEFAULT_VALUES: Record<FieldType, TFieldMetaSchema> = {
   [FieldType.SIGNATURE]: FIELD_SIGNATURE_META_DEFAULT_VALUES,
   [FieldType.FREE_SIGNATURE]: undefined,
@@ -420,6 +456,7 @@ export const FIELD_META_DEFAULT_VALUES: Record<FieldType, TFieldMetaSchema> = {
   [FieldType.RADIO]: FIELD_RADIO_META_DEFAULT_VALUES,
   [FieldType.CHECKBOX]: FIELD_CHECKBOX_META_DEFAULT_VALUES,
   [FieldType.DROPDOWN]: FIELD_DROPDOWN_META_DEFAULT_VALUES,
+  [FieldType.FILE]: FIELD_FILE_META_DEFAULT_VALUES,
 } as const;
 
 export const ZEnvelopeFieldAndMetaSchema = z.discriminatedUnion('type', [
@@ -466,6 +503,10 @@ export const ZEnvelopeFieldAndMetaSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal(FieldType.DROPDOWN),
     fieldMeta: ZDropdownFieldMeta.optional().default(FIELD_DROPDOWN_META_DEFAULT_VALUES),
+  }),
+  z.object({
+    type: z.literal(FieldType.FILE),
+    fieldMeta: ZFileFieldMeta.optional().default(FIELD_FILE_META_DEFAULT_VALUES),
   }),
 ]);
 

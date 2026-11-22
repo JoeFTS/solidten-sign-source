@@ -2,6 +2,7 @@ import { TWO_FACTOR_EMAIL_EXPIRATION_MINUTES } from '@documenso/lib/server-only/
 import { send2FATokenEmail } from '@documenso/lib/server-only/2fa/email/send-2fa-token-email';
 import { assertRateLimit } from '@documenso/lib/server-only/rate-limit/rate-limit-middleware';
 import { request2FAEmailRateLimit } from '@documenso/lib/server-only/rate-limit/rate-limits';
+import { getTokenRateLimitKey } from '@documenso/lib/server-only/rate-limit/token-rate-limit-key';
 import { DocumentAuth } from '@documenso/lib/types/document-auth';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
 import { prisma } from '@documenso/prisma';
@@ -24,7 +25,8 @@ export const accessAuthRequest2FAEmailRoute = procedure
 
       const rateLimitResult = await request2FAEmailRateLimit.check({
         ip: ctx.metadata.requestMetadata.ipAddress ?? 'unknown',
-        identifier: token,
+        // Solid Ten Sign (S-L6): never the raw link token as a key.
+        identifier: getTokenRateLimitKey(token),
       });
 
       assertRateLimit(rateLimitResult);

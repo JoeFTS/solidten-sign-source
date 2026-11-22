@@ -14,11 +14,16 @@ import { AppError, AppErrorCode } from '../../errors/app-error';
 import { jobs } from '../../jobs/client';
 import { extractDerivedDocumentEmailSettings } from '../../types/document-email';
 import { type EnvelopeIdOptions, mapSecondaryIdToDocumentId } from '../../utils/envelope';
-import { canRecipientBeModified, isRecipientEmailValidForSending } from '../../utils/recipients';
+import { canSendMailToRecipient } from '../../utils/recipient-mail';
+import { canRecipientBeModified } from '../../utils/recipients';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
+import { lockEnvelopeForRecipientChange } from '../envelope/envelope-transition-lock';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
+import { prepareRecipientEmailChanges } from '../recipient-reassign/recipient-email-change';
 import { assertCompatibleRecipientGrouping } from '../signature-level/assert-compatible-recipient-grouping';
 import { assertCompatibleRecipientRole } from '../signature-level/assert-compatible-recipient-role';
+import { assertAssistantRolesAllowedOnEnvelope } from './assert-assistant-signing-order';
+import { assertNewRecipientEmailsAvailable } from './assert-new-recipient-emails';
 import { resolveReplacedRecipientSigningOrders } from './assign-omitted-recipient-signing-orders';
 
 export interface SetDocumentRecipientsOptions {
@@ -82,6 +87,12 @@ export const setDocumentRecipients = async ({
     throw new Error('Document already complete');
   }
 
+  // Solid Ten Sign (AUD-C12): an assistant needs sequential signing.
+  await assertAssistantRolesAllowedOnEnvelope({
+    envelopeId: envelope.id,
+    roles: recipients.map((recipient) => recipient.role),
+  });
+
   const recipientsHaveActionAuth = recipients.some(
     (recipient) => recipient.actionAuth && recipient.actionAuth.length > 0,
   );
@@ -116,6 +127,13 @@ export const setDocumentRecipients = async ({
     existingRecipients: normalizedRecipients.filter((recipient) => !requestedOrderRecipients.includes(recipient)),
   });
 
+  // Solid Ten Sign (RT2-L1): no new recipient with an email already on a sent document.
+  assertNewRecipientEmailsAvailable({
+    envelope,
+    existingIds: existingRecipients.map((recipient) => recipient.id),
+    resulting: normalizedRecipients,
+  });
+
   const removedRecipients = existingRecipients.filter(
     (existingRecipient) => !normalizedRecipients.find((recipient) => recipient.id === existingRecipient.id),
   );
@@ -142,8 +160,30 @@ export const setDocumentRecipients = async ({
     };
   });
 
+  const emailChanges = await prepareRecipientEmailChanges({
+    envelope,
+    changes: linkedRecipients.flatMap((recipient) =>
+      recipient._persisted && recipient.canPersistedRecipientBeModified
+        ? [{ previous: recipient._persisted, newEmail: recipient.email }]
+        : [],
+    ),
+    resultingRecipients: linkedRecipients.map((recipient) => ({
+      id: recipient._persisted?.id,
+      email: recipient.email,
+    })),
+  });
+
   const persistedRecipients = await prisma.$transaction(async (tx) => {
     await assertEnvelopeMutable(envelope, tx);
+
+    // Solid Ten Sign (FS2-C1): lock, and refuse when a recipient being edited or removed signed,
+    // declined or got a new link since it was read.
+    await lockEnvelopeForRecipientChange(tx, envelope.id, [
+      ...linkedRecipients.flatMap((recipient) =>
+        recipient._persisted && recipient.canPersistedRecipientBeModified ? [recipient._persisted] : [],
+      ),
+      ...removedRecipients,
+    ]);
 
     return await Promise.all(
       linkedRecipients.map(async (recipient) => {
@@ -177,6 +217,7 @@ export const setDocumentRecipients = async ({
             sendStatus: recipient.role === RecipientRole.CC ? SendStatus.SENT : SendStatus.NOT_SENT,
             signingStatus: recipient.role === RecipientRole.CC ? SigningStatus.SIGNED : SigningStatus.NOT_SIGNED,
             authOptions,
+            ...emailChanges.resetDataFor(recipient._persisted?.id),
           },
           create: {
             name: recipient.name,
@@ -192,6 +233,10 @@ export const setDocumentRecipients = async ({
         });
 
         const recipientId = upsertedRecipient.id;
+
+        if (recipient._persisted) {
+          await emailChanges.recordAudit(tx, upsertedRecipient, requestMetadata);
+        }
 
         // Clear all fields if the recipient role is changed to a type that cannot have fields.
         if (
@@ -254,6 +299,8 @@ export const setDocumentRecipients = async ({
     );
   });
 
+  await emailChanges.notify(requestMetadata);
+
   if (removedRecipients.length > 0) {
     await prisma.$transaction(async (tx) => {
       await tx.recipient.deleteMany({
@@ -289,7 +336,7 @@ export const setDocumentRecipients = async ({
           if (
             recipient.sendStatus !== SendStatus.SENT ||
             recipient.role === RecipientRole.CC ||
-            !isRecipientEmailValidForSending(recipient)
+            !canSendMailToRecipient(recipient)
           ) {
             return;
           }

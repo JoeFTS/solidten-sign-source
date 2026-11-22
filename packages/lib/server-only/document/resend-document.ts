@@ -1,7 +1,7 @@
 import { DocumentInviteEmailTemplate } from '@documenso/email/templates/document-invite';
 import { resolveExpiresAt } from '@documenso/lib/constants/envelope-expiration';
 import { RECIPIENT_ROLE_TO_EMAIL_TYPE, RECIPIENT_ROLES_DESCRIPTION } from '@documenso/lib/constants/recipient-roles';
-import { AppError } from '@documenso/lib/errors/app-error';
+import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
@@ -21,10 +21,12 @@ import { createElement } from 'react';
 
 import { getI18nInstance } from '../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../constants/app';
+import { supersedeWaitingSigningEmailRetries } from '../../jobs/client/supersede-signing-email-retries';
 import { extractDerivedDocumentEmailSettings } from '../../types/document-email';
 import { mapEnvelopeToWebhookDocumentPayload, ZWebhookDocumentSchema } from '../../types/webhook-payload';
 import { isDocumentCompleted } from '../../utils/document';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
+import { UNVERIFIED_RECIPIENT_EMAIL_MESSAGE } from '../../utils/recipient-mail';
 import { isRecipientEmailValidForSending } from '../../utils/recipients';
 import { renderEmailWithI18N } from '../../utils/render-email-with-i18n';
 import { shouldShowNewAccountWarning } from '../../utils/sender-trust';
@@ -108,6 +110,14 @@ export const resendDocument = async ({ id, userId, recipients, teamId, requestMe
     throw new Error('Can not send completed document');
   }
 
+  // Solid Ten Sign (AUD-C4 follow-up): say so, instead of answering OK and sending nothing.
+  if (envelope.recipients.some((recipient) => recipients.includes(recipient.id) && recipient.unverifiedEmailAt)) {
+    throw new AppError(AppErrorCode.INVALID_REQUEST, {
+      message: UNVERIFIED_RECIPIENT_EMAIL_MESSAGE,
+      userMessage: UNVERIFIED_RECIPIENT_EMAIL_MESSAGE,
+    });
+  }
+
   // A recipientCount of 0 means unlimited recipients are allowed. Block resending
   // when the document has more recipients than the organisation is allowed to send
   // to, mirroring the check in `sendDocument`. This prevents bypassing the limit by
@@ -164,7 +174,31 @@ export const resendDocument = async ({ id, userId, recipients, teamId, requestMe
     envelope.documentMeta,
   ).recipientSigningRequest;
 
-  if (!isRecipientSigningRequestEmailEnabled) {
+  // Loaded on use: the SMS delivery chain pulls in lingui macros, which must stay out of this
+  // module's load-time imports (see sms-availability.ts).
+  const { resendSigningSms } = await import('../sms/deliver-signing-sms');
+
+  const { emailRecipientIds, smsDeliveredCount } = await resendSigningSms({
+    envelope,
+    recipients: recipientsToRemind,
+    resentAt,
+    isSigningRequestEmailEnabled: isRecipientSigningRequestEmailEnabled,
+    user,
+    requestMetadata: requestMetadata.requestMetadata,
+  });
+
+  const recipientsToEmail = recipientsToRemind.filter((recipient) => emailRecipientIds.has(recipient.id));
+
+  if (recipientsToEmail.length === 0) {
+    if (smsDeliveredCount > 0) {
+      await triggerWebhook({
+        event: WebhookTriggerEvents.DOCUMENT_REMINDER_SENT,
+        data: ZWebhookDocumentSchema.parse(mapEnvelopeToWebhookDocumentPayload(envelope)),
+        userId: envelope.userId,
+        teamId: envelope.teamId,
+      });
+    }
+
     return envelope;
   }
 
@@ -197,7 +231,7 @@ export const resendDocument = async ({ id, userId, recipients, teamId, requestMe
   await assertOrganisationRatesAndLimits({
     organisationId,
     organisationClaim: claims,
-    count: recipientsToRemind.length,
+    count: recipientsToEmail.length,
     type: 'email',
   });
 
@@ -207,7 +241,7 @@ export const resendDocument = async ({ id, userId, recipients, teamId, requestMe
   });
 
   await Promise.all(
-    recipientsToRemind.map(async (recipient) => {
+    recipientsToEmail.map(async (recipient) => {
       if (recipient.role === RecipientRole.CC || !isRecipientEmailValidForSending(recipient)) {
         return;
       }
@@ -221,18 +255,28 @@ export const resendDocument = async ({ id, userId, recipients, teamId, requestMe
 
       const recipientActionVerb = i18n._(RECIPIENT_ROLES_DESCRIPTION[recipient.role].actionVerb).toLowerCase();
 
+      // Solid Ten: a recipient who never got the first email (it was not delivered) gets the
+      // normal signing request, not a "Reminder".
+      const isFirstDelivery = recipient.sendStatus === SendStatus.NOT_SENT;
+
       let emailMessage = envelope.documentMeta.message || '';
-      let emailSubject = i18n._(msg`Reminder: Please ${recipientActionVerb} this document`);
+      let emailSubject = isFirstDelivery
+        ? i18n._(msg`Please ${recipientActionVerb} this document`)
+        : i18n._(msg`Reminder: Please ${recipientActionVerb} this document`);
 
       if (selfSigner) {
         emailMessage = i18n._(
           msg`You have initiated the document ${`"${envelope.title}"`} that requires you to ${recipientActionVerb} it.`,
         );
-        emailSubject = i18n._(msg`Reminder: Please ${recipientActionVerb} your document`);
+        emailSubject = isFirstDelivery
+          ? i18n._(msg`Please ${recipientActionVerb} your document`)
+          : i18n._(msg`Reminder: Please ${recipientActionVerb} your document`);
       }
 
       if (organisationType === OrganisationType.ORGANISATION) {
-        emailSubject = i18n._(msg`Reminder: ${envelope.team.name} invited you to ${recipientActionVerb} a document`);
+        emailSubject = isFirstDelivery
+          ? i18n._(msg`${envelope.team.name} invited you to ${recipientActionVerb} a document`)
+          : i18n._(msg`Reminder: ${envelope.team.name} invited you to ${recipientActionVerb} a document`);
 
         if (!emailMessage) {
           const inviterName = user.name || user.email;
@@ -296,7 +340,10 @@ export const resendDocument = async ({ id, userId, recipients, teamId, requestMe
         from: senderEmail,
         replyTo: replyToEmail,
         subject: envelope.documentMeta.subject
-          ? renderCustomEmailTemplate(i18n._(msg`Reminder: ${envelope.documentMeta.subject}`), customEmailTemplate)
+          ? renderCustomEmailTemplate(
+              isFirstDelivery ? envelope.documentMeta.subject : i18n._(msg`Reminder: ${envelope.documentMeta.subject}`),
+              customEmailTemplate,
+            )
           : emailSubject,
         html,
         text,
@@ -318,6 +365,14 @@ export const resendDocument = async ({ id, userId, recipients, teamId, requestMe
           sentAt: new Date(),
         },
       });
+
+      // Solid Ten: this send worked, so the recipient is no longer "not delivered", and a retry
+      // still waiting from a mail outage must not send it again.
+      await prisma.recipient.updateMany({
+        where: { id: recipient.id, deliveryFailedAt: { not: null } },
+        data: { deliveryFailedAt: null },
+      });
+      await supersedeWaitingSigningEmailRetries(recipient.id);
 
       await prisma.documentAuditLog.create({
         data: createDocumentAuditLogData({

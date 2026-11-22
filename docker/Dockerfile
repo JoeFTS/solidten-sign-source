@@ -97,6 +97,10 @@ RUN npx turbo run build --filter=@documenso/remix...
 ###########################
 FROM base AS runner
 
+# Solid Ten Sign: run in production mode. Without this the app uses the development logger and
+# development error output (stack traces in API errors) and is about 10 times slower.
+ENV NODE_ENV=production
+
 ENV HUSKY=0
 ENV DOCKER_OUTPUT=1
 

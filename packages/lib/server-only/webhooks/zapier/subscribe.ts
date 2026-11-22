@@ -16,8 +16,6 @@ export const subscribeHandler = async (req: Request) => {
 
     const { webhookUrl, eventTrigger } = await req.json();
 
-    await assertNotPrivateUrl(webhookUrl);
-
     const result = await validateApiToken({ authorization }).catch(() => {
       throw new AppError(AppErrorCode.UNAUTHORIZED, { message: 'Unauthorized' });
     });
@@ -41,6 +39,10 @@ export const subscribeHandler = async (req: Request) => {
         message: 'You do not have permission to manage webhooks for this team',
       });
     }
+
+    // Solid Ten Sign (AUD-C7): the DNS lookup and address check run only for an authenticated
+    // caller with MANAGE_TEAM, so a stranger cannot use them to probe internal names.
+    await assertNotPrivateUrl(webhookUrl);
 
     const createdWebhook = await prisma.webhook.create({
       data: {

@@ -1,5 +1,6 @@
 import { ORGANISATION_MEMBER_ROLE_PERMISSIONS_MAP } from '@documenso/lib/constants/organisations';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { reassignEnvelopesAfterAccessLoss } from '@documenso/lib/server-only/team/reassign-envelopes-after-access-loss';
 import { generateDatabaseId } from '@documenso/lib/universal/id';
 import {
   buildOrganisationWhereQuery,
@@ -154,5 +155,9 @@ export const updateOrganisationMemberRoute = authenticatedProcedure
           groupId: newMemberGroup.id,
         },
       });
+
+      // Solid Ten: a lower role can drop the member's last path to a team (a team that does not inherit
+      // members); their envelopes there go to the owner, as for a group removal.
+      await reassignEnvelopesAfterAccessLoss(tx, { organisationId, userIds: [organisationMemberToUpdate.userId] });
     });
   });

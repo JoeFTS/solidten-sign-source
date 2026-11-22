@@ -70,9 +70,47 @@ declare namespace NodeJS {
     NEXT_PRIVATE_SIGNING_TIMESTAMP_AUTHORITY?: string;
     NEXT_PRIVATE_SIGNING_REASON?: string;
     NEXT_PUBLIC_SIGNING_CONTACT_INFO?: string;
+    NEXT_PUBLIC_ST_FIELD_LOGIC_ENABLED?: 'true' | 'false';
+    NEXT_PUBLIC_ST_PUBLIC_FORMS_ENABLED?: 'true' | 'false';
+    NEXT_PUBLIC_ST_FILE_UPLOAD_ENABLED?: 'true' | 'false';
+    NEXT_PUBLIC_ST_SOURCE_URL?: string;
+    NEXT_PRIVATE_ST_FILE_UPLOAD_MAX_BYTES?: string;
+    NEXT_PRIVATE_ST_FILE_UPLOAD_ENVELOPE_MAX_BYTES?: string;
+    NEXT_PRIVATE_ST_HEALTH_TOKEN?: string;
+    NEXT_PRIVATE_ST_OPERATOR_EMAILS?: string;
+    NEXT_PRIVATE_ST_SMS_DENIED_NANP_AREA_CODES?: string;
+    NEXT_PRIVATE_ST_SMS_ALLOW_FAKE_IN_PRODUCTION?: string;
+    NEXT_PRIVATE_ST_WEBHOOK_SIGNED_ONLY?: string;
+    NEXT_PRIVATE_ST_PUBLIC_FORM_SERVER_DAILY_CODE_CAP?: string;
+    NEXT_PRIVATE_ST_PUBLIC_FORM_DAILY_CODE_CAP?: string;
+    NEXT_PRIVATE_ST_SMS_DAILY_CAP?: string;
+    NEXT_PRIVATE_ST_EMAIL_ATTACHMENT_LIMIT_MB?: string;
+    NEXT_PRIVATE_ST_PDF_CHILD_MAX_MB?: string;
+    NEXT_PRIVATE_ST_PDF_CHILD_TIMEOUT_MS?: string;
+    NEXT_PRIVATE_ST_PDF_TEMP_DIR?: string;
+    NEXT_PRIVATE_ST_JOB_CONCURRENCY?: string;
+    NEXT_PRIVATE_ST_SHUTDOWN_DRAIN_MS?: string;
+    NEXT_PRIVATE_ST_PDF_CHILD_DISABLED?: string;
+    NEXT_PRIVATE_ST_PDF_CHILD_REQUIRED?: string;
+    NEXT_PRIVATE_ST_SMS_ALLOWED_COUNTRY_CODES?: string;
+    NEXT_PRIVATE_ST_PUBLIC_FORM_DAILY_EMAIL_CAP?: string;
     NEXT_PRIVATE_USE_LEGACY_SIGNING_SUBFILTER?: string;
 
     NEXT_PRIVATE_SMTP_TRANSPORT?: 'mailchannels' | 'resend' | 'smtp-auth' | 'smtp-api';
+
+    NEXT_PRIVATE_SMS_PROVIDER?: 'twilio' | 'fake';
+    NEXT_PRIVATE_TWILIO_ACCOUNT_SID?: string;
+    NEXT_PRIVATE_TWILIO_AUTH_TOKEN?: string;
+    NEXT_PRIVATE_TWILIO_FROM_NUMBER?: string;
+    NEXT_PRIVATE_TWILIO_MESSAGING_SERVICE_SID?: string;
+    /** Comma-separated hosts that webhooks may call even though they resolve to private addresses. */
+    NEXT_PRIVATE_WEBHOOK_SSRF_BYPASS_HOSTS?: string;
+    /** "true" puts recipient signing tokens back into webhook payloads (old shape). Default off. */
+    NEXT_PRIVATE_WEBHOOK_INCLUDE_RECIPIENT_TOKENS?: string;
+    /** Derived from NEXT_PRIVATE_WEBHOOK_SSRF_BYPASS_HOSTS in createPublicEnv; never set it directly. */
+    NEXT_PUBLIC_WEBHOOK_SSRF_BYPASS_ACTIVE?: 'true' | 'false';
+    /** Derived from NEXT_PRIVATE_SMS_PROVIDER in createPublicEnv; never set it directly. */
+    NEXT_PUBLIC_SMS_ENABLED?: 'true' | 'false';
 
     NEXT_PRIVATE_RESEND_API_KEY?: string;
 
@@ -113,6 +151,12 @@ declare namespace NodeJS {
     NEXT_PRIVATE_BROWSERLESS_URL?: string;
 
     NEXT_PRIVATE_JOBS_PROVIDER?: 'inngest' | 'local' | 'bullmq';
+    NEXT_PRIVATE_RETENTION_DRY_RUN?: string;
+    E2E_MAIL_SINK_URL?: string;
+    E2E_LARGE_PDF_PATH?: string;
+    E2E_PDF_CHILD_DISABLED?: string;
+    E2E_MAIL_CONTAINER?: string;
+    E2E_MAIL_REFUSED_DOMAIN?: string;
 
     NEXT_PUBLIC_USE_INTERNAL_URL_BROWSERLESS?: string;
 

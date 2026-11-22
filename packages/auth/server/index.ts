@@ -8,6 +8,7 @@ import { rejectEmbedSessionMiddleware } from './lib/session/embed-session-restri
 import { setCsrfCookie } from './lib/session/session-cookies';
 import { accountRoute } from './routes/account';
 import { callbackRoute } from './routes/callback';
+import { emailLinkRoute } from './routes/email-link';
 import { emailPasswordRoute } from './routes/email-password';
 import { embedRoute } from './routes/embed';
 import { oauthRoute } from './routes/oauth';
@@ -29,6 +30,10 @@ export const auth = new Hono<HonoAuthContext>()
   .use('/email-password/update-password', rejectEmbedSessionMiddleware)
   .use('/email-password/2fa/*', rejectEmbedSessionMiddleware)
   .use('/two-factor/*', rejectEmbedSessionMiddleware)
+  // Solid Ten Sign (S-L1): a sign-in locked for in-person signing cannot list or end the host's sign-ins.
+  .use('/sessions', rejectEmbedSessionMiddleware)
+  .use('/signout-all', rejectEmbedSessionMiddleware)
+  .use('/signout-session', rejectEmbedSessionMiddleware)
   .get('/csrf', async (c) => {
     const csrfToken = await setCsrfCookie(c);
 
@@ -40,6 +45,7 @@ export const auth = new Hono<HonoAuthContext>()
   .route('/callback', callbackRoute)
   .route('/oauth', oauthRoute)
   .route('/email-password', emailPasswordRoute)
+  .route('/email-link', emailLinkRoute)
   .route('/embed', embedRoute)
   .route('/passkey', passkeyRoute)
   .route('/two-factor', twoFactorRoute);
@@ -48,6 +54,25 @@ export const auth = new Hono<HonoAuthContext>()
  * Handle errors.
  */
 auth.onError((err, c) => {
+  // Solid Ten: a rate-limit refusal says so (it answered UNKNOWN_ERROR with an empty message)
+  // and keeps the Retry-After of the response the route built.
+  if (err instanceof HTTPException && err.status === 429) {
+    const retryAfter = err.res?.headers.get('Retry-After');
+
+    if (retryAfter) {
+      c.header('Retry-After', retryAfter);
+    }
+
+    return c.json(
+      {
+        code: AppErrorCode.TOO_MANY_REQUESTS,
+        message: 'Too many requests. Wait a moment, then try again.',
+        statusCode: 429,
+      },
+      429,
+    );
+  }
+
   if (err instanceof HTTPException) {
     return c.json(
       {

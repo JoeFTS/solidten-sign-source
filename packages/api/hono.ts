@@ -25,17 +25,27 @@ tsRestHonoApp
   .all('/zapier/subscribe', async (c) => subscribeHandler(c.req.raw))
   .all('/zapier/unsubscribe', async (c) => unsubscribeHandler(c.req.raw));
 
-tsRestHonoApp.mount('/', async (request) => {
-  return fetchRequestHandler({
-    request,
-    contract: ApiContractV1,
-    router: ApiContractV1Implementation,
-    options: {
-      errorHandler: (err) => {
-        if (err instanceof TsRestHttpError && err.statusCode === 500) {
-          console.error(err);
-        }
+// The ts-rest contract paths are absolute (`/api/v1/...`), so the handler needs the request with its
+// full path. Hono 4.13.18 strips the route prefix from a mounted request by default (4.13.13 did
+// not), which made every v1 document and template route answer 404. So the request is rebuilt with
+// its ORIGINAL url. It must be rebuilt, not passed through: under @hono/node-server 2.x the original
+// is that library's own lightweight request object, and ts-rest's `new Request(request)` then throws
+// ("Cannot read private member #state"), which answered 500 on every v1 route.
+tsRestHonoApp.mount(
+  '/',
+  async (request) => {
+    return fetchRequestHandler({
+      request,
+      contract: ApiContractV1,
+      router: ApiContractV1Implementation,
+      options: {
+        errorHandler: (err) => {
+          if (err instanceof TsRestHttpError && err.statusCode === 500) {
+            console.error(err);
+          }
+        },
       },
-    },
-  });
-});
+    });
+  },
+  { replaceRequest: (request) => new Request(request.url, request) },
+);

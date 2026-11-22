@@ -6,6 +6,26 @@ import { getIpAddress } from '../../universal/get-ip-address';
 import type { createRateLimit, RateLimitCheckResult } from './rate-limit';
 
 /**
+ * Solid Ten: every 429 says the same thing (LD3-L1). JSON routes answer
+ * `{ "error": TOO_MANY_REQUESTS_MESSAGE, "code": "TOO_MANY_REQUESTS" }` with Retry-After and the
+ * X-RateLimit headers; tRPC answers its own error shape with code -32029 (trpc-rate-limit.ts,
+ * and trpc.ts for limits checked inside a procedure).
+ */
+export const TOO_MANY_REQUESTS_MESSAGE = 'Too many requests. Wait a moment, then try again.';
+
+export const TOO_MANY_REQUESTS_BODY = { error: TOO_MANY_REQUESTS_MESSAGE, code: 'TOO_MANY_REQUESTS' } as const;
+
+/**
+ * Solid Ten: seconds until a refused caller may try again, for Retry-After.
+ */
+export const getRetryAfterSeconds = (reset: Date) => Math.max(1, Math.ceil((reset.getTime() - Date.now()) / 1000));
+
+/** Solid Ten: a Retry-After header for a refusal, to pass as AppError `headers` or on a Response. */
+export const getRetryAfterHeaders = (reset: Date): Record<string, string> => ({
+  'Retry-After': String(getRetryAfterSeconds(reset)),
+});
+
+/**
  * Set rate limit response headers on a Hono context.
  */
 const setRateLimitHeaders = (c: Context, result: RateLimitCheckResult) => {
@@ -42,7 +62,7 @@ export const createRateLimitMiddleware = (
     if (result.isLimited) {
       c.header('Retry-After', String(Math.max(1, Math.ceil((result.reset.getTime() - Date.now()) / 1000))));
 
-      return c.json({ error: 'Too many requests, please try again later.' }, 429);
+      return c.json(TOO_MANY_REQUESTS_BODY, 429);
     }
 
     await next();
@@ -60,7 +80,7 @@ export const rateLimitResponse = (c: Context, result: RateLimitCheckResult): Res
   if (result.isLimited) {
     c.header('Retry-After', String(Math.max(1, Math.ceil((result.reset.getTime() - Date.now()) / 1000))));
 
-    return c.json({ error: 'Too many requests, please try again later.' }, 429);
+    return c.json(TOO_MANY_REQUESTS_BODY, 429);
   }
 
   return null;
@@ -76,7 +96,8 @@ export const assertRateLimit = (result: RateLimitCheckResult): void => {
     const retryAfter = String(Math.max(1, Math.ceil((result.reset.getTime() - Date.now()) / 1000)));
 
     throw new AppError(AppErrorCode.TOO_MANY_REQUESTS, {
-      message: 'Too many requests, please try again later.',
+      message: TOO_MANY_REQUESTS_MESSAGE,
+      userMessage: TOO_MANY_REQUESTS_MESSAGE,
       headers: {
         'X-RateLimit-Limit': String(result.limit),
         'X-RateLimit-Remaining': String(result.remaining),

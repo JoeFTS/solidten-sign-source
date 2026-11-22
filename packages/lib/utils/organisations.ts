@@ -151,5 +151,14 @@ export const generateDefaultOrganisationSettings = (): Omit<OrganisationGlobalSe
     reminderSettings: DEFAULT_ENVELOPE_REMINDER_SETTINGS,
 
     aiFeaturesEnabled: false,
+
+    allowSenderReassign: true,
+    allowSignerReassign: false,
+
+    allowInPersonSigning: true,
+
+    commentsEnabled: false,
+    commentsSharedThread: false,
+    retentionSettings: null,
   };
 };

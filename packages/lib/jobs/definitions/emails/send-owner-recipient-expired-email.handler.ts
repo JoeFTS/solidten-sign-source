@@ -6,10 +6,12 @@ import { createElement } from 'react';
 import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
+import { canOwnerReachTeam } from '../../../server-only/team/reassign-envelopes-after-access-loss';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import { formatDocumentsPath } from '../../../utils/teams';
 import type { JobRunIO } from '../../client/_internal/job';
+import { runTaskAtMostOnce } from '../../client/at-most-once-task';
 import type { TSendOwnerRecipientExpiredEmailJobDefinition } from './send-owner-recipient-expired-email';
 
 export const run = async ({ payload, io }: { payload: TSendOwnerRecipientExpiredEmailJobDefinition; io: JobRunIO }) => {
@@ -55,6 +57,11 @@ export const run = async ({ payload, io }: { payload: TSendOwnerRecipientExpired
 
   const { documentMeta, user: documentOwner } = envelope;
 
+  // Solid Ten: an owner who lost access to the team gets no more notices of its documents.
+  if (!(await canOwnerReachTeam({ userId: documentOwner.id, teamId: envelope.teamId }))) {
+    return;
+  }
+
   const isEmailEnabled = extractDerivedDocumentEmailSettings(documentMeta).ownerRecipientExpired;
 
   if (!isEmailEnabled) {
@@ -87,7 +94,8 @@ export const run = async ({ payload, io }: { payload: TSendOwnerRecipientExpired
     assetBaseUrl: NEXT_PUBLIC_WEBAPP_URL(),
   });
 
-  await io.runTask('send-owner-recipient-expired-email', async () => {
+  // Solid Ten: at most once; a re-run after a crash during the send does not send it twice.
+  await runTaskAtMostOnce(io, 'send-owner-recipient-expired-email', async (markSending) => {
     const [html, text] = await Promise.all([
       renderEmailWithI18N(template, { lang: emailLanguage, branding }),
       renderEmailWithI18N(template, {
@@ -96,6 +104,8 @@ export const run = async ({ payload, io }: { payload: TSendOwnerRecipientExpired
         plainText: true,
       }),
     ]);
+
+    await markSending();
 
     await emailTransport.sendMail({
       to: {

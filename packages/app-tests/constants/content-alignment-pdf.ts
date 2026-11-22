@@ -36,7 +36,8 @@ export const CONTENT_ALIGNMENT_PDF = fs.readFileSync(path.join(__dirname, '../..
  * The Documenso wordmark, wide (about 6.8:1) so fitting, centering and
  * rotation are all visible.
  */
-export const CONTENT_ALIGNMENT_LOGO_PNG = fs.readFileSync(path.join(__dirname, '../../../packages/assets/logo.png'));
+// Solid Ten: a copy of upstream's wordmark kept for tests (see field-alignment-pdf.ts).
+export const CONTENT_ALIGNMENT_LOGO_PNG = fs.readFileSync(path.join(__dirname, '../assets/visual-fixture-logo.png'));
 
 export const CONTENT_ALIGNMENT_PAGES = {
   text: 1,

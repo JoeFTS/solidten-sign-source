@@ -4,6 +4,7 @@ import type { Transporter } from 'nodemailer';
 import { createTransport } from 'nodemailer';
 
 import { MailChannelsTransport } from './transports/mailchannels';
+import { SMTP_TIMEOUTS } from './transports/smtp-timeouts';
 
 /**
  * Creates a Nodemailer transport object for sending emails.
@@ -83,6 +84,7 @@ const getTransport = (): Transporter => {
       host: env('NEXT_PRIVATE_SMTP_HOST'),
       port: Number(env('NEXT_PRIVATE_SMTP_PORT')) || 587,
       secure: env('NEXT_PRIVATE_SMTP_SECURE') === 'true',
+      ...SMTP_TIMEOUTS,
       auth: {
         user: env('NEXT_PRIVATE_SMTP_APIKEY_USER') ?? 'apikey',
         pass: env('NEXT_PRIVATE_SMTP_APIKEY') ?? '',
@@ -94,6 +96,7 @@ const getTransport = (): Transporter => {
     host: env('NEXT_PRIVATE_SMTP_HOST') ?? '127.0.0.1:2500',
     port: Number(env('NEXT_PRIVATE_SMTP_PORT')) || 587,
     secure: env('NEXT_PRIVATE_SMTP_SECURE') === 'true',
+    ...SMTP_TIMEOUTS,
     ignoreTLS: env('NEXT_PRIVATE_SMTP_UNSAFE_IGNORE_TLS') === 'true',
     auth: env('NEXT_PRIVATE_SMTP_USERNAME')
       ? {

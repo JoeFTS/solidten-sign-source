@@ -80,7 +80,8 @@ test('[PUBLIC_PROFILE]: create team profile', async ({ page }) => {
     throw new Error('Expected seeded direct template signature field to exist');
   }
 
-  await page.getByRole('link', { name: 'Sign' }).click();
+  // Exact: the header logo link is named "Solid Ten Sign" and also contains "Sign".
+  await page.getByRole('link', { name: 'Sign', exact: true }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await signSignaturePad(page);

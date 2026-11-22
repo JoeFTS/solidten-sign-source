@@ -26,7 +26,8 @@ export const ZWebhookRecipientSchema = z.object({
   templateId: z.number().nullable(),
   email: z.string(),
   name: z.string(),
-  token: z.string(),
+  // Solid Ten: only present when NEXT_PRIVATE_WEBHOOK_INCLUDE_RECIPIENT_TOKENS=true.
+  token: z.string().optional(),
   documentDeletedAt: z.coerce.date().nullable(),
   expiresAt: z.coerce.date().nullable(),
   expirationNotifiedAt: z.coerce.date().nullable(),
@@ -63,6 +64,23 @@ export const ZWebhookDocumentMetaSchema = z.object({
 /**
  * Schema for document data in webhook payloads.
  */
+/**
+ * Solid Ten: a file a signer attached to an "Attach a file" field. Metadata only.
+ */
+export const ZWebhookAttachedFileSchema = z.object({
+  id: z.string(),
+  fieldId: z.string(),
+  recipientId: z.number(),
+  fileName: z.string(),
+  mimeType: z.string(),
+  size: z.number(),
+  sha256: z.string(),
+  uploadedBy: z.object({ name: z.string(), email: z.string() }),
+  uploadedAt: z.string(),
+});
+
+export type TWebhookAttachedFile = z.infer<typeof ZWebhookAttachedFileSchema>;
+
 export const ZWebhookDocumentSchema = z.object({
   id: z.number(),
   envelopeId: z.string(),
@@ -87,6 +105,11 @@ export const ZWebhookDocumentSchema = z.object({
    * Legacy field for backwards compatibility.
    */
   Recipient: z.array(ZWebhookRecipientSchema),
+
+  /**
+   * Solid Ten: files signers attached. Present only when there are any.
+   */
+  attachedFiles: z.array(ZWebhookAttachedFileSchema).optional(),
 });
 
 /**

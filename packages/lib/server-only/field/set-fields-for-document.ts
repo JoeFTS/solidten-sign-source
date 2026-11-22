@@ -25,6 +25,7 @@ import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapFieldToLegacyField } from '../../utils/fields';
 import { canRecipientFieldsBeModified } from '../../utils/recipients';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
+import { assertFieldLogicAllowed, toFieldLogicDefinitions } from '../field-logic/assert-field-logic';
 
 export interface SetFieldsForDocumentOptions {
   userId: number;
@@ -123,6 +124,12 @@ export const setFieldsForDocument = async ({
       _persisted: existing,
       _recipient: recipient,
     };
+  });
+
+  await assertFieldLogicAllowed({
+    envelope,
+    fields: toFieldLogicDefinitions(linkedFields),
+    existingFields,
   });
 
   const persistedFields = await prisma.$transaction(async (tx) => {

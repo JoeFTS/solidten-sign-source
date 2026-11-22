@@ -8,9 +8,20 @@ import type { ContentImageMap, ContentImageSource } from '../../universal/conten
 import { getFileServerSide } from '../../universal/upload/get-file.server';
 import { getDataContentIds } from '../../utils/envelope-content';
 
-export const loadContentImages = async (
+export const loadContentImages = async (contents: Pick<EnvelopeContent, 'dataContentId'>[]): Promise<ContentImageMap> =>
+  new Map(
+    [...(await loadContentImageBytes(contents))].map(
+      ([id, bytes]) => [id, new SkiaImage(Buffer.from(bytes)) as unknown as ContentImageSource] as const,
+    ),
+  );
+
+/**
+ * Solid Ten: the stored bytes of the content images, by data content id, not yet decoded (the PDF
+ * child decodes them; it has no database, SEC3-M1).
+ */
+export const loadContentImageBytes = async (
   contents: Pick<EnvelopeContent, 'dataContentId'>[],
-): Promise<ContentImageMap> => {
+): Promise<Map<string, Uint8Array>> => {
   const dataContentIds = getDataContentIds(contents);
 
   if (dataContentIds.length === 0) {
@@ -27,7 +38,7 @@ export const loadContentImages = async (
 
   const entries = await pMap(
     dataContents,
-    async (dataContent): Promise<[string, ContentImageSource] | null> => {
+    async (dataContent): Promise<[string, Uint8Array] | null> => {
       if (dataContent.metadata.type !== DataContentType.IMAGE) {
         return null;
       }
@@ -37,7 +48,7 @@ export const loadContentImages = async (
         data: dataContent.data,
       });
 
-      return [dataContent.id, new SkiaImage(Buffer.from(bytes)) as unknown as ContentImageSource];
+      return [dataContent.id, bytes];
     },
     { concurrency: 6 },
   );

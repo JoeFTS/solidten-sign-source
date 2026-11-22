@@ -1,6 +1,7 @@
 import { uploadEnvelopeContentImage } from '@documenso/lib/server-only/envelope-content/upload-envelope-content-image';
 import { assertRateLimit } from '@documenso/lib/server-only/rate-limit/rate-limit-middleware';
 import { envelopeContentRateLimit } from '@documenso/lib/server-only/rate-limit/rate-limits';
+import { ZDataContentImageMeta } from '@documenso/lib/types/data-content-meta';
 
 import { authenticatedProcedure } from '../trpc';
 import {
@@ -47,7 +48,7 @@ export const uploadEnvelopeContentImageRoute = authenticatedProcedure
       content,
       dataContent: {
         id: dataContent.id,
-        metadata: dataContent.metadata,
+        metadata: ZDataContentImageMeta.parse(dataContent.metadata),
       },
     };
   });

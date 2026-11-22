@@ -32,7 +32,7 @@ export type DocumentCertificateQRViewProps = {
   documentId: number;
   title: string;
   internalVersion: number;
-  envelopeItems: (EnvelopeItem & { documentData: DocumentData })[];
+  envelopeItems: (EnvelopeItem & { documentData: Pick<DocumentData, 'id' | 'type'> })[];
   documentTeamUrl: string;
   recipientCount?: number;
   completedDate?: Date;
@@ -76,8 +76,8 @@ export const DocumentCertificateQRView = ({
 
               <DialogDescription>
                 <Trans>
-                  This document is available in your Documenso account. You can view more details, recipients, and audit
-                  logs there.
+                  This document is available in your Solid Ten Sign account. You can view more details, recipients, and
+                  audit logs there.
                 </Trans>
               </DialogDescription>
             </DialogHeader>

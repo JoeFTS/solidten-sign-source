@@ -23,6 +23,8 @@ import {
 import { ZRecipientAuthOptionsSchema } from '../types/document-auth';
 import type { TEnvelopeContentMeta } from '../types/envelope-content-meta';
 import type { ApiRequestMetadata, RequestMetadata } from '../universal/extract-request-metadata';
+import { formatInPersonHostSuffix } from './in-person-audit';
+import { formatScheduledSendTime } from './scheduled-send';
 
 type CreateDocumentAuditLogDataOptions<T = TDocumentAuditLog['type']> = {
   envelopeId: string;
@@ -491,6 +493,22 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
       you: msg`You prefilled a field`,
       user: msg`${user} prefilled a field`,
     }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_FIELD_CONDITION_CLEARED }, () => ({
+      anonymous: msg({
+        message: `Field cleared because its condition is no longer met`,
+        context: `Audit log format`,
+      }),
+      you: msg`A field you filled was cleared because its condition is no longer met`,
+      user: msg`A field filled by ${user} was cleared because its condition is no longer met`,
+    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_FIELD_CALCULATED }, () => ({
+      anonymous: msg({
+        message: `Calculated field updated`,
+        context: `Audit log format`,
+      }),
+      you: msg`A calculated field was updated after your change`,
+      user: msg`A calculated field was updated after a change by ${user}`,
+    }))
     .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_VISIBILITY_UPDATED }, () => ({
       anonymous: msg({
         message: `Document visibility updated`,
@@ -650,6 +668,23 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
           user: msg`${user} resent an email to ${data.recipientEmail}`,
         };
       }
+      // Solid Ten: the app stopped during the send; the email may or may not have gone out.
+      if (data.deliveryUnconfirmed) {
+        return {
+          anonymous: msg`Email may have been sent (the send was interrupted and not repeated)`,
+          you: msg`An email to ${data.recipientEmail} may have been sent (the send was interrupted and not repeated)`,
+          user: msg`An email to ${data.recipientEmail} may have been sent (the send was interrupted and not repeated)`,
+        };
+      }
+      // Solid Ten: the signed document went as a download link (too large to attach).
+      if (data.documentDelivery === 'LINK') {
+        return {
+          anonymous: msg`Email sent with a download link instead of the attached document`,
+          you: msg`You sent an email to ${data.recipientEmail} with a download link instead of the attached document`,
+          user: msg`${user} sent an email to ${data.recipientEmail} with a download link instead of the attached document`,
+        };
+      }
+
       return {
         anonymous: msg({
           message: `Email sent`,
@@ -659,6 +694,16 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
         user: msg`${user} sent an email to ${data.recipientEmail}`,
       };
     })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.SMS_SENT }, ({ data }) => ({
+      anonymous: msg({ message: `Text message sent`, context: `Audit log format` }),
+      you: msg`You sent a text message to ${data.recipientEmail} at ${data.phoneNumberMasked ?? ''}`,
+      user: msg`${user} sent a text message to ${data.recipientEmail} at ${data.phoneNumberMasked ?? ''}`,
+    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.SMS_FAILED }, ({ data }) => ({
+      anonymous: msg({ message: `Text message failed`, context: `Audit log format` }),
+      you: msg`A text message to ${data.recipientEmail} failed (${data.reason})`,
+      user: msg`A text message to ${data.recipientEmail} failed (${data.reason})`,
+    }))
     .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_COMPLETED }, () => ({
       anonymous: msg({ message: `Document completed`, context: `Audit log format` }),
       you: msg({ message: `Document completed`, context: `Audit log format` }),
@@ -740,6 +785,175 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
       you: msg`Your remote signature was applied`,
       user: msg`${user}'s remote signature was applied`,
     }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_SEND_SCHEDULED }, ({ data }) => {
+      const time = formatScheduledSendTime(data.scheduledAt, data.timezone);
+
+      return {
+        anonymous: msg`Document scheduled to be sent at ${time}`,
+        you: msg`You scheduled the document to be sent at ${time}`,
+        user: msg`${user} scheduled the document to be sent at ${time}`,
+      };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_SEND_UNSCHEDULED }, () => ({
+      anonymous: msg`Scheduled send removed`,
+      you: msg`You removed the scheduled send`,
+      user: msg`${user} removed the scheduled send`,
+    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_ACCESS_AUTH_2FA_LOCKED }, ({ data }) => {
+      const message = msg`The access code for ${data.recipientEmail} was locked after ${data.failedAttempts} wrong codes`;
+
+      return { anonymous: message, you: message, user: message };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.EMAIL_NOT_DELIVERED }, ({ data }) => {
+      const message =
+        data.emailType === 'DOCUMENT_COMPLETED'
+          ? msg`The signed copy to ${data.recipientEmail} could not be delivered after ${data.attempts} attempts`
+          : msg`The signing request to ${data.recipientEmail} could not be delivered after ${data.attempts} attempts`;
+
+      return { anonymous: message, you: message, user: message };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_SCHEDULED_SEND_FAILED }, ({ data }) => {
+      const message = msg`The scheduled send failed: ${data.reason}`;
+
+      return { anonymous: message, you: message, user: message };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.RECIPIENT_REASSIGNED }, ({ data }) => {
+      const from = data.fromName ? `${data.fromName} (${data.fromEmail})` : data.fromEmail;
+      const to = data.toName ? `${data.toName} (${data.toEmail})` : data.toEmail;
+
+      if (data.trigger === 'PHONE_CHANGE') {
+        return {
+          anonymous: msg`Signing link for ${to} reissued for a new phone number`,
+          you: msg`You changed the phone number for ${to}; a new signing link was issued`,
+          user: msg`${user} changed the phone number for ${to}; a new signing link was issued`,
+        };
+      }
+
+      return {
+        anonymous: msg`Signing request reassigned from ${from} to ${to}`,
+        you: msg`You reassigned the signing request from ${from} to ${to}`,
+        user: msg`${user} reassigned the signing request from ${from} to ${to}`,
+      };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RETENTION_APPLIED }, ({ data }) => {
+      const message =
+        data.action === 'PURGE'
+          ? msg`The document was permanently deleted by the ${data.days}-day retention rule`
+          : msg`The document was deleted by the ${data.days}-day retention rule`;
+
+      return { anonymous: message, you: message, user: message };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_PUBLIC_FORM_SUBMITTED }, ({ data }) => {
+      const message = data.emailVerified
+        ? msg`${data.submitterEmail} submitted the public form after verifying the email address with a code`
+        : msg`${data.submitterEmail} submitted the public form without email verification`;
+
+      return { anonymous: message, you: message, user: message };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.FIELD_FILE_UPLOADED }, ({ data }) => ({
+      anonymous: msg`File attached: ${data.fileName}`,
+      you: msg`You attached the file ${data.fileName}`,
+      user: msg`${user} attached the file ${data.fileName}`,
+    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.FIELD_FILE_REPLACED }, ({ data }) => ({
+      anonymous: msg`Attached file ${data.previousFileName} replaced with ${data.fileName}`,
+      you: msg`You replaced the attached file ${data.previousFileName} with ${data.fileName}`,
+      user: msg`${user} replaced the attached file ${data.previousFileName} with ${data.fileName}`,
+    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.FIELD_FILE_REMOVED }, ({ data }) => {
+      if (data.reason === 'SIGNER') {
+        return {
+          anonymous: msg`Attached file removed: ${data.fileName}`,
+          you: msg`You removed the attached file ${data.fileName}`,
+          user: msg`${user} removed the attached file ${data.fileName}`,
+        };
+      }
+
+      const message =
+        data.reason === 'CONDITION'
+          ? msg`Attached file ${data.fileName} removed because its field's condition is no longer met`
+          : msg`Attached file ${data.fileName} removed because the signing request was reassigned`;
+
+      return { anonymous: message, you: message, user: message };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.IN_PERSON_SESSION_STARTED }, ({ data }) => {
+      const host = data.hostName ? `${data.hostName} (${data.hostEmail})` : data.hostEmail;
+
+      return {
+        anonymous: msg`In-person signing started, hosted by ${host}`,
+        you: msg`You started in-person signing`,
+        user: msg`${user} started in-person signing`,
+      };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.IN_PERSON_SIGNER_STARTED }, ({ data }) => {
+      const host = data.hostName ? `${data.hostName} (${data.hostEmail})` : data.hostEmail;
+      const signer = data.recipientName ? `${data.recipientName} (${data.recipientEmail})` : data.recipientEmail;
+
+      const message = data.emailCodeVerified
+        ? msg`${signer} confirmed their name and email code on a device hosted in person by ${host}`
+        : msg`${signer} confirmed their name on a device hosted in person by ${host}`;
+
+      return { anonymous: message, you: message, user: message };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.IN_PERSON_SESSION_ENDED }, ({ data }) => {
+      const host = data.hostName ? `${data.hostName} (${data.hostEmail})` : data.hostEmail;
+
+      const message = match(data.reason)
+        .with('PIN_LOCKOUT', () => msg`In-person signing hosted by ${host} ended after too many wrong PIN attempts`)
+        .with('EXPIRED', () => msg`In-person signing hosted by ${host} ended because it timed out`)
+        .with('ENDED_ELSEWHERE', () => {
+          const endedBy = data.endedByName ? `${data.endedByName} (${data.endedByEmail})` : (data.endedByEmail ?? host);
+
+          return msg`In-person signing hosted by ${host} was ended from another browser by ${endedBy}`;
+        })
+        .otherwise(() => msg`In-person signing hosted by ${host} ended`);
+
+      return { anonymous: message, you: message, user: message };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.COMMENT_CREATED }, ({ data }) => {
+      if (data.body !== undefined) {
+        const body = data.body;
+
+        return {
+          anonymous: msg`A comment was written: "${body}"`,
+          you: msg`You wrote a comment: "${body}"`,
+          user: msg`${user} wrote a comment: "${body}"`,
+        };
+      }
+
+      return {
+        anonymous: msg`A comment was written`,
+        you: msg`You wrote a comment`,
+        user: msg`${user} wrote a comment`,
+      };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.COMMENT_THREAD_RESOLVED }, ({ data }) =>
+      data.resolved
+        ? {
+            anonymous: msg`A comment thread was marked resolved`,
+            you: msg`You marked a comment thread resolved`,
+            user: msg`${user} marked a comment thread resolved`,
+          }
+        : {
+            anonymous: msg`A comment thread was opened again`,
+            you: msg`You opened a comment thread again`,
+            user: msg`${user} opened a comment thread again`,
+          },
+    )
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.COMMENT_SETTINGS_UPDATED }, ({ data }) => {
+      const message = !data.enabled
+        ? msg`Comments were turned off for this document`
+        : data.sharedThread
+          ? msg`Comments were turned on for this document, with one thread for all recipients`
+          : msg`Comments were turned on for this document, with one thread for each recipient`;
+
+      return { anonymous: message, you: message, user: message };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.FIELD_FILE_DOWNLOADED }, ({ data }) => ({
+      anonymous: msg`Attached file downloaded: ${data.fileName}`,
+      you: msg`You downloaded the attached file ${data.fileName}`,
+      user: msg`${user} downloaded the attached file ${data.fileName}`,
+    }))
     .exhaustive();
 
   let selectedDescription = description.anonymous;
@@ -752,6 +966,6 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
 
   return {
     prefix,
-    description: i18n._(selectedDescription),
+    description: i18n._(selectedDescription) + formatInPersonHostSuffix(i18n, auditLog),
   };
 };

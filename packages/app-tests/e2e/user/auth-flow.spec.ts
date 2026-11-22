@@ -57,9 +57,13 @@ test('[USER] can sign in using email and password', async ({ page }: { page: Pag
   const { user, team } = await seedUser();
 
   await page.goto('/signin');
-  await page.getByLabel('Email').fill(user.email);
-  await page.getByLabel('Password', { exact: true }).fill('password');
-  await page.getByRole('button', { name: 'Sign In' }).click();
+
+  // The sign-in page also has the email-link form with its own Email field.
+  const passwordForm = page.locator('form').filter({ has: page.getByLabel('Password', { exact: true }) });
+
+  await passwordForm.getByLabel('Email').fill(user.email);
+  await passwordForm.getByLabel('Password', { exact: true }).fill('password');
+  await passwordForm.getByRole('button', { name: 'Sign In' }).click();
 
   await page.waitForURL(`/t/${team.url}/documents`);
   await expect(page).toHaveURL(`/t/${team.url}/documents`);

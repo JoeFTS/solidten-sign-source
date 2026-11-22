@@ -1,7 +1,9 @@
 import backgroundPattern from '@documenso/assets/images/background-pattern.png';
 import { Outlet } from 'react-router';
 
+import { BrandingLogo } from '~/components/general/branding-logo';
 import { PublicLegalLinks } from '~/components/general/public-legal-links';
+import { SourceCodeNotice } from '~/components/general/source-code-notice';
 
 export default function Layout() {
   return (
@@ -19,13 +21,15 @@ export default function Layout() {
           />
         </div>
 
-        <div className="relative w-full flex items-center justify-center">
+        <div className="relative flex w-full flex-col items-center justify-center">
+          <BrandingLogo className="mb-8 h-9 w-auto" />
           <Outlet />
         </div>
       </div>
 
       <footer className="z-10 mt-8 w-full">
         <PublicLegalLinks />
+        <SourceCodeNotice className="mt-2" />
       </footer>
     </main>
   );

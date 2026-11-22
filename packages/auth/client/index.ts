@@ -227,6 +227,34 @@ export class AuthClient {
     },
   };
 
+  public emailLink = {
+    /** Ask for a sign-in link. Resolves the same way whether or not the email has an account. */
+    request: async (data: { email: string }) => {
+      const response = await this.client['email-link'].request.$post({ json: data });
+
+      if (!response.ok) {
+        const error = await response.json();
+
+        throw AppError.parseError(error);
+      }
+    },
+
+    /** Exchange the token from an emailed link for a session. */
+    signIn: async (data: { token: string; totpCode?: string; backupCode?: string; redirectPath?: string }) => {
+      const { redirectPath, ...json } = data;
+
+      const response = await this.client['email-link'].authorize.$post({ json });
+
+      if (!response.ok) {
+        const error = await response.json();
+
+        throw AppError.parseError(error);
+      }
+
+      handleSignInRedirect(redirectPath);
+    },
+  };
+
   public twoFactor = {
     setup: async () => {
       const response = await this.client['two-factor'].setup.$post();

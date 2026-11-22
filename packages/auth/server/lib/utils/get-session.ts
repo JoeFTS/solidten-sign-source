@@ -58,6 +58,7 @@ export const getActiveSessions = async (c: Context | Request): Promise<ActiveSes
       updatedAt: true,
       createdAt: true,
       ipAddress: true,
+      stInPersonSessionId: true,
       userAgent: true,
       isEmbed: true,
     },

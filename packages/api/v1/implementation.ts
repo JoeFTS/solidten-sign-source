@@ -6,18 +6,22 @@ import { tsr } from '@ts-rest/serverless/fetch';
 import { match } from 'ts-pattern';
 import '@documenso/lib/constants/time-zones';
 import { DEFAULT_DOCUMENT_TIME_ZONE, TIME_ZONES } from '@documenso/lib/constants/time-zones';
-import { AppError } from '@documenso/lib/errors/app-error';
+import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { deleteDocument } from '@documenso/lib/server-only/document/delete-document';
 import { findDocuments } from '@documenso/lib/server-only/document/find-documents';
 import { resendDocument } from '@documenso/lib/server-only/document/resend-document';
 import { sendDocument } from '@documenso/lib/server-only/document/send-document';
 import { createDocumentData } from '@documenso/lib/server-only/document-data/create-document-data';
 import { updateDocumentMeta } from '@documenso/lib/server-only/document-meta/upsert-document-meta';
+import { assertEnvelopeMutable } from '@documenso/lib/server-only/envelope/assert-envelope-mutable';
 import { createEnvelope } from '@documenso/lib/server-only/envelope/create-envelope';
 import { getEnvelopeById, getEnvelopeWhereInput } from '@documenso/lib/server-only/envelope/get-envelope-by-id';
 import { deleteDocumentField } from '@documenso/lib/server-only/field/delete-document-field';
 import { updateEnvelopeFields } from '@documenso/lib/server-only/field/update-envelope-fields';
-import { insertFormValuesInPdf } from '@documenso/lib/server-only/pdf/insert-form-values-in-pdf';
+import {
+  assertFieldLogicAllowed,
+  toFieldLogicDefinitions,
+} from '@documenso/lib/server-only/field-logic/assert-field-logic';
 import { deleteEnvelopeRecipient } from '@documenso/lib/server-only/recipient/delete-envelope-recipient';
 import { getRecipientsForDocument } from '@documenso/lib/server-only/recipient/get-recipients-for-document';
 import { setDocumentRecipients } from '@documenso/lib/server-only/recipient/set-document-recipients';
@@ -43,7 +47,6 @@ import { isDocumentCompleted } from '@documenso/lib/utils/document';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
 import { mapSecondaryIdToDocumentId, mapSecondaryIdToTemplateId } from '@documenso/lib/utils/envelope';
 import { prisma } from '@documenso/prisma';
-
 import { ApiContractV1 } from './contract';
 import { authenticatedMiddleware } from './middleware/authenticated';
 
@@ -813,16 +816,11 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
     if (body.formValues) {
       const pdf = await getFileServerSide(firstEnvelopeItemData);
 
-      const prefilled = await insertFormValuesInPdf({
-        pdf: Buffer.from(pdf),
-        formValues: body.formValues,
-      });
-
-      const { documentData: newDocumentData } = await putNormalizedPdfFileServerSide({
-        name: fileName,
-        type: 'application/pdf',
-        arrayBuffer: async () => Promise.resolve(prefilled),
-      });
+      // Solid Ten (AUD-5): the form values are filled in the PDF child, with the normalisation.
+      const { documentData: newDocumentData } = await putNormalizedPdfFileServerSide(
+        { name: fileName, type: 'application/pdf', arrayBuffer: async () => Promise.resolve(Buffer.from(pdf)) },
+        { formValues: body.formValues },
+      );
 
       await prisma.envelopeItem.update({
         where: {
@@ -1067,6 +1065,12 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
         },
       };
     } catch (err) {
+      // Solid Ten Sign (F4): a refusal the caller can act on (such as an unverified direct-link
+      // address) answers 400 with its message, as the web app does. Everything else stays a 500.
+      if (AppError.parseError(err).code === AppErrorCode.INVALID_REQUEST) {
+        return AppError.toRestAPIError(err);
+      }
+
       return {
         status: 500,
         body: {
@@ -1329,6 +1333,9 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
         id: true,
         secondaryId: true,
         status: true,
+        type: true,
+        internalVersion: true,
+        signatureLevel: true,
         envelopeItems: {
           select: { id: true },
         },
@@ -1360,6 +1367,27 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
     }
 
     try {
+      // Solid Ten: the same checks as every v2 field save (number formats and values, field
+      // rules, file fields, the AES/QES lock), so v1 is not a way around them.
+      await assertEnvelopeMutable(envelope);
+
+      const existingFields = await prisma.field.findMany({ where: { envelopeId: envelope.id } });
+
+      await assertFieldLogicAllowed({
+        envelope,
+        fields: toFieldLogicDefinitions([
+          ...existingFields,
+          ...fields.map((fieldData) => ({
+            type: fieldData.type,
+            recipientId: Number(fieldData.recipientId),
+            envelopeItemId: firstEnvelopeItemId,
+            pageNumber: fieldData.pageNumber,
+            fieldMeta: fieldData.fieldMeta,
+          })),
+        ]),
+        existingFields,
+      });
+
       const createdFields = await prisma.$transaction(async (tx) => {
         return Promise.all(
           fields.map(async (fieldData) => {
@@ -1406,9 +1434,9 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
                 success: true,
                 data: undefined,
               }))
-              .with('FREE_SIGNATURE', () => ({
+              .with('FREE_SIGNATURE', 'FILE', (type) => ({
                 success: false,
-                error: 'FREE_SIGNATURE is not supported',
+                error: `${type} is not supported`,
                 data: undefined,
               }))
               .exhaustive();

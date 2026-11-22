@@ -2,6 +2,10 @@ import { prepareCscRecipientSigning } from '@documenso/ee/server-only/signing/cs
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { completeDocumentWithToken } from '@documenso/lib/server-only/document/complete-document-with-token';
 import { rejectDocumentWithToken } from '@documenso/lib/server-only/document/reject-document-with-token';
+import {
+  endInPersonTurnAfterSignerAction,
+  findInPersonHostForRequest,
+} from '@documenso/lib/server-only/in-person/in-person-session';
 import { createEnvelopeRecipients } from '@documenso/lib/server-only/recipient/create-envelope-recipients';
 import { deleteEnvelopeRecipient } from '@documenso/lib/server-only/recipient/delete-envelope-recipient';
 import { getRecipientById } from '@documenso/lib/server-only/recipient/get-recipient-by-id';
@@ -633,6 +637,13 @@ export const recipientRouter = router({
           });
         }
 
+        // Solid Ten Sign: on a host's in-person device the signed-in user is the
+        // host, not the signer, so it must never satisfy the signer's checks.
+        const inPersonHost = await findInPersonHostForRequest({
+          authSessionId: ctx.inPersonLock?.session.id ?? ctx.session?.id,
+          token,
+        });
+
         await completeDocumentWithToken({
           token,
           id: {
@@ -642,9 +653,15 @@ export const recipientRouter = router({
           accessAuthOptions,
           nextSigner,
           recipientOverride,
-          userId: ctx.user?.id,
+          userId: inPersonHost ? undefined : ctx.user?.id,
           requestMetadata: ctx.metadata.requestMetadata,
+          inPersonHost,
         });
+
+        // Solid Ten Sign (RT2-L3): the in-person turn ends in this request, not on the next page load.
+        if (inPersonHost) {
+          await endInPersonTurnAfterSignerAction({ sessionId: inPersonHost.sessionId });
+        }
 
         return { status: 'SIGNED' as const };
       } catch (err) {
@@ -677,7 +694,7 @@ export const recipientRouter = router({
    * @private
    */
   rejectDocumentWithToken: procedure.input(ZRejectDocumentWithTokenMutationSchema).mutation(async ({ input, ctx }) => {
-    const { token, documentId, reason } = input;
+    const { token, documentId, reason, accessAuthOptions } = input;
 
     ctx.logger.info({
       input: {
@@ -685,7 +702,12 @@ export const recipientRouter = router({
       },
     });
 
-    return await rejectDocumentWithToken({
+    const inPersonHost = await findInPersonHostForRequest({
+      authSessionId: ctx.inPersonLock?.session.id ?? ctx.session?.id,
+      token,
+    });
+
+    const result = await rejectDocumentWithToken({
       token,
       id: {
         type: 'documentId',
@@ -693,6 +715,16 @@ export const recipientRouter = router({
       },
       reason,
       requestMetadata: ctx.metadata.requestMetadata,
+      inPersonHost,
+      accessAuthOptions,
+      userId: inPersonHost ? undefined : ctx.user?.id,
     });
+
+    // Solid Ten Sign (RT2-L3): the in-person turn ends in this request, not on the next page load.
+    if (inPersonHost) {
+      await endInPersonTurnAfterSignerAction({ sessionId: inPersonHost.sessionId });
+    }
+
+    return result;
   }),
 });

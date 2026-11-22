@@ -7,9 +7,11 @@ import { AppError, AppErrorCode } from '../../errors/app-error';
 import { jobs } from '../../jobs/client';
 import { extractDerivedDocumentEmailSettings } from '../../types/document-email';
 import { createDocumentAuditLogData } from '../../utils/document-audit-logs';
-import { canRecipientBeModified, isRecipientEmailValidForSending } from '../../utils/recipients';
+import { canSendMailToRecipient } from '../../utils/recipient-mail';
+import { canRecipientBeModified } from '../../utils/recipients';
 import { buildTeamWhereQuery } from '../../utils/teams';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
+import { lockEnvelopeForRecipientChange } from '../envelope/envelope-transition-lock';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 
 export interface DeleteEnvelopeRecipientOptions {
@@ -106,6 +108,10 @@ export const deleteEnvelopeRecipient = async ({
   const deletedRecipient = await prisma.$transaction(async (tx) => {
     await assertEnvelopeMutable(envelope, tx);
 
+    // Solid Ten Sign (FS2-C1): lock, and refuse when the recipient signed or declined since it
+    // was read (a signature racing the removal).
+    await lockEnvelopeForRecipientChange(tx, envelope.id, [recipientToDelete]);
+
     if (envelope.type === EnvelopeType.DOCUMENT) {
       await tx.documentAuditLog.create({
         data: createDocumentAuditLogData({
@@ -138,7 +144,7 @@ export const deleteEnvelopeRecipient = async ({
     recipientToDelete.role !== RecipientRole.CC &&
     isRecipientRemovedEmailEnabled &&
     envelope.type === EnvelopeType.DOCUMENT &&
-    isRecipientEmailValidForSending(recipientToDelete)
+    canSendMailToRecipient(recipientToDelete)
   ) {
     // Enqueue the "removed from document" email as a background job so a
     // transient mail outage doesn't fail the request and the send is retried.

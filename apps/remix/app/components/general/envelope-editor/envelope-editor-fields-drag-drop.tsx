@@ -1,6 +1,7 @@
 import { getBoundingClientRect } from '@documenso/lib/client-only/get-bounding-client-rect';
 import { useDocumentElement } from '@documenso/lib/client-only/hooks/use-document-element';
 import { useCurrentEnvelopeEditor } from '@documenso/lib/client-only/providers/envelope-editor-provider';
+import { IS_FILE_UPLOAD_ENABLED } from '@documenso/lib/constants/field-file';
 import { PDF_VIEWER_PAGE_SELECTOR } from '@documenso/lib/constants/pdf-viewer';
 import { FIELD_META_DEFAULT_VALUES } from '@documenso/lib/types/field-meta';
 import { nanoid } from '@documenso/lib/universal/id';
@@ -20,6 +21,7 @@ import {
   HashIcon,
   ListIcon,
   MailIcon,
+  PaperclipIcon,
   TextIcon,
   UserIcon,
 } from 'lucide-react';
@@ -83,6 +85,16 @@ export const fieldButtonList = [
     icon: ListIcon,
     name: msg`Dropdown`,
   },
+  // Solid Ten: signer file upload.
+  ...(IS_FILE_UPLOAD_ENABLED()
+    ? [
+        {
+          type: FieldType.FILE,
+          icon: PaperclipIcon,
+          name: msg`Attach a file`,
+        },
+      ]
+    : []),
 ];
 
 type EnvelopeEditorFieldDragDropProps = {

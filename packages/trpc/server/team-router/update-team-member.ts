@@ -1,6 +1,10 @@
 import { TEAM_MEMBER_ROLE_PERMISSIONS_MAP } from '@documenso/lib/constants/teams';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { getMemberRoles } from '@documenso/lib/server-only/team/get-member-roles';
+import {
+  getUserIdsOfOrganisationMembers,
+  reassignEnvelopesAfterAccessLoss,
+} from '@documenso/lib/server-only/team/reassign-envelopes-after-access-loss';
 import { generateDatabaseId } from '@documenso/lib/universal/id';
 import { buildTeamWhereQuery, isTeamRoleWithinUserHierarchy } from '@documenso/lib/utils/teams';
 import { prisma } from '@documenso/prisma';
@@ -163,6 +167,13 @@ export const updateTeamMemberRoute = authenticatedProcedure
             .with(TeamMemberRole.ADMIN, () => teamAdminGroup.organisationGroupId)
             .exhaustive(),
         },
+      });
+
+      // Solid Ten: the member moves between this team's own groups, so this is a safeguard: it moves
+      // nothing while the new group still links them to the team.
+      await reassignEnvelopesAfterAccessLoss(tx, {
+        organisationId: team.organisationId,
+        userIds: await getUserIdsOfOrganisationMembers(tx, [memberId]),
       });
     });
   });

@@ -7,6 +7,7 @@ import {
 import { useOptionalSession } from '@documenso/lib/client-only/providers/session';
 import { DIRECT_TEMPLATE_RECIPIENT_EMAIL } from '@documenso/lib/constants/direct-templates';
 import { isBase64Image } from '@documenso/lib/constants/signatures';
+import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import type { TRecipientActionAuth } from '@documenso/lib/types/document-auth';
 import type { TEnvelope } from '@documenso/lib/types/envelope';
 import { ZFullFieldSchema } from '@documenso/lib/types/field';
@@ -36,12 +37,14 @@ import { useEmbedSigningContext } from '~/components/embed/embed-signing-context
 import { handleCheckboxFieldClick } from '~/utils/field-signing/checkbox-field';
 import { handleDropdownFieldClick } from '~/utils/field-signing/dropdown-field';
 import { handleEmailFieldClick } from '~/utils/field-signing/email-field';
+import { removeFieldsHiddenByLogic } from '~/utils/field-signing/field-logic-view';
+import { handleFileFieldClick } from '~/utils/field-signing/file-field';
 import { handleInitialsFieldClick } from '~/utils/field-signing/initial-field';
 import { handleNameFieldClick } from '~/utils/field-signing/name-field';
 import { handleNumberFieldClick } from '~/utils/field-signing/number-field';
 import { handleSignatureFieldClick } from '~/utils/field-signing/signature-field';
 import { handleTextFieldClick } from '~/utils/field-signing/text-field';
-
+import { SIGNING_TOO_MANY_REQUESTS_MESSAGE } from '~/utils/toast-error-messages';
 import { useRequiredDocumentSigningAuthContext } from '../document-signing/document-signing-auth-provider';
 import { useRequiredEnvelopeSigningContext } from '../document-signing/envelope-signing-provider';
 
@@ -74,6 +77,7 @@ export const EnvelopeSignerPageRenderer = ({ pageData }: { pageData: PageRenderD
     selectedAssistantRecipientFields,
     selectedAssistantRecipient,
     isDirectTemplate,
+    applySignedFieldResponse,
   } = useRequiredEnvelopeSigningContext();
 
   // Note: We're using refs here due to the closure within the signField function.
@@ -416,6 +420,16 @@ export const EnvelopeSignerPageRenderer = ({ pageData }: { pageData: PageRenderD
               loadingSpinnerGroup.destroy();
             });
         })
+        /**
+         * FILE FIELD (Solid Ten). The dialog saves each change itself.
+         */
+        .with({ type: FieldType.FILE }, (field) => {
+          void handleFileFieldClick({ field, token: envelopeData.recipient.token, isDirectTemplate }).then((result) => {
+            if (result) {
+              applySignedFieldResponse(result);
+            }
+          });
+        })
         .exhaustive();
     };
 
@@ -452,6 +466,8 @@ export const EnvelopeSignerPageRenderer = ({ pageData }: { pageData: PageRenderD
     }
 
     const fieldCanvasStyleCache = createFieldCanvasStyleCache();
+
+    removeFieldsHiddenByLogic(pageLayer.current, cachedRenderFields.current, localPageFields);
 
     // Render current recipient fields which have changed or are not currently rendered.
     for (const field of localPageFields) {
@@ -530,9 +546,14 @@ export const EnvelopeSignerPageRenderer = ({ pageData }: { pageData: PageRenderD
         envelopeId: envelope.id,
       });
 
+      // Solid Ten: a rate-limit refusal says so; the field stays as it was and nothing else is lost.
+      const isRateLimited = AppError.parseError(err).code === AppErrorCode.TOO_MANY_REQUESTS;
+
       toast({
-        title: t`Error`,
-        description: t`An error occurred while signing the field.`,
+        title: isRateLimited ? i18n._(SIGNING_TOO_MANY_REQUESTS_MESSAGE.title) : t`Error`,
+        description: isRateLimited
+          ? i18n._(SIGNING_TOO_MANY_REQUESTS_MESSAGE.description)
+          : t`An error occurred while signing the field.`,
         variant: 'destructive',
       });
 

@@ -1,5 +1,9 @@
 import { getOptionalNonEmbedSession } from '@documenso/auth/server/lib/session/embed-session-restrictions';
-import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embedding-presign/verify-embedding-presign-token';
+import {
+  presignFileTokenReachesEnvelope,
+  type VerifiedPresignFileToken,
+  verifyPresignFileToken,
+} from '@documenso/lib/server-only/embedding-presign/verify-presign-file-token';
 import type { DocumentDataVersion } from '@documenso/lib/types/document';
 import { sha256 } from '@documenso/lib/universal/crypto';
 import { getFileServerSide } from '@documenso/lib/universal/upload/get-file.server';
@@ -8,7 +12,6 @@ import { sValidator } from '@hono/standard-validator';
 import type { DocumentData, EnvelopeItem } from '@prisma/client';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
-
 import type { HonoEnv } from '../../../router';
 import { checkEnvelopeFileAccess } from '../files.helpers';
 
@@ -40,14 +43,12 @@ route.get(
     const session = await getOptionalNonEmbedSession(c);
 
     let userId = session.user?.id;
+    let presign: VerifiedPresignFileToken | undefined;
 
-    // Check presignToken if provided
     if (presignToken) {
-      const verifiedToken = await verifyEmbeddingPresignToken({
-        token: presignToken,
-      }).catch(() => undefined);
+      presign = await verifyPresignFileToken(presignToken);
 
-      userId = verifiedToken?.userId;
+      userId = presign?.userId;
     }
 
     if (!userId) {
@@ -66,9 +67,12 @@ route.get(
         envelope: {
           select: {
             id: true,
+            secondaryId: true,
             type: true,
             teamId: true,
             templateType: true,
+            visibility: true,
+            userId: true,
           },
         },
       },
@@ -79,11 +83,17 @@ route.get(
     }
 
     // Check whether the user has access to the document.
+    if (!presignFileTokenReachesEnvelope(presign, envelopeItem.envelope)) {
+      return c.json({ error: 'Not found' }, 404);
+    }
+
     const hasAccess = await checkEnvelopeFileAccess({
       userId,
       teamId: envelopeItem.envelope.teamId,
       envelopeType: envelopeItem.envelope.type,
       templateType: envelopeItem.envelope.templateType,
+      visibility: envelopeItem.envelope.visibility,
+      ownerId: envelopeItem.envelope.userId,
     });
 
     if (!hasAccess) {

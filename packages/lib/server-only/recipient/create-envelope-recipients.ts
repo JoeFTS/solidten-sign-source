@@ -14,6 +14,8 @@ import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { assertCompatibleRecipientGrouping } from '../signature-level/assert-compatible-recipient-grouping';
 import { assertCompatibleRecipientRole } from '../signature-level/assert-compatible-recipient-role';
+import { assertAssistantRolesAllowedOnEnvelope } from './assert-assistant-signing-order';
+import { assertNewRecipientEmailsAvailable } from './assert-new-recipient-emails';
 import { assignOmittedRecipientSigningOrders } from './assign-omitted-recipient-signing-orders';
 
 export interface CreateEnvelopeRecipientsOptions {
@@ -74,6 +76,12 @@ export const createEnvelopeRecipients = async ({
     });
   }
 
+  // Solid Ten Sign (AUD-C12): an assistant needs sequential signing.
+  await assertAssistantRolesAllowedOnEnvelope({
+    envelopeId: envelope.id,
+    roles: recipientsToCreate.map((recipient) => recipient.role),
+  });
+
   const recipientsHaveActionAuth = recipientsToCreate.some(
     (recipient) => recipient.actionAuth && recipient.actionAuth.length > 0,
   );
@@ -108,6 +116,13 @@ export const createEnvelopeRecipients = async ({
       signatureLevel: envelope.signatureLevel,
       recipients: recipientsToCreate,
       existingRecipients,
+    });
+
+    // Solid Ten Sign (RT2-L1): no new recipient with an email already on a sent document.
+    assertNewRecipientEmailsAvailable({
+      envelope,
+      existingIds: existingRecipients.map((recipient) => recipient.id),
+      resulting: [...existingRecipients, ...recipientsToCreate.map((recipient) => ({ email: recipient.email }))],
     });
 
     const normalizedRecipients = assignOmittedRecipientSigningOrders({

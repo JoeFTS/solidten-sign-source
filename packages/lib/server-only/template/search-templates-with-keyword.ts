@@ -42,8 +42,10 @@ export const searchTemplatesWithKeyword = async ({ query, userId, limit = 20 }: 
 
   const filters: Prisma.EnvelopeWhereInput[] = [
     // Templates owned by the user matching title or recipient email.
+    // Solid Ten (AUD-9): only in teams the user still belongs to.
     {
       userId,
+      teamId: { in: teamIds },
       deletedAt: null,
       ...titleOrRecipientMatch,
     },

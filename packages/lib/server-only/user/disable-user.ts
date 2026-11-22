@@ -56,6 +56,9 @@ export const disableUser = async ({ id }: DisableUserOptions) => {
           expiry: new Date(),
         },
       });
+
+      // Solid Ten Sign (FINDINGS 13): a disabled account is signed out everywhere.
+      await tx.session.deleteMany({ where: { userId: id } });
     });
   } catch (error) {
     console.error('Error disabling user', error);

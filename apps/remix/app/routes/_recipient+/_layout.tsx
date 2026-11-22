@@ -10,11 +10,13 @@ import { useEffect } from 'react';
 import { isRouteErrorResponse, Link, Outlet } from 'react-router';
 import { Header as AuthenticatedHeader } from '~/components/general/app-header';
 import { GenericErrorLayout } from '~/components/general/generic-error-layout';
+import { SourceCodeNotice } from '~/components/general/source-code-notice';
+import { retryAfterRouteHeaders } from '~/utils/retry-after-headers';
 import type { Route } from './+types/_layout';
 
 export function meta() {
   return [
-    { title: i18n._(msg`Sign Document - Documenso`) },
+    { title: i18n._(msg`Sign Document - Solid Ten Sign`) },
     { name: 'robots', content: 'noindex, nofollow, noarchive, nosnippet, noimageindex' },
   ];
 }
@@ -28,11 +30,15 @@ export function meta() {
 export default function RecipientLayout({ matches }: Route.ComponentProps) {
   const { sessionData } = useOptionalSession();
 
-  // Hide the header for signing routes.
-  const hideHeader = matches.some(
+  // Solid Ten Sign: the signing pages (also used below for the source-link footer).
+  const isSigningPage = matches.some(
     (match) =>
       match?.id === 'routes/_recipient+/sign.$token+/_index' || match?.id === 'routes/_recipient+/d.$token+/_index',
   );
+
+  // Hide the header for signing routes.
+  // Solid Ten Sign: a sign-in handed to signers in person never shows the host's account header.
+  const hideHeader = Boolean(sessionData?.session.stInPersonSessionId) || isSigningPage;
 
   return (
     <div className="min-h-screen">
@@ -45,9 +51,20 @@ export default function RecipientLayout({ matches }: Route.ComponentProps) {
       >
         <Outlet />
       </main>
+
+      {/* Solid Ten Sign: the AGPL source link on every recipient page (not in embeds: own layout).
+          H-D1: relative z-10 lifts it over the PDF viewer's padded last-page label. On a phone the
+          signing page keeps its sign panel fixed at the bottom (z-50, stays on top), so the footer
+          gets room to scroll clear of it there. */}
+      <footer className={cn('relative z-10 px-4 pt-2 pb-6', isSigningPage && 'pb-40 md:pb-6')}>
+        <SourceCodeNotice />
+      </footer>
     </div>
   );
 }
+
+// Solid Ten: a 429 thrown by a loader below (public form over its open limit) keeps its Retry-After.
+export const headers = retryAfterRouteHeaders;
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const analytics = useAnalytics();

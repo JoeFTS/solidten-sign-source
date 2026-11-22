@@ -1,4 +1,6 @@
 import { useAnalytics } from '@documenso/lib/client-only/hooks/use-analytics';
+import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import type { TRecipientAccessAuth } from '@documenso/lib/types/document-auth';
 import { trpc } from '@documenso/trpc/react';
 import { Button } from '@documenso/ui/primitives/button';
 import {
@@ -21,6 +23,11 @@ import { useForm } from 'react-hook-form';
 import { useSearchParams } from 'react-router';
 import { z } from 'zod';
 
+import { SIGNING_TOO_MANY_REQUESTS_MESSAGE } from '~/utils/toast-error-messages';
+
+import { AccessAuth2FAForm } from './access-auth-2fa-form';
+import { useDocumentSigningAuthContext } from './document-signing-auth-provider';
+
 const ZRejectDocumentFormSchema = z.object({
   reason: z.string().max(500, msg`Reason must be less than 500 characters`),
 });
@@ -40,12 +47,18 @@ export function DocumentSigningRejectDialog({
   onRejected,
   trigger,
 }: DocumentSigningRejectDialogProps) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const { toast } = useToast();
   const analytics = useAnalytics();
   const [searchParams] = useSearchParams();
 
   const [isOpen, setIsOpen] = useState(false);
+
+  // Solid Ten Sign (AUD-14): a decline needs the emailed access code, as completion does.
+  const authContext = useDocumentSigningAuthContext();
+  const requiresAccessCode = authContext?.derivedRecipientAccessAuth.includes('TWO_FACTOR_AUTH') ?? false;
+  const [pendingReason, setPendingReason] = useState<string | null>(null);
+  const [accessCodeError, setAccessCodeError] = useState<string | null>(null);
 
   const { mutateAsync: rejectDocumentWithToken } = trpc.recipient.rejectDocumentWithToken.useMutation();
 
@@ -56,12 +69,19 @@ export function DocumentSigningRejectDialog({
     },
   });
 
-  const onRejectDocument = async ({ reason }: TRejectDocumentFormSchema) => {
+  const onRejectDocument = async ({ reason }: TRejectDocumentFormSchema, accessAuthOptions?: TRecipientAccessAuth) => {
+    if (requiresAccessCode && !accessAuthOptions) {
+      setPendingReason(reason);
+
+      return;
+    }
+
     try {
       await rejectDocumentWithToken({
         documentId,
         token,
         reason,
+        accessAuthOptions,
       });
 
       toast({
@@ -78,15 +98,35 @@ export function DocumentSigningRejectDialog({
         window.location.href = `/sign/${token}/rejected`;
       }
     } catch (err) {
+      const errorCode = AppError.parseError(err).code;
+
+      // Solid Ten Sign (AUD-14): a wrong or locked code is shown in the code form.
+      if (accessAuthOptions && errorCode === AppErrorCode.TWO_FACTOR_AUTH_FAILED) {
+        setAccessCodeError(t`Invalid verification code. Please try again.`);
+
+        return;
+      }
+
+      if (accessAuthOptions && errorCode === AppErrorCode.TOO_MANY_REQUESTS) {
+        setAccessCodeError(t`Too many wrong codes. Request a new code and try again.`);
+
+        return;
+      }
+
       analytics.captureException(err, {
         source: 'signing',
         location: 'reject_document',
         documentId,
       });
 
+      // Solid Ten: a rate-limit refusal says so.
+      const isRateLimited = errorCode === AppErrorCode.TOO_MANY_REQUESTS;
+
       toast({
-        title: t`Error`,
-        description: t`An error occurred while rejecting the document. Please try again.`,
+        title: isRateLimited ? i18n._(SIGNING_TOO_MANY_REQUESTS_MESSAGE.title) : t`Error`,
+        description: isRateLimited
+          ? i18n._(SIGNING_TOO_MANY_REQUESTS_MESSAGE.description)
+          : t`An error occurred while rejecting the document. Please try again.`,
         variant: 'destructive',
         duration: 5000,
       });
@@ -102,6 +142,8 @@ export function DocumentSigningRejectDialog({
   useEffect(() => {
     if (!isOpen) {
       form.reset();
+      setPendingReason(null);
+      setAccessCodeError(null);
     }
   }, [isOpen]);
 
@@ -126,8 +168,19 @@ export function DocumentSigningRejectDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {pendingReason !== null && (
+          <AccessAuth2FAForm
+            token={token}
+            error={accessCodeError}
+            onSubmit={async (accessAuthOptions) => onRejectDocument({ reason: pendingReason }, accessAuthOptions)}
+          />
+        )}
+
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onRejectDocument)} className="space-y-4">
+          <form
+            onSubmit={form.handleSubmit(async (values) => onRejectDocument(values))}
+            className={pendingReason !== null ? 'hidden' : 'space-y-4'}
+          >
             <FormField
               control={form.control}
               name="reason"

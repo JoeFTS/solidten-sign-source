@@ -97,7 +97,14 @@ export const getDocumentAndSenderByToken = async ({
           order: true,
           envelopeId: true,
           documentDataId: true,
-          documentData: true,
+          // Solid Ten (LD3-M2): never the bytes. Pages that return this object to the browser
+          // would otherwise carry the whole PDF twice as base64; viewers fetch it by URL.
+          documentData: {
+            select: {
+              id: true,
+              type: true,
+            },
+          },
         },
       },
       team: {
@@ -153,6 +160,8 @@ export const getDocumentAndSenderByToken = async ({
 
   return {
     ...result,
+    // Solid Ten (AUD-13): the share-link token never goes to a recipient page.
+    qrToken: null,
     user: {
       id: result.user.id,
       email: result.user.email,

@@ -19,8 +19,11 @@ import {
 import type { ComponentType } from 'react';
 import { FaUsers } from 'react-icons/fa6';
 import { IS_BILLING_ENABLED, IS_DOCUMENSO_CLOUD } from '../constants/app';
+import { env } from './env';
 import { canExecuteOrganisationAction } from './organisations';
 import { canExecuteTeamAction } from './teams';
+
+const isSmsEnabled = () => env('NEXT_PUBLIC_SMS_ENABLED') === 'true';
 
 export type SettingsNavScope = 'organisation' | 'team' | 'account';
 
@@ -121,6 +124,22 @@ export const getSettingsNavGroups = ({
             label: msg`Reminders`,
             isSubNav: true,
           },
+          ...(isSmsEnabled()
+            ? [
+                {
+                  key: 'preferences-sms',
+                  path: `/o/${organisation.url}/settings/sms`,
+                  label: msg`Text messages`,
+                  isSubNav: true,
+                },
+              ]
+            : []),
+          {
+            key: 'preferences-lifecycle',
+            path: `/o/${organisation.url}/settings/lifecycle`,
+            label: msg`Document lifecycle`,
+            isSubNav: true,
+          },
           {
             key: 'preferences-certificates',
             path: `/o/${organisation.url}/settings/certificates`,
@@ -219,6 +238,22 @@ export const getSettingsNavGroups = ({
               key: 'preferences-reminders',
               path: `/t/${team.url}/settings/reminders`,
               label: msg`Reminders`,
+              isSubNav: true,
+            },
+            ...(isSmsEnabled()
+              ? [
+                  {
+                    key: 'preferences-sms',
+                    path: `/t/${team.url}/settings/sms`,
+                    label: msg`Text messages`,
+                    isSubNav: true,
+                  },
+                ]
+              : []),
+            {
+              key: 'preferences-lifecycle',
+              path: `/t/${team.url}/settings/lifecycle`,
+              label: msg`Document lifecycle`,
               isSubNav: true,
             },
             {

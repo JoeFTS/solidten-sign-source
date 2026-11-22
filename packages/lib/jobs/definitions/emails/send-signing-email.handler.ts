@@ -19,6 +19,8 @@ import { buildEnvelopeEmailHeaders } from '../../../server-only/email/build-enve
 import { getEmailContext } from '../../../server-only/email/get-email-context';
 import { assertOrganisationRatesAndLimits } from '../../../server-only/rate-limit/assert-organisation-rates-and-limits';
 import { updateRecipientNextReminder } from '../../../server-only/recipient/update-recipient-next-reminder';
+import { deliverSigningSms, markRecipientSentBySms } from '../../../server-only/sms/deliver-signing-sms';
+import { buildSmsIdempotencyKey, isSigningSmsPossible } from '../../../server-only/sms/sms-availability';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '../../../types/document-audit-logs';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { createDocumentAuditLogData } from '../../../utils/document-audit-logs';
@@ -44,7 +46,9 @@ export const run = async ({ payload, io }: { payload: TSendSigningEmailJobDefini
         createdAt: true,
       },
     }),
-    prisma.envelope.findFirstOrThrow({
+    // Solid Ten: findFirst, so a document that was cancelled, completed or deleted before the
+    // email went ends the job instead of failing it (and later reporting "not delivered").
+    prisma.envelope.findFirst({
       where: {
         ...unsafeBuildEnvelopeIdQuery(
           {
@@ -77,6 +81,12 @@ export const run = async ({ payload, io }: { payload: TSendSigningEmailJobDefini
     }),
   ]);
 
+  if (!envelope) {
+    io.logger.info(`Document ${documentId} is no longer pending, signing email not sent`);
+
+    return;
+  }
+
   const { documentMeta, team } = envelope;
 
   if (recipient.role === RecipientRole.CC) {
@@ -87,7 +97,7 @@ export const run = async ({ payload, io }: { payload: TSendSigningEmailJobDefini
     envelope.documentMeta,
   ).recipientSigningRequest;
 
-  if (!isRecipientSigningRequestEmailEnabled) {
+  if (!isRecipientSigningRequestEmailEnabled && !isSigningSmsPossible(envelope.documentMeta)) {
     return;
   }
 
@@ -112,7 +122,29 @@ export const run = async ({ payload, io }: { payload: TSendSigningEmailJobDefini
   });
 
   // Don't send signing invitations if the organisation has email sending disabled or the owner is disabled (e.g. banned).
-  if (envelope.user.disabled || emailsDisabled) {
+  if (envelope.user.disabled) {
+    return;
+  }
+
+  const smsDelivery = await io.runTask('send-signing-sms', async () => {
+    const result = await deliverSigningSms({
+      envelope,
+      recipient,
+      purpose: 'SIGNING_REQUEST',
+      idempotencyKey: buildSmsIdempotencyKey('SIGNING_REQUEST', recipient),
+      isSigningRequestEmailEnabled: isRecipientSigningRequestEmailEnabled,
+      user,
+      requestMetadata,
+    });
+
+    return { shouldSendEmail: result.shouldSendEmail, isSmsDelivered: result.isSmsDelivered };
+  });
+
+  if (emailsDisabled || !smsDelivery.shouldSendEmail) {
+    if (smsDelivery.isSmsDelivered) {
+      await markRecipientSentBySms({ recipientId: recipient.id, envelopeId: envelope.id });
+    }
+
     return;
   }
 
@@ -254,6 +286,8 @@ export const run = async ({ payload, io }: { payload: TSendSigningEmailJobDefini
       data: {
         sendStatus: SendStatus.SENT,
         sentAt,
+        // Solid Ten: a send that worked clears an earlier "not delivered".
+        deliveryFailedAt: null,
       },
     });
   });
@@ -266,20 +300,23 @@ export const run = async ({ payload, io }: { payload: TSendSigningEmailJobDefini
     lastReminderSentAt: null,
   });
 
-  await prisma.documentAuditLog.create({
-    data: createDocumentAuditLogData({
-      type: DOCUMENT_AUDIT_LOG_TYPE.EMAIL_SENT,
-      envelopeId: envelope.id,
-      user,
-      requestMetadata,
-      data: {
-        emailType: recipientEmailType,
-        recipientId: recipient.id,
-        recipientName: recipient.name,
-        recipientEmail: recipient.email,
-        recipientRole: recipient.role,
-        isResending: false,
-      },
-    }),
+  // Solid Ten: in a task, so a re-run after a crash does not write the entry twice.
+  await io.runTask('audit-email-sent', async () => {
+    await prisma.documentAuditLog.create({
+      data: createDocumentAuditLogData({
+        type: DOCUMENT_AUDIT_LOG_TYPE.EMAIL_SENT,
+        envelopeId: envelope.id,
+        user,
+        requestMetadata,
+        data: {
+          emailType: recipientEmailType,
+          recipientId: recipient.id,
+          recipientName: recipient.name,
+          recipientEmail: recipient.email,
+          recipientRole: recipient.role,
+          isResending: false,
+        },
+      }),
+    });
   });
 };

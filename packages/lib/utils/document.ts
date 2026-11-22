@@ -70,6 +70,8 @@ export const extractDerivedDocumentMeta = (
 
     // Reminder settings.
     reminderSettings: meta.reminderSettings ?? settings.reminderSettings ?? null,
+
+    signingChannel: meta.signingChannel ?? null,
   } satisfies Omit<DocumentMeta, 'id'>;
 };
 

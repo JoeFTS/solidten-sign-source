@@ -1,0 +1,69 @@
+{
+  "name": "Solid Ten Sign: document completed",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "solidten-document-completed",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a47da1d3-eafe-4497-b095-ce4eda94ed8f",
+      "name": "Solid Ten Sign webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "ac913f98-e2e4-4899-817e-a3184176ed37"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Solid Ten Sign: verify the webhook signature, refuse replays, keep only completed documents.\nconst crypto = require('crypto');\n\nconst SECRET = 'REPLACE_WITH_YOUR_WEBHOOK_SECRET';\nconst TOLERANCE_SECONDS = 300;\n\nconst results = [];\n\nfor (const item of $input.all()) {\n  const headers = item.json.headers || {};\n  const timestamp = String(headers['x-solidten-timestamp'] || '');\n  const signature = String(headers['x-solidten-signature'] || '');\n\n  // n8n parsed the JSON body. Solid Ten Sign sends JSON.stringify output, so stringifying the\n  // parsed body again gives back the exact bytes that were signed.\n  const rawBody = JSON.stringify(item.json.body);\n\n  if (!/^\\d+$/.test(timestamp) || !/^v1=[0-9a-f]{64}$/.test(signature)) {\n    throw new Error('Missing or malformed signature headers');\n  }\n\n  if (Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) > TOLERANCE_SECONDS) {\n    throw new Error('Delivery is too old (possible replay)');\n  }\n\n  const expected = 'v1=' + crypto.createHmac('sha256', SECRET).update(timestamp + '.' + rawBody, 'utf8').digest('hex');\n\n  if (expected.length !== signature.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) {\n    throw new Error('Signature does not match');\n  }\n\n  if (item.json.body.event !== 'DOCUMENT_COMPLETED') {\n    continue;\n  }\n\n  results.push({ json: { event: item.json.body.event, document: item.json.body.payload } });\n}\n\nreturn results;\n"
+      },
+      "id": "bef6ef3e-3255-41bd-bd52-96981349ee7d",
+      "name": "Verify signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {},
+      "id": "edff412e-7a63-4ddb-bc74-cb4bf4b53a02",
+      "name": "Your step here",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [480, 0],
+      "notes": "Replace with your action. The document is in $json.document (title, envelopeId, externalId, recipients, completedAt)."
+    }
+  ],
+  "connections": {
+    "Solid Ten Sign webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify signature": {
+      "main": [
+        [
+          {
+            "node": "Your step here",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

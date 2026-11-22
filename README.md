@@ -1,3 +1,13 @@
+> **This is Solid Ten Sign, a modified version of [Documenso](https://github.com/documenso/documenso).**
+>
+> - Based on Documenso Community Edition v2.22.0. Modified by Solid Ten, 2026. This copy was last changed in November 2026.
+> - License: GNU AGPL-3.0, the same as Documenso. See [LICENSE](LICENSE). The `packages/ee` folder keeps Documenso's own commercial license (see `packages/ee/LICENSE`). It is included unchanged, and Solid Ten added no code that uses it.
+> - This repository holds the source code of the service at `sign.solidten.io`. Each update of the service is published here as one change.
+> - Solid Ten Sign is not affiliated with or endorsed by Documenso. "Documenso" is a trademark of its owner. For the original product, go to [documenso.com](https://documenso.com).
+> - Questions or security reports about this modified version: `support@solidten.io`. Do not send them to Documenso.
+>
+> The text below is Documenso's original README.
+
 <img src="https://github.com/documenso/documenso/assets/13398220/a643571f-0239-46a6-a73e-6bef38d1228b" alt="Documenso Logo">
 
 <p align="center" style="margin-top: 20px">

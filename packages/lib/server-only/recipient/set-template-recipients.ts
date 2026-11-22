@@ -14,6 +14,7 @@ import { type EnvelopeIdOptions, mapSecondaryIdToTemplateId } from '../../utils/
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { assertCompatibleRecipientGrouping } from '../signature-level/assert-compatible-recipient-grouping';
 import { assertCompatibleRecipientRole } from '../signature-level/assert-compatible-recipient-role';
+import { assertAssistantRolesAllowedOnEnvelope } from './assert-assistant-signing-order';
 import { resolveReplacedRecipientSigningOrders } from './assign-omitted-recipient-signing-orders';
 
 export type SetTemplateRecipientsOptions = {
@@ -51,6 +52,12 @@ export const setTemplateRecipients = async ({ userId, teamId, id, recipients }: 
   if (!envelope) {
     throw new Error('Template not found');
   }
+
+  // Solid Ten Sign (AUD-C12): an assistant needs sequential signing.
+  await assertAssistantRolesAllowedOnEnvelope({
+    envelopeId: envelope.id,
+    roles: recipients.map((recipient) => recipient.role),
+  });
 
   const recipientsHaveActionAuth = recipients.some(
     (recipient) => recipient.actionAuth && recipient.actionAuth.length > 0,

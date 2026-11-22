@@ -54,7 +54,20 @@ export const normalizeReturnTo = (returnTo?: string) => {
       pathname = `${basePath}${pathname}`;
     }
 
-    return `${pathname}${returnToUrl.search}${returnToUrl.hash}`;
+    const result = `${pathname}${returnToUrl.search}${returnToUrl.hash}`;
+
+    // Solid Ten Sign: '/.//evil.example' and '<origin>//evil.example' resolve on the app
+    // but normalise to '//evil.example', which a browser reads as another host. The
+    // value that is redirected to must be the value that was checked.
+    if (!result.startsWith('/') || result.startsWith('//') || result.startsWith('/\\')) {
+      return undefined;
+    }
+
+    if (new URL(result, NEXT_PUBLIC_WEBAPP_URL()).origin !== getWebAppOrigin()) {
+      return undefined;
+    }
+
+    return result;
   } catch {
     return undefined;
   }

@@ -8,6 +8,7 @@ import { logger } from '@documenso/lib/utils/logger';
 import type { Team, User } from '@prisma/client';
 import type { TsRestRequest } from '@ts-rest/serverless';
 import type { Logger } from 'pino';
+import { ZodError } from 'zod';
 
 type B = {
   // appRoute: any;
@@ -102,7 +103,30 @@ export const authenticatedMiddleware = <
 
       let message = 'Unauthorized';
 
+      // Solid Ten: a body that fails a schema in the handler (for example field meta) is a 400.
+      if (err instanceof ZodError) {
+        return {
+          status: 400,
+          body: { message: `Invalid request: ${err.issues.map((issue) => issue.message).join('; ')}` },
+        } as const;
+      }
+
+      // Solid Ten (DISK-L1): the database cannot take requests: a plain 503, not a 401.
+      const unavailable = AppError.toRestAPIError(err);
+
+      if (unavailable.status === 503) {
+        return unavailable as typeof unavailable & { status: 503 };
+      }
+
       if (err instanceof AppError) {
+        // Solid Ten: a validation refusal is a 400 with its reason, not a 401. Other codes keep
+        // the old answer (401), which callers rely on to not learn whether a document exists.
+        const restError = AppError.toRestAPIError(err);
+
+        if (restError.status === 400) {
+          return restError;
+        }
+
         if (err.code === AppErrorCode.TOO_MANY_REQUESTS) {
           return {
             status: 429,

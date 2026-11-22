@@ -25,6 +25,7 @@ import { BrandingLogo } from '~/components/general/branding-logo';
 import { DocumentAttachmentsPopover } from '~/components/general/document/document-attachments-popover';
 import { EmbeddedEditorAttachmentPopover } from '~/components/general/document/embedded-editor-attachment-popover';
 import { EnvelopeEditorSettingsDialog } from '~/components/general/envelope-editor/envelope-editor-settings-dialog';
+import { ScheduledSendBadge } from '~/components/general/scheduled-send/scheduled-send-badge';
 
 import { TemplateDirectLinkBadge } from '../template/template-direct-link-badge';
 import { EnvelopeItemTitleInput } from './envelope-editor-title-input';
@@ -154,6 +155,10 @@ export default function EnvelopeEditorHeader() {
                   </Badge>
                 ))
                 .exhaustive()}
+
+            {isDocument && !isEmbedded && envelope.status === DocumentStatus.DRAFT && (
+              <ScheduledSendBadge envelopeId={envelope.id} allowUnschedule />
+            )}
 
             {autosaveError && (
               <>

@@ -1,0 +1,16 @@
+Solid Ten Sign: open-source notices
+
+Solid Ten Sign is a modified version of Documenso Community Edition.
+Copyright (c) Documenso, Inc. and contributors.
+Changes copyright (c) Solid Ten.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU Affero General Public License, version 3, as published by the Free Software Foundation.
+This program is distributed WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the license for details:
+https://www.gnu.org/licenses/agpl-3.0.html
+
+Source code of this modified version: SOURCE_URL_NOT_SET
+Original project: https://github.com/documenso/documenso
+
+Solid Ten Sign is not affiliated with or endorsed by Documenso, Inc.

@@ -25,7 +25,14 @@ export const SEAL_DOCUMENT_JOB_DEFINITION = {
   },
   handler: async ({ payload, io }) => {
     const handler = await import('./seal-document.handler');
+    const { runHeavyPdfWork } = await import('../../../server-only/pdf/heavy-pdf-queue');
+    const { getEnvelopeStoredBytes } = await import('../../../server-only/email/stored-document-size');
+    const { mapDocumentIdToSecondaryId } = await import('../../../utils/envelope');
 
-    await handler.run({ payload, io });
+    // Solid Ten: sealing a large document is heavy PDF work; it runs alone among it (LD2-A).
+    const bytes = await getEnvelopeStoredBytes({ secondaryId: mapDocumentIdToSecondaryId(payload.documentId) });
+
+    // A job waits for its turn (no 503): a refusal would only use up its retries.
+    await runHeavyPdfWork(bytes, async () => await handler.run({ payload, io }), { waitForTurn: true });
   },
 } as const satisfies JobDefinition<typeof SEAL_DOCUMENT_JOB_DEFINITION_ID, TSealDocumentJobDefinition>;

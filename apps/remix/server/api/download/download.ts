@@ -13,7 +13,7 @@ import contentDisposition from 'content-disposition';
 import { Hono } from 'hono';
 
 import type { HonoEnv } from '../../router';
-import { handleEnvelopeItemFileRequest } from '../files/files.helpers';
+import { checkEnvelopeFileAccess, handleEnvelopeItemFileRequest } from '../files/files.helpers';
 import {
   ZDownloadDocumentRequestParamsSchema,
   ZDownloadEnvelopeAuditLogPdfRequestParamsSchema,
@@ -103,6 +103,20 @@ export const downloadRoute = new Hono<HonoEnv>()
 
         if (!envelopeItem.documentData) {
           return c.json({ error: 'Document data not found' }, 404);
+        }
+
+        // Solid Ten (AUD-7): the token user's role must see the document's visibility.
+        const hasAccess = await checkEnvelopeFileAccess({
+          userId: apiToken.user.id,
+          teamId: envelopeItem.envelope.teamId,
+          envelopeType: envelopeItem.envelope.type,
+          templateType: envelopeItem.envelope.templateType,
+          visibility: envelopeItem.envelope.visibility,
+          ownerId: envelopeItem.envelope.userId,
+        });
+
+        if (!hasAccess) {
+          return c.json({ error: 'Envelope item not found' }, 404);
         }
 
         const baseOptions = {

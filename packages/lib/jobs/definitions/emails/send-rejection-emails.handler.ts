@@ -11,6 +11,7 @@ import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { DOCUMENSO_INTERNAL_EMAIL } from '../../../constants/email';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
+import { canOwnerReachTeam } from '../../../server-only/team/reassign-envelopes-after-access-loss';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { unsafeBuildEnvelopeIdQuery } from '../../../utils/envelope';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
@@ -48,13 +49,21 @@ export const run = async ({ payload, io }: { payload: TSendSigningRejectionEmail
         },
       },
     }),
-    prisma.recipient.findFirstOrThrow({
+    prisma.recipient.findFirst({
       where: {
         id: recipientId,
         signingStatus: SigningStatus.REJECTED,
       },
     }),
   ]);
+
+  // Solid Ten Sign (FS2-C1): the recipient is no longer a decliner (the decline lost a race, or
+  // the request was handed on). Nothing to send; stop instead of retrying for hours.
+  if (!recipient) {
+    io.logger.info(`Recipient ${recipientId} has not declined; no rejection emails to send`);
+
+    return;
+  }
 
   const { user: documentOwner } = envelope;
 
@@ -109,6 +118,11 @@ export const run = async ({ payload, io }: { payload: TSendSigningRejectionEmail
         text,
       });
     });
+  }
+
+  // Solid Ten: an owner who lost access to the team gets no more notices of its documents.
+  if (!(await canOwnerReachTeam({ userId: envelope.user.id, teamId: envelope.teamId }))) {
+    return;
   }
 
   // Send notification email to document owner

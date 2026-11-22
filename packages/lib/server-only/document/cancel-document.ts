@@ -10,6 +10,7 @@ import { createDocumentAuditLogData } from '../../utils/document-audit-logs';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapSecondaryIdToDocumentId } from '../../utils/envelope';
 import { isMemberManagerOrAbove } from '../../utils/teams';
+import { lockPendingEnvelope } from '../envelope/envelope-transition-lock';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { getMemberRoles } from '../team/get-member-roles';
 import { triggerWebhook } from '../webhooks/trigger/trigger-webhook';
@@ -75,6 +76,10 @@ export const cancelDocument = async ({ id, userId, teamId, reason, requestMetada
   }
 
   const updatedEnvelope = await prisma.$transaction(async (tx) => {
+    // Solid Ten: lock the envelope so a last signature or the seal cannot interleave, and refuse
+    // once everyone has signed: the document is waiting to be sealed.
+    await lockPendingEnvelope(tx, envelope.id, { refuseWhenAwaitingSeal: true });
+
     const updated = await tx.envelope.update({
       where: {
         id: envelope.id,

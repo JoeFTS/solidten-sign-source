@@ -20,6 +20,7 @@ import { AnalyticsOverviewCards } from '~/components/general/analytics/analytics
 import { AnalyticsPageHeader } from '~/components/general/analytics/analytics-page-header';
 import { AnalyticsStatusBreakdownCard } from '~/components/general/analytics/analytics-status-breakdown-card';
 import { AnalyticsTemplateUsageCard } from '~/components/general/analytics/analytics-template-usage-card';
+import { AnalyticsUsageReportCard } from '~/components/general/analytics/analytics-usage-report-card';
 import { resolveBrowserTimezone, useAnalyticsRange } from '~/utils/analytics';
 import { appMetaTags } from '~/utils/meta';
 
@@ -176,6 +177,12 @@ export default function OrganisationAnalyticsPage({ loaderData }: Route.Componen
           searchPlaceholder={_(msg`Search teams`)}
           noSearchResultsLabel={<Trans>No teams match your search</Trans>}
           testIdPrefix="team"
+        />
+
+        <AnalyticsUsageReportCard
+          scope={{ type: 'organisation', organisationId: organisation.id }}
+          rangeInput={{ timezone, ...range }}
+          fileNamePrefix={organisation.url}
         />
       </div>
     </div>

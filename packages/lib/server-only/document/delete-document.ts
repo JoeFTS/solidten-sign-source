@@ -11,8 +11,9 @@ import type { ApiRequestMetadata } from '../../universal/extract-request-metadat
 import { isDocumentCompleted } from '../../utils/document';
 import { createDocumentAuditLogData } from '../../utils/document-audit-logs';
 import { type EnvelopeIdOptions, unsafeBuildEnvelopeIdQuery } from '../../utils/envelope';
-import { isRecipientEmailValidForSending } from '../../utils/recipients';
+import { canSendMailToRecipient } from '../../utils/recipient-mail';
 import { getEmailContext } from '../email/get-email-context';
+import { lockPendingEnvelope } from '../envelope/envelope-transition-lock';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { triggerWebhook } from '../webhooks/trigger/trigger-webhook';
 
@@ -169,6 +170,12 @@ const handleDocumentOwnerDelete = async ({ envelope, user, requestMetadata }: Ha
 
   // Hard delete draft and pending documents.
   const deletedEnvelope = await prisma.$transaction(async (tx) => {
+    // Solid Ten: lock the envelope; a document that everyone has signed is being sealed and must stay.
+    await lockPendingEnvelope(tx, envelope.id, {
+      allowedStatuses: [DocumentStatus.DRAFT, DocumentStatus.PENDING],
+      refuseWhenAwaitingSeal: true,
+    });
+
     // Currently redundant since deleting a document will delete the audit logs.
     // However may be useful if we disassociate audit logs and documents if required.
     await tx.documentAuditLog.create({
@@ -208,7 +215,7 @@ const handleDocumentOwnerDelete = async ({ envelope, user, requestMetadata }: Ha
       (recipient) =>
         recipient.sendStatus === SendStatus.SENT &&
         recipient.role !== RecipientRole.CC &&
-        isRecipientEmailValidForSending(recipient),
+        canSendMailToRecipient(recipient),
     )
     .map((recipient) => ({
       email: recipient.email,

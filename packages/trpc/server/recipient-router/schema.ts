@@ -201,6 +201,8 @@ export const ZRejectDocumentWithTokenMutationSchema = z.object({
   documentId: z.number(),
   reason: z.string(),
   authOptions: ZRecipientActionAuthSchema.optional(),
+  // Solid Ten Sign (AUD-14): the emailed access code, when the recipient's access needs one.
+  accessAuthOptions: ZRecipientAccessAuthSchema.optional(),
 });
 
 export type TRejectDocumentWithTokenMutationSchema = z.infer<typeof ZRejectDocumentWithTokenMutationSchema>;

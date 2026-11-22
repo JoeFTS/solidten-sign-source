@@ -5,6 +5,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 import type { HonoEnv } from '../../../router';
+import { resolveRecipientTokenParam } from '../in-person-turn-token';
+import { canTokenAccessDocument } from '../token-document-access';
 import { handleEnvelopeItemPdfRequest } from './get-envelope-item-pdf';
 
 const route = new Hono<HonoEnv>();
@@ -24,7 +26,8 @@ route.get(
   '/token/:token/envelope/:envelopeId/envelopeItem/:envelopeItemId/dataId/:documentDataId/:version/item.pdf',
   sValidator('param', ZGetEnvelopeItemByTokenParamsSchema),
   async (c) => {
-    const { token, envelopeId, envelopeItemId, documentDataId, version } = c.req.valid('param');
+    const { token: tokenParam, envelopeId, envelopeItemId, documentDataId, version } = c.req.valid('param');
+    const token = await resolveRecipientTokenParam(c, tokenParam);
 
     if (!token) {
       return c.json({ error: 'Not found' }, 404);
@@ -64,7 +67,7 @@ route.get(
       },
     });
 
-    if (!envelopeItem) {
+    if (!envelopeItem || !(await canTokenAccessDocument(c, { token, envelopeId }))) {
       return c.json({ error: 'Not found' }, 404);
     }
 

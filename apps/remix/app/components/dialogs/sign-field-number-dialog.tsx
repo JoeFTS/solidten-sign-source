@@ -1,4 +1,5 @@
 import type { TNumberFieldMeta } from '@documenso/lib/types/field-meta';
+import { checkNumberInput, parseFieldNumberValue } from '@documenso/lib/utils/field-number-value';
 import { cn } from '@documenso/ui/lib/utils';
 import { Button } from '@documenso/ui/primitives/button';
 import {
@@ -9,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@documenso/ui/primitives/dialog';
-import { numberFormatValues } from '@documenso/ui/primitives/document-flow/field-items-advanced-settings/constants';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@documenso/ui/primitives/form/form';
 import { Input } from '@documenso/ui/primitives/input';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -30,36 +30,25 @@ export const SignFieldNumberDialog = createCallable<SignFieldNumberDialogProps, 
     const createNumberFieldSchema = (fieldMeta: TNumberFieldMeta) => {
       const { numberFormat, minValue, maxValue } = fieldMeta;
 
-      if (numberFormat) {
-        const foundRegex = numberFormatValues.find((item) => item.value === numberFormat)?.regex;
-
-        if (foundRegex) {
-          return z.string().refine(
-            (value) => {
-              return foundRegex.test(value.toString());
-            },
-            {
-              message: t`Number needs to be formatted as ${numberFormat}`,
-            },
-          );
-        }
-      }
-
-      // Not gong to work with min/max numbers + number format
-      // Since currently doesn't work in V1 going to ignore for now.
+      // Solid Ten: the same grammar as the server (see `checkNumberInput`).
       return z.string().superRefine((value, ctx) => {
-        const isValidNumber = /^[0-9,.]+$/.test(value.toString());
+        const problem = checkNumberInput(value.toString(), numberFormat);
 
-        if (!isValidNumber) {
+        if (problem) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: t`Please enter a valid number`,
+            message:
+              problem === 'negative'
+                ? t`Enter zero or a positive number`
+                : numberFormat
+                  ? t`Number needs to be formatted as ${numberFormat}`
+                  : t`Please enter a valid number`,
           });
 
           return;
         }
 
-        if (typeof minValue === 'number' && parseFloat(value) < minValue) {
+        if (typeof minValue === 'number' && (parseFieldNumberValue(value, numberFormat) ?? 0) < minValue) {
           ctx.addIssue({
             code: z.ZodIssueCode.too_small,
             minimum: minValue,
@@ -70,7 +59,7 @@ export const SignFieldNumberDialog = createCallable<SignFieldNumberDialogProps, 
           return;
         }
 
-        if (typeof maxValue === 'number' && parseFloat(value) > maxValue) {
+        if (typeof maxValue === 'number' && (parseFieldNumberValue(value, numberFormat) ?? 0) > maxValue) {
           ctx.addIssue({
             code: z.ZodIssueCode.too_big,
             maximum: maxValue,

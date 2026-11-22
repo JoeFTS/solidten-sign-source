@@ -1,6 +1,5 @@
-import { numberFormatValues } from '@documenso/ui/primitives/document-flow/field-items-advanced-settings/constants';
-
 import type { TNumberFieldMeta as NumberFieldMeta } from '../types/field-meta';
+import { checkNumberInput, describeNumberInputProblem, parseFieldNumberValue } from '../utils/field-number-value';
 
 export const validateNumberField = (
   value: string,
@@ -11,26 +10,17 @@ export const validateNumberField = (
 
   const { minValue, maxValue, readOnly, required, numberFormat, fontSize } = fieldMeta || {};
 
-  if (numberFormat && value.length > 0) {
-    const foundRegex = numberFormatValues.find((item) => item.value === numberFormat)?.regex;
+  // Solid Ten: the one grammar per format (see `field-number-value.ts`).
+  const inputProblem = value.length > 0 ? checkNumberInput(value, numberFormat) : null;
 
-    if (!foundRegex) {
-      errors.push(`Invalid number format - ${numberFormat}`);
-    }
-
-    if (foundRegex && !foundRegex.test(value)) {
-      errors.push(`Value ${value} does not match the number format - ${numberFormat}`);
-    }
+  if (inputProblem) {
+    errors.push(describeNumberInputProblem(value, numberFormat, inputProblem));
   }
 
-  const numberValue = parseFloat(value);
+  const numberValue = parseFieldNumberValue(value, numberFormat) ?? parseFloat(value);
 
   if (isSigningPage && required && !value) {
     errors.push('Value is required');
-  }
-
-  if ((isSigningPage || value.length > 0) && !/^[0-9,.]+$/.test(value.trim())) {
-    errors.push(`Value is not a valid number`);
   }
 
   if (typeof minValue === 'number' && minValue > 0 && numberValue < minValue) {

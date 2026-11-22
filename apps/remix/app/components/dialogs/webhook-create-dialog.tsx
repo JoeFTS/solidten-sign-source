@@ -1,3 +1,4 @@
+import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { trpc } from '@documenso/trpc/react';
 import { ZCreateWebhookRequestSchema } from '@documenso/trpc/server/webhook-router/schema';
 import { Button } from '@documenso/ui/primitives/button';
@@ -82,9 +83,14 @@ export const WebhookCreateDialog = ({ trigger, ...props }: WebhookCreateDialogPr
 
       form.reset();
     } catch (err) {
+      const error = AppError.parseError(err);
+
       toast({
         title: _(msg`Error`),
-        description: _(msg`An error occurred while creating the webhook. Please try again.`),
+        description:
+          error.code === AppErrorCode.WEBHOOK_INVALID_REQUEST && error.message
+            ? error.message
+            : _(msg`An error occurred while creating the webhook. Please try again.`),
         variant: 'destructive',
       });
     }
@@ -127,7 +133,7 @@ export const WebhookCreateDialog = ({ trigger, ...props }: WebhookCreateDialogPr
                       </FormControl>
 
                       <FormDescription>
-                        <Trans>The URL for Documenso to send webhook events to.</Trans>
+                        <Trans>The URL for Solid Ten Sign to send webhook events to.</Trans>
                       </FormDescription>
 
                       <FormMessage />
@@ -197,7 +203,7 @@ export const WebhookCreateDialog = ({ trigger, ...props }: WebhookCreateDialogPr
                     <FormDescription>
                       <Trans>
                         A secret that will be sent to your URL so you can verify that the request has been sent by
-                        Documenso.
+                        Solid Ten Sign.
                       </Trans>
                     </FormDescription>
                     <FormMessage />

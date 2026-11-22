@@ -1,14 +1,10 @@
-import {
-  convertPlaceholdersToFieldInputs,
-  extractPdfPlaceholders,
-} from '@documenso/lib/server-only/pdf/auto-place-fields';
+import { convertPlaceholdersToFieldInputs } from '@documenso/lib/server-only/pdf/auto-place-fields';
 import { findRecipientByPlaceholder } from '@documenso/lib/server-only/pdf/helpers';
-import { insertFormValuesInPdf } from '@documenso/lib/server-only/pdf/insert-form-values-in-pdf';
-import { normalizePdf } from '@documenso/lib/server-only/pdf/normalize-pdf';
+import { prepareUploadedPdfIsolated } from '@documenso/lib/server-only/pdf-child/isolated-pdf';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
 import { prefixedId } from '@documenso/lib/universal/id';
-import { putPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
+import { putPreparedPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
 import { prisma } from '@documenso/prisma';
 import type { Envelope, EnvelopeItem, Recipient } from '@prisma/client';
@@ -47,23 +43,13 @@ export const UNSAFE_createEnvelopeItems = async ({
   // For each file: normalize, extract & clean placeholders, then upload.
   const envelopeItemsToCreate = await Promise.all(
     files.map(async ({ file, orderOverride, clientId }, index) => {
-      let buffer = Buffer.from(await file.arrayBuffer());
+      // Solid Ten (AUD-5): in the PDF child and the heavy-PDF queue at every size (isolated-pdf.ts).
+      const { cleanedPdf, placeholders, pageCount } = await prepareUploadedPdfIsolated(
+        Buffer.from(await file.arrayBuffer()),
+        { flattenForm: envelope.type !== 'TEMPLATE', formValues: envelope.formValues },
+      );
 
-      if (envelope.formValues) {
-        buffer = await insertFormValuesInPdf({ pdf: buffer, formValues: envelope.formValues });
-      }
-
-      const { pdf: normalized } = await normalizePdf(buffer, {
-        flattenForm: envelope.type !== 'TEMPLATE',
-      });
-
-      const { cleanedPdf, placeholders } = await extractPdfPlaceholders(normalized);
-
-      const { documentData } = await putPdfFileServerSide({
-        name: file.name,
-        type: 'application/pdf',
-        arrayBuffer: async () => Promise.resolve(cleanedPdf),
-      });
+      const { documentData } = await putPreparedPdfFileServerSide({ name: file.name, pdf: cleanedPdf, pageCount });
 
       return {
         id: prefixedId('envelope_item'),

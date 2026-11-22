@@ -1,6 +1,7 @@
 import {
   isDisposableEmail,
   isEmailDomainAllowedForSignup,
+  isSigninDisabledGlobally,
   isSigninEnabledForProvider,
   isSignupEnabledForProvider,
 } from '@documenso/lib/constants/auth';
@@ -13,6 +14,10 @@ import { isTwoFactorAuthenticationEnabled } from '@documenso/lib/server-only/2fa
 import { setupTwoFactorAuthentication } from '@documenso/lib/server-only/2fa/setup-2fa';
 import { validateTwoFactorAuthentication } from '@documenso/lib/server-only/2fa/validate-2fa';
 import { viewBackupCodes } from '@documenso/lib/server-only/2fa/view-backup-codes';
+import {
+  assertCredentialChangeStepUp,
+  revokeOtherUserSessions,
+} from '@documenso/lib/server-only/auth/credential-step-up';
 import { verifyCaptchaToken } from '@documenso/lib/server-only/captcha/verify-captcha';
 import { rateLimitResponse } from '@documenso/lib/server-only/rate-limit/rate-limit-middleware';
 import {
@@ -24,6 +29,7 @@ import {
   updatePasswordRateLimit,
   verifyEmailRateLimit,
 } from '@documenso/lib/server-only/rate-limit/rate-limits';
+import { getTokenRateLimitKey } from '@documenso/lib/server-only/rate-limit/token-rate-limit-key';
 import { getEmailBlocklistDomains } from '@documenso/lib/server-only/site-settings/get-email-blocklist-domains';
 import { createUser } from '@documenso/lib/server-only/user/create-user';
 import { forgotPassword } from '@documenso/lib/server-only/user/forgot-password';
@@ -260,6 +266,9 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
 
     const { session, user } = await getSession(c);
 
+    // Solid Ten Sign (AUD-C10 follow-up): a credential change needs a recent sign-in.
+    await assertCredentialChangeStepUp({ session, userId: user.id, checkTwoFactor: false });
+
     const updateLimitResult = await updatePasswordRateLimit.check({
       ip: requestMetadata.ipAddress ?? 'unknown',
       identifier: String(user.id),
@@ -317,7 +326,8 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
 
     const verifyLimitResult = await verifyEmailRateLimit.check({
       ip: requestMetadata.ipAddress ?? 'unknown',
-      identifier: token,
+      // Solid Ten Sign (SEC2-L1): the RateLimit table keeps a hash, never the token itself.
+      identifier: getTokenRateLimitKey(token),
     });
 
     const verifyLimited = rateLimitResponse(c, verifyLimitResult);
@@ -331,7 +341,8 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
     const { state, userId } = await verifyEmail({ token });
 
     // If email is verified, automatically authenticate user.
-    if (state === EMAIL_VERIFICATION_STATE.VERIFIED && userId !== null) {
+    // Solid Ten Sign: not while sign-in is turned off; the email is still verified.
+    if (state === EMAIL_VERIFICATION_STATE.VERIFIED && userId !== null && !isSigninDisabledGlobally()) {
       await onAuthorize({ userId }, c);
     }
 
@@ -422,7 +433,8 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
 
     const resetLimitResult = await resetPasswordRateLimit.check({
       ip: requestMetadata.ipAddress ?? 'unknown',
-      identifier: token,
+      // Solid Ten Sign (SEC2-L1): the RateLimit table keeps a hash, never the token itself.
+      identifier: getTokenRateLimitKey(token),
     });
 
     const resetLimited = rateLimitResponse(c, resetLimitResult);
@@ -475,7 +487,10 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
    * Setup two factor authentication.
    */
   .post('/2fa/setup', async (c) => {
-    const { user } = await getSession(c);
+    const { user, session } = await getSession(c);
+
+    // Solid Ten Sign (AUD-C10 follow-up): a credential change needs a recent sign-in.
+    await assertCredentialChangeStepUp({ session, userId: user.id, checkTwoFactor: false });
 
     const result = await setupTwoFactorAuthentication({
       user,
@@ -501,7 +516,10 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
     async (c) => {
       const requestMetadata = c.get('requestMetadata');
 
-      const { user: sessionUser } = await getSession(c);
+      const { user: sessionUser, session } = await getSession(c);
+
+      // Solid Ten Sign (AUD-C10 follow-up): a credential change needs a recent sign-in.
+      await assertCredentialChangeStepUp({ session, userId: sessionUser.id, checkTwoFactor: false });
 
       const user = await prisma.user.findFirst({
         where: {
@@ -527,6 +545,9 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
         requestMetadata,
       });
 
+      // Solid Ten Sign (AUD-C10 follow-up): as on /two-factor, a 2FA change ends the other sign-ins.
+      await revokeOtherUserSessions({ userId: user.id, currentSessionId: session.id });
+
       return c.json({
         success: true,
         recoveryCodes: result.recoveryCodes,
@@ -548,7 +569,10 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
     async (c) => {
       const requestMetadata = c.get('requestMetadata');
 
-      const { user: sessionUser } = await getSession(c);
+      const { user: sessionUser, session } = await getSession(c);
+
+      // Solid Ten Sign (AUD-C10 follow-up): a credential change needs a recent sign-in.
+      await assertCredentialChangeStepUp({ session, userId: sessionUser.id, checkTwoFactor: false });
 
       const user = await prisma.user.findFirst({
         where: {
@@ -576,6 +600,9 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
         requestMetadata,
       });
 
+      // Solid Ten Sign (AUD-C10 follow-up): as on /two-factor, a 2FA change ends the other sign-ins.
+      await revokeOtherUserSessions({ userId: user.id, currentSessionId: session.id });
+
       return c.text('OK', 201);
     },
   )
@@ -591,7 +618,10 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
       }),
     ),
     async (c) => {
-      const { user: sessionUser } = await getSession(c);
+      const { user: sessionUser, session } = await getSession(c);
+
+      // Solid Ten Sign (AUD-C10 follow-up): a credential change needs a recent sign-in.
+      await assertCredentialChangeStepUp({ session, userId: sessionUser.id, checkTwoFactor: false });
 
       const user = await prisma.user.findFirst({
         where: {

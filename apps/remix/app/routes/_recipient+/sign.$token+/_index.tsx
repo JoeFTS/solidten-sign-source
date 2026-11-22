@@ -22,6 +22,7 @@ import { getNextPendingRecipient } from '@documenso/lib/server-only/recipient/ge
 import { getRecipientByToken } from '@documenso/lib/server-only/recipient/get-recipient-by-token';
 import { getRecipientSignatures } from '@documenso/lib/server-only/recipient/get-recipient-signatures';
 import { getRecipientsForAssistant } from '@documenso/lib/server-only/recipient/get-recipients-for-assistant';
+import { getSigningLinkStatus } from '@documenso/lib/server-only/recipient-reassign/get-signing-link-status';
 import { getTeamSettings } from '@documenso/lib/server-only/team/get-team-settings';
 import { assertSenderNotDisabled } from '@documenso/lib/server-only/user/assert-user-not-disabled';
 import { getUserByEmail } from '@documenso/lib/server-only/user/get-user-by-email';
@@ -78,6 +79,10 @@ const handleV1Loader = async ({ params, request }: Route.LoaderArgs) => {
 
   if (!document || !document.documentData || !recipient || document.status === DocumentStatus.DRAFT) {
     throw new Response('Not Found', { status: 404 });
+  }
+
+  if (document.status === DocumentStatus.CANCELLED) {
+    throw redirect(`/sign/${token}/cancelled`);
   }
 
   const recipientWithFields = { ...recipient, fields };
@@ -223,6 +228,10 @@ const handleV2Loader = async ({ params, request }: Route.LoaderArgs) => {
 
   const { envelope, recipient, isCompleted, isRejected, isExpired, isRecipientsTurn } = envelopeForSigning;
 
+  if (envelope.status === DocumentStatus.CANCELLED) {
+    throw redirect(`/sign/${token}/cancelled`);
+  }
+
   if (!isRecipientsTurn) {
     throw redirect(`/sign/${token}/waiting`);
   }
@@ -353,6 +362,11 @@ export async function loader(loaderArgs: Route.LoaderArgs) {
   });
 
   if (!foundRecipient) {
+    // Solid Ten: a link whose request was handed to someone else says so.
+    if ((await getSigningLinkStatus({ token })) === 'REASSIGNED') {
+      throw redirect(`/sign/${token}/reassigned`);
+    }
+
     throw new Response('Not Found', { status: 404 });
   }
 
@@ -479,8 +493,8 @@ const SigningPageV1 = ({ data }: { data: Awaited<ReturnType<typeof handleV1Loade
             <p className="mt-36 text-muted-foreground/60 text-sm">
               <Trans>
                 Want to send slick signing links like this one?{' '}
-                <Link to="https://documenso.com" className="text-documenso-700 hover:text-documenso-600">
-                  Check out Documenso
+                <Link to="https://solidten.io" className="text-documenso-700 hover:text-documenso-600">
+                  Check out Solid Ten Sign
                 </Link>
                 .
               </Trans>
@@ -579,8 +593,8 @@ const SigningPageV2 = ({ data }: { data: Awaited<ReturnType<typeof handleV2Loade
             <p className="mt-36 text-muted-foreground/60 text-sm">
               <Trans>
                 Want to send slick signing links like this one?{' '}
-                <Link to="https://documenso.com" className="text-documenso-700 hover:text-documenso-600">
-                  Check out Documenso
+                <Link to="https://solidten.io" className="text-documenso-700 hover:text-documenso-600">
+                  Check out Solid Ten Sign
                 </Link>
                 .
               </Trans>

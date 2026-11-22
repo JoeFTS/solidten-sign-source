@@ -135,6 +135,39 @@ export const apiTrpcRateLimit = createRateLimit({
   window: '1m',
 });
 
+/**
+ * Solid Ten: token-authorized signing calls (sign or clear a field, complete, reject, the link
+ * status poll), counted per recipient link (a hash of the token, never the token) with a per-IP
+ * backstop. A signer with 150 fields, or an office of signers behind one NAT address, no longer
+ * shares the 100-per-IP tRPC limit.
+ */
+export const apiTrpcSigningRateLimit = createRateLimit({
+  action: 'api.trpc.signing',
+  max: 600,
+  globalMax: 3000,
+  window: '1m',
+});
+
+/**
+ * Solid Ten: signed-in staff calls, counted per session with a per-IP backstop.
+ */
+export const apiTrpcSessionRateLimit = createRateLimit({
+  action: 'api.trpc.session',
+  max: 600,
+  globalMax: 3000,
+  window: '1m',
+});
+
+/**
+ * Solid Ten: field-file uploads, per IP only here; the upload procedure keeps its own per-IP and
+ * per-recipient limits (fieldFileUploadRateLimit).
+ */
+export const apiTrpcFieldUploadRateLimit = createRateLimit({
+  action: 'api.trpc.field-upload',
+  max: 300,
+  window: '1m',
+});
+
 export const aiRateLimit = createRateLimit({
   action: 'api.ai',
   max: 3,
@@ -155,4 +188,35 @@ export const envelopeContentRateLimit = createRateLimit({
   action: 'api.envelope-content',
   max: 20,
   window: '1m',
+});
+
+// ---- Email-link sign-in (Solid Ten Sign) ----
+
+/**
+ * Per IP (20 an hour) and per email from one IP (5 an hour). Keyed by email and IP, so
+ * requests from elsewhere cannot use up the owner's budget (S-M1).
+ */
+export const emailLinkRequestRateLimit = createRateLimit({
+  action: 'auth.email-link-request',
+  max: 5,
+  globalMax: 20,
+  window: '1h',
+});
+
+/**
+ * A ceiling per email from all IPs together. Over it the request is still answered as
+ * usual but no new link is sent: it only delays new links, it never blocks the owner from
+ * the links already in their inbox (S-M1).
+ */
+export const emailLinkRequestEmailCeiling = createRateLimit({
+  action: 'auth.email-link-request-email',
+  max: 30,
+  window: '1h',
+});
+
+export const emailLinkAuthorizeRateLimit = createRateLimit({
+  action: 'auth.email-link-authorize',
+  max: 10,
+  globalMax: 50,
+  window: '15m',
 });

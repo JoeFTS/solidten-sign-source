@@ -83,13 +83,17 @@ test('[SIGNING_GROUPS]: group members sign in any order and gate the next step',
   // The whole group is done — step 3 unlocks and completes the document.
   await completeSigning(page, recipient3);
 
+  // The seal runs in the PDF child; under load it can take more than 5 s.
   await expect
-    .poll(async () => {
-      const envelope = await prisma.envelope.findUniqueOrThrow({
-        where: { id: document.id },
-      });
+    .poll(
+      async () => {
+        const envelope = await prisma.envelope.findUniqueOrThrow({
+          where: { id: document.id },
+        });
 
-      return envelope.status;
-    })
+        return envelope.status;
+      },
+      { timeout: 20_000 },
+    )
     .toBe(DocumentStatus.COMPLETED);
 });

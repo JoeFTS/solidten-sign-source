@@ -21,6 +21,7 @@ import { AnalyticsOverviewCards } from '~/components/general/analytics/analytics
 import { AnalyticsPageHeader } from '~/components/general/analytics/analytics-page-header';
 import { AnalyticsStatusBreakdownCard } from '~/components/general/analytics/analytics-status-breakdown-card';
 import { AnalyticsTemplateUsageCard } from '~/components/general/analytics/analytics-template-usage-card';
+import { AnalyticsUsageReportCard } from '~/components/general/analytics/analytics-usage-report-card';
 import { useCurrentTeam } from '~/providers/team';
 import { resolveBrowserTimezone, useAnalyticsRange } from '~/utils/analytics';
 import { appMetaTags } from '~/utils/meta';
@@ -173,6 +174,12 @@ export default function TeamAnalyticsPage({ loaderData }: Route.ComponentProps) 
           searchPlaceholder={_(msg`Search members`)}
           noSearchResultsLabel={<Trans>No members match your search</Trans>}
           testIdPrefix="member"
+        />
+
+        <AnalyticsUsageReportCard
+          scope={{ type: 'team', teamId: team.id }}
+          rangeInput={{ timezone, ...range }}
+          fileNamePrefix={team.url}
         />
       </div>
     </div>

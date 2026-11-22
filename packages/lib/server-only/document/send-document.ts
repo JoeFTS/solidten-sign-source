@@ -37,12 +37,14 @@ import { getFileServerSide } from '../../universal/upload/get-file.server';
 import { putNormalizedPdfFileServerSide } from '../../universal/upload/put-file.server';
 import { isDocumentCompleted } from '../../utils/document';
 import { extractDocumentAuthMethods } from '../../utils/document-auth';
-import { type EnvelopeIdOptions, mapSecondaryIdToDocumentId } from '../../utils/envelope';
+import { type EnvelopeIdOptions, mapSecondaryIdToDocumentId, unsafeBuildEnvelopeIdQuery } from '../../utils/envelope';
 import { assertEnvelopeContentLimits, getContentsMissingImages } from '../../utils/envelope-content';
+import { dropAutoInsertsOfHiddenFields } from '../../utils/field-conditions';
 import { toCheckboxCustomText, toRadioCustomText } from '../../utils/fields';
 import { getRecipientsInActiveSigningStep } from '../../utils/recipient-groups';
 import { getRecipientsWithMissingFields, isRecipientEmailValidForSending } from '../../utils/recipients';
 import { loadContentImages } from '../data-content/load-content-images';
+import { getEnvelopeStoredBytes } from '../email/stored-document-size';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import {
   commitRenderedEnvelopeItems,
@@ -50,7 +52,12 @@ import {
   type RenderedEnvelopeItem,
   renderContentsIntoEnvelopeItem,
 } from '../envelope-content/insert-contents-into-envelope-item';
-import { insertFormValuesInPdf } from '../pdf/insert-form-values-in-pdf';
+import { applyFieldLogicForEnvelope } from '../field-logic/apply-field-logic';
+import { assertFieldLogicReadyToSend } from '../field-logic/assert-field-logic';
+import { runHeavyPdfWork } from '../pdf/heavy-pdf-queue';
+import { assertAssistantSigningOrderValid } from '../recipient/assert-assistant-signing-order';
+import { resolveScheduledSendBeforeSend } from '../scheduled-send/resolve-scheduled-send-before-send';
+import { isSigningSmsPossible } from '../sms/sms-availability';
 import { assertUserNotDisabledById } from '../user/assert-user-not-disabled';
 import { triggerWebhook } from '../webhooks/trigger/trigger-webhook';
 
@@ -60,9 +67,37 @@ export type SendDocumentOptions = {
   teamId: number;
   sendEmail?: boolean;
   requestMetadata: ApiRequestMetadata;
+  /**
+   * Set only by the scheduled-send worker, to prove it holds the schedule claim.
+   */
+  scheduledSendClaim?: { id: string; claimedAt: Date };
 };
 
-export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetadata }: SendDocumentOptions) => {
+/**
+ * Solid Ten: the send transaction applies field rules and writes many rows; under load it ran past
+ * the client default (10 s, packages/prisma/index.ts) and failed with P2028. Give it room. A send that
+ * still fails half way is healed by the job recovery sweep (heal-unsent-signing-requests.ts).
+ */
+const SEND_DOCUMENT_TRANSACTION_OPTIONS = { timeout: 30_000, maxWait: 15_000 };
+
+/**
+ * Solid Ten: a send of a large document holds the heavy-PDF slot for its rendering and its
+ * transaction, so another large upload or send cannot stall that transaction (LD2-A).
+ */
+export const sendDocument = async (options: SendDocumentOptions) =>
+  await runHeavyPdfWork(
+    await getEnvelopeStoredBytes(unsafeBuildEnvelopeIdQuery(options.id, EnvelopeType.DOCUMENT)),
+    async () => await sendDocumentUnqueued(options),
+  );
+
+const sendDocumentUnqueued = async ({
+  id,
+  userId,
+  teamId,
+  sendEmail,
+  requestMetadata,
+  scheduledSendClaim,
+}: SendDocumentOptions) => {
   // Refuse to send on behalf of a disabled account. Guards distribute /
   // redistribute / template-use routes, the bulk-send job, and direct
   // templates that auto-send on creation.
@@ -167,6 +202,13 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
     envelope.documentMeta.signingOrder = DocumentSigningOrder.SEQUENTIAL;
   }
 
+  // Solid Ten Sign (AUD-C12): an assistant needs sequential signing.
+  assertAssistantSigningOrderValid({
+    signingOrder,
+    signatureLevel: envelope.signatureLevel,
+    roles: envelope.recipients.map((recipient) => recipient.role),
+  });
+
   let recipientsToNotify = envelope.recipients;
 
   if (signingOrder === DocumentSigningOrder.SEQUENTIAL) {
@@ -233,6 +275,9 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
       message: `The following recipients are missing required fields: ${missingRecipientDescriptions}. Signers must have at least one signature field.`,
     });
   }
+
+  await assertFieldLogicReadyToSend({ envelope, fields: envelope.fields, recipients: envelope.recipients });
+  await resolveScheduledSendBeforeSend({ envelopeId: envelope.id, scheduledSendClaim, requestMetadata });
 
   // The items are only pointed at the rendered copies inside the transaction
   // that moves the envelope on from DRAFT, so a failure anywhere before that
@@ -323,6 +368,8 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
         fieldsToAutoInsert.push(fieldToAutoInsert);
       }
     }
+
+    dropAutoInsertsOfHiddenFields(envelope.fields, fieldsToAutoInsert);
   }
 
   if (isTspEnvelope(envelope) && envelope.status === DocumentStatus.DRAFT) {
@@ -382,6 +429,8 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
           // Don't put metadata or user here since it's a system event.
         }),
       });
+
+      await applyFieldLogicForEnvelope({ tx, envelopeId: envelope.id });
     }
 
     const expiresAt = resolveExpiresAt(envelope.documentMeta?.envelopeExpirationPeriod ?? null);
@@ -418,7 +467,7 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
         recipients: true,
       },
     });
-  });
+  }, SEND_DOCUMENT_TRANSACTION_OPTIONS);
 
   const isRecipientSigningRequestEmailEnabled = extractDerivedDocumentEmailSettings(
     envelope.documentMeta,
@@ -427,7 +476,11 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
   // Only send email if one of the following is true:
   // - It is explicitly set
   // - The email is enabled for signing requests AND sendEmail is undefined
-  if (sendEmail || (isRecipientSigningRequestEmailEnabled && sendEmail === undefined)) {
+  // Solid Ten: a text-only envelope still needs the job, which sends the text.
+  const isSigningRequestDeliveryEnabled =
+    isRecipientSigningRequestEmailEnabled || isSigningSmsPossible(envelope.documentMeta);
+
+  if (sendEmail || (isSigningRequestDeliveryEnabled && sendEmail === undefined)) {
     await Promise.all(
       recipientsToNotify.map(async (recipient) => {
         if (recipient.sendStatus === SendStatus.SENT || recipient.role === RecipientRole.CC) {
@@ -463,23 +516,18 @@ const injectFormValuesIntoDocument = async (
 ) => {
   const file = await getFileServerSide(envelopeItem.documentData);
 
-  const prefilled = await insertFormValuesInPdf({
-    pdf: Buffer.from(file),
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-    formValues: envelope.formValues as Record<string, string | number | boolean>,
-  });
-
   let fileName = envelope.title;
 
   if (!envelope.title.endsWith('.pdf')) {
     fileName = `${envelope.title}.pdf`;
   }
 
-  const { documentData: newDocumentData } = await putNormalizedPdfFileServerSide({
-    name: fileName,
-    type: 'application/pdf',
-    arrayBuffer: async () => Promise.resolve(prefilled),
-  });
+  // Solid Ten (AUD-5): the form values are filled in the PDF child, with the normalisation.
+  const { documentData: newDocumentData } = await putNormalizedPdfFileServerSide(
+    { name: fileName, type: 'application/pdf', arrayBuffer: async () => Promise.resolve(Buffer.from(file)) },
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    { formValues: envelope.formValues as Record<string, string | number | boolean> },
+  );
 
   await prisma.envelopeItem.update({
     where: {

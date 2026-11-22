@@ -5,6 +5,7 @@ import { groupBy, unique } from 'remeda';
 
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { ContentImageMap } from '../../universal/content-renderer/content-renderer';
+import { filterVisibleFields } from '../../utils/field-conditions';
 import { insertFieldInPDFV2, type OverlayContent } from './insert-field-in-pdf-v2';
 
 type InsertPageOverlaysOptions = {
@@ -15,7 +16,7 @@ type InsertPageOverlaysOptions = {
 };
 
 export const insertPageOverlays = async ({ pdfDoc, fields, contents = [], images }: InsertPageOverlaysOptions) => {
-  const fieldsByPage = groupBy(fields, (field) => field.page);
+  const fieldsByPage = groupBy(filterVisibleFields(fields), (field) => field.page);
   const contentsByPage = groupBy(contents, (content) => content.contentMeta.page);
 
   const pageNumbers = unique([...Object.keys(fieldsByPage), ...Object.keys(contentsByPage)].map(Number));

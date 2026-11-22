@@ -6,6 +6,7 @@ import {
 import { DO_NOT_INVALIDATE_QUERY_ON_MUTATION, SKIP_QUERY_BATCH_META } from '@documenso/lib/constants/trpc';
 import { AppError } from '@documenso/lib/errors/app-error';
 import { type TRecipientLite, ZRecipientEmailSchema } from '@documenso/lib/types/recipient';
+import { megabytesToBytes } from '@documenso/lib/universal/unit-convertions';
 import { trpc } from '@documenso/trpc/react';
 import { DOCUMENT_TITLE_MAX_LENGTH } from '@documenso/trpc/server/document-router/schema';
 import type { TUseEnvelopePayload } from '@documenso/trpc/server/envelope-router/use-envelope.types';
@@ -670,7 +671,7 @@ export function TemplateUseDialog({
                                           return;
                                         }
 
-                                        if (file.size > APP_DOCUMENT_UPLOAD_SIZE_LIMIT * 1024 * 1024) {
+                                        if (file.size > megabytesToBytes(APP_DOCUMENT_UPLOAD_SIZE_LIMIT)) {
                                           form.setError(`customDocumentData.${i}.data`, {
                                             type: 'manual',
                                             message: _(

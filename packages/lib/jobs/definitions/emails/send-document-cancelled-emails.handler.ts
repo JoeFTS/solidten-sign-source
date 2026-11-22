@@ -1,5 +1,4 @@
 import DocumentCancelTemplate from '@documenso/email/templates/document-cancel';
-import { isRecipientEmailValidForSending } from '@documenso/lib/utils/recipients';
 import { prisma } from '@documenso/prisma';
 import { msg } from '@lingui/core/macro';
 import { EnvelopeType, ReadStatus, RecipientRole, SendStatus, SigningStatus } from '@prisma/client';
@@ -11,6 +10,7 @@ import { getEmailContext } from '../../../server-only/email/get-email-context';
 import { assertOrganisationRatesAndLimits } from '../../../server-only/rate-limit/assert-organisation-rates-and-limits';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { unsafeBuildEnvelopeIdQuery } from '../../../utils/envelope';
+import { canSendMailToRecipient } from '../../../utils/recipient-mail';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import type { JobRunIO } from '../../client/_internal/job';
 import type { TSendDocumentCancelledEmailsJobDefinition } from './send-document-cancelled-emails';
@@ -97,7 +97,7 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCancelledEmai
       recipient.role !== RecipientRole.CC &&
       (recipient.sendStatus === SendStatus.SENT || recipient.readStatus === ReadStatus.OPENED) &&
       recipient.signingStatus !== SigningStatus.REJECTED &&
-      isRecipientEmailValidForSending(recipient),
+      canSendMailToRecipient(recipient),
   );
 
   await io.runTask('send-cancellation-emails', async () => {

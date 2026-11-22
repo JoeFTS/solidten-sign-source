@@ -19,6 +19,7 @@ import { useEffect } from 'react';
 import { Link, redirect, useSearchParams } from 'react-router';
 
 import { SignInForm } from '~/components/forms/signin';
+import { SignInEmailLinkForm } from '~/components/forms/signin-email-link';
 import { SIGNUP_ERROR_MESSAGES } from '~/components/forms/signup';
 import { appMetaTags } from '~/utils/meta';
 
@@ -129,9 +130,11 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
         </h1>
 
         <p className="mt-2 text-muted-foreground text-sm">
-          <Trans>Welcome back, we are lucky to have you.</Trans>
+          <Trans>Enter your email. We send you a link that signs you in.</Trans>
         </p>
         <hr className="-mx-6 my-4" />
+
+        <SignInEmailLinkForm className="mb-4" />
 
         <SignInForm
           isEmailPasswordSigninEnabled={isEmailPasswordSigninEnabled}

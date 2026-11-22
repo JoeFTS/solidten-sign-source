@@ -2,6 +2,7 @@ import { useAnalytics } from '@documenso/lib/client-only/hooks/use-analytics';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { type TRecipientAccessAuth, ZDocumentAccessAuthSchema } from '@documenso/lib/types/document-auth';
 import { fieldsContainUnsignedRequiredField } from '@documenso/lib/utils/advanced-fields-helpers';
+import { describeSigningRefusal } from '@documenso/lib/utils/signing-refusal';
 import { zEmail } from '@documenso/lib/utils/zod';
 import { Button } from '@documenso/ui/primitives/button';
 import {
@@ -30,7 +31,7 @@ import { useEmbedSigningContext } from '~/components/embed/embed-signing-context
 import { AccessAuth2FAForm } from '~/components/general/document-signing/access-auth-2fa-form';
 import { DocumentSigningDisclosure } from '~/components/general/document-signing/document-signing-disclosure';
 
-import { getSigningCompletionErrorMessage } from '~/utils/toast-error-messages';
+import { getSigningCompletionErrorMessage, getSigningRefusalTitle } from '~/utils/toast-error-messages';
 
 import { useRequiredDocumentSigningAuthContext } from './document-signing-auth-provider';
 
@@ -182,11 +183,18 @@ export const DocumentSigningCompleteDialog = ({
     } catch (error) {
       const err = AppError.parseError(error);
 
-      if (AppErrorCode.TWO_FACTOR_AUTH_FAILED === err.code) {
+      // Solid Ten Sign (AUD-1): too many wrong codes lock the code until a new one is sent.
+      const isCodeLocked = AppErrorCode.TOO_MANY_REQUESTS === err.code && Boolean(data.accessAuthOptions);
+
+      if (AppErrorCode.TWO_FACTOR_AUTH_FAILED === err.code || isCodeLocked) {
         // This was a 2FA validation failure - show the 2FA dialog again with error
         form.setValue('accessAuthOptions', undefined);
 
-        setTwoFactorValidationError('Invalid verification code. Please try again.');
+        setTwoFactorValidationError(
+          isCodeLocked
+            ? 'Too many wrong codes. Request a new code and try again.'
+            : 'Invalid verification code. Please try again.',
+        );
         setShowTwoFactorForm(true);
 
         return;
@@ -203,9 +211,17 @@ export const DocumentSigningCompleteDialog = ({
       // rethrow rather than toasting themselves.
       const toastMessage = getSigningCompletionErrorMessage(err.code);
 
+      // Solid Ten: an expected refusal (form closed or full, page expired, a value the server
+      // does not accept, busy, rate limited) says why; the generic text is for the unexpected.
+      const refusal = describeSigningRefusal({
+        code: err.code,
+        message: err.message,
+        httpStatus: (error as { data?: { httpStatus?: number } } | null)?.data?.httpStatus,
+      });
+
       toast({
-        title: i18n._(toastMessage.title),
-        description: i18n._(toastMessage.description),
+        title: refusal ? i18n._(getSigningRefusalTitle(refusal)) : i18n._(toastMessage.title),
+        description: refusal ? refusal.message : i18n._(toastMessage.description),
         variant: 'destructive',
       });
     }

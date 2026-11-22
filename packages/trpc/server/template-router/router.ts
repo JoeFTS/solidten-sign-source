@@ -9,6 +9,7 @@ import { createDocumentData } from '@documenso/lib/server-only/document-data/cre
 import { createEnvelope } from '@documenso/lib/server-only/envelope/create-envelope';
 import { duplicateEnvelope } from '@documenso/lib/server-only/envelope/duplicate-envelope';
 import { updateEnvelope } from '@documenso/lib/server-only/envelope/update-envelope';
+import { preparePublicFormSubmission } from '@documenso/lib/server-only/public-form/public-form-submit';
 import {
   createDocumentFromDirectTemplate,
   ZCreateDocumentFromDirectTemplateResponseSchema,
@@ -633,12 +634,21 @@ export const templateRouter = router({
         signedFieldValues,
         templateUpdatedAt,
         nextSigner,
+        publicForm,
       } = input;
 
       ctx.logger.info({
         input: {
           directTemplateToken,
         },
+      });
+
+      const publicFormSubmission = await preparePublicFormSubmission({
+        directTemplateToken,
+        directRecipientEmail,
+        hasNextSigner: Boolean(nextSigner),
+        publicForm,
+        requestMetadata: ctx.metadata.requestMetadata,
       });
 
       return await createDocumentFromDirectTemplate({
@@ -657,6 +667,11 @@ export const templateRouter = router({
           : undefined,
         nextSigner,
         requestMetadata: ctx.metadata,
+        hooks: publicFormSubmission?.hooks,
+      }).catch(async (error) => {
+        await publicFormSubmission?.release();
+
+        throw error;
       });
     }),
 

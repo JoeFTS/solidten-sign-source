@@ -1,4 +1,5 @@
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { reassignEnvelopesAfterAccessLoss } from '@documenso/lib/server-only/team/reassign-envelopes-after-access-loss';
 import { generateDatabaseId } from '@documenso/lib/universal/id';
 import { getHighestOrganisationRoleInGroup } from '@documenso/lib/utils/organisations';
 import { prisma } from '@documenso/prisma';
@@ -209,5 +210,8 @@ export const updateOrganisationMemberRoleRoute = adminProcedure
           groupId: newMemberGroup.id,
         },
       });
+
+      // Solid Ten: a lower role can drop the member's last path to a team; see update-organisation-members.ts.
+      await reassignEnvelopesAfterAccessLoss(tx, { organisationId, userIds: [member.userId] });
     });
   });

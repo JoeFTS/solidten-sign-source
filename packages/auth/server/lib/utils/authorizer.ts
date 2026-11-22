@@ -1,3 +1,5 @@
+import { isSigninDisabledGlobally } from '@documenso/lib/constants/auth';
+import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { assertUserNotDisabledById } from '@documenso/lib/server-only/user/assert-user-not-disabled';
 import type { Context } from 'hono';
 
@@ -18,6 +20,16 @@ type AuthorizeUser = {
  * caller.
  */
 export const onAuthorize = async (user: AuthorizeUser, c: Context<HonoAuthContext>) => {
+  // Solid Ten Sign: the NEXT_PUBLIC_DISABLE_SIGNIN kill switch holds for every sign-in path
+  // here, not only the routes that check it themselves (passkey and OAuth did not).
+  if (isSigninDisabledGlobally()) {
+    throw new AppError(AppErrorCode.NOT_SETUP, {
+      message: 'Sign-in is turned off on this server.',
+      userMessage: 'Sign-in is turned off on this server.',
+      statusCode: 403,
+    });
+  }
+
   await assertUserNotDisabledById({ userId: user.userId });
 
   const metadata = c.get('requestMetadata');

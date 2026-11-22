@@ -12,11 +12,10 @@ export const ZGetMultiSignDocumentRequestSchema = z.object({
 });
 
 export const ZGetMultiSignDocumentResponseSchema = ZDocumentLiteSchema.extend({
+  // Solid Ten (LD3-M2): no document bytes; the viewer fetches the PDF by URL.
   documentData: DocumentDataSchema.pick({
     type: true,
     id: true,
-    data: true,
-    initialData: true,
   }),
   documentMeta: DocumentMetaSchema.pick({
     signingOrder: true,

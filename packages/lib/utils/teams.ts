@@ -210,6 +210,13 @@ export const generateDefaultTeamSettings = (): Omit<TeamGlobalSettings, 'id' | '
     reminderSettings: null,
 
     aiFeaturesEnabled: null,
+
+    allowSenderReassign: null,
+    allowSignerReassign: null,
+    allowInPersonSigning: null,
+    commentsEnabled: null,
+    commentsSharedThread: null,
+    retentionSettings: null,
   };
 };
 

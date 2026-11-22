@@ -106,7 +106,7 @@ export const extractFieldInsertionValues = ({
 
       if (errors.length > 0) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: 'Invalid number',
+          message: `Invalid number: ${errors[0]}`,
         });
       }
 

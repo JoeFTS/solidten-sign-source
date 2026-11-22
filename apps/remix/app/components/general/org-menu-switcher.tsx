@@ -3,6 +3,7 @@ import { useOptionalCurrentOrganisation } from '@documenso/lib/client-only/provi
 import { useSession } from '@documenso/lib/client-only/providers/session';
 import { IS_BILLING_ENABLED } from '@documenso/lib/constants/app';
 import { EXTENDED_ORGANISATION_MEMBER_ROLE_MAP } from '@documenso/lib/constants/organisations-translations';
+import { NEXT_PUBLIC_ST_SOURCE_URL } from '@documenso/lib/constants/source-code';
 import { EXTENDED_TEAM_MEMBER_ROLE_MAP } from '@documenso/lib/constants/teams-translations';
 import { formatAvatarUrl } from '@documenso/lib/utils/avatars';
 import { isAdmin } from '@documenso/lib/utils/is-admin';
@@ -337,6 +338,18 @@ export const OrgMenuSwitcher = () => {
                   </Link>
                 </DropdownMenuItem>
               )}
+
+              {/* Solid Ten Sign: the AGPL source link. */}
+              <DropdownMenuItem className="px-4 py-2 text-muted-foreground" asChild>
+                <a
+                  href={NEXT_PUBLIC_ST_SOURCE_URL()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="menu-source-code-link"
+                >
+                  <Trans>Source code</Trans>
+                </a>
+              </DropdownMenuItem>
 
               <DropdownMenuItem
                 className="hover:!text-muted-foreground px-4 py-2 text-muted-foreground"

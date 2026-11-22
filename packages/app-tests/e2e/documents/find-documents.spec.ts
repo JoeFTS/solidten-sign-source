@@ -1132,8 +1132,14 @@ test.describe('Find Documents UI - Sender Filter', () => {
       include: { members: { include: { user: true }, orderBy: { id: 'asc' } } },
     });
 
-    const member1 = org.members[1].user;
-    const member2 = org.members[2].user;
+    // Member ids are random strings, so the Owner can sort anywhere. Pick the two members who are
+    // not the Owner.
+    const [member1, member2] = org.members
+      .filter((member) => member.userId !== org.ownerUserId)
+      .map((member) => member.user);
+
+    expect(member1.id).not.toBe(owner.id);
+    expect(member2.id).not.toBe(owner.id);
 
     const { user: outsideUser } = await seedUser();
 

@@ -8,7 +8,7 @@ import {
   APP_CONTENT_IMAGE_MIME_TYPES,
   APP_CONTENT_IMAGE_UPLOAD_SIZE_LIMIT,
 } from '@documenso/lib/constants/envelope-content';
-import { megabytesToBytes } from '@documenso/lib/universal/unit-convertions';
+import { formatMegabyteLimit, megabytesToBytes } from '@documenso/lib/universal/unit-convertions';
 import type { ZodRawShape } from 'zod';
 import z from 'zod';
 import { zfd } from 'zod-form-data';
@@ -22,7 +22,7 @@ export const zfdFile = () => {
   const maxBytes = megabytesToBytes(APP_DOCUMENT_UPLOAD_SIZE_LIMIT);
 
   return zfd.file().refine((file) => file.size <= maxBytes, {
-    message: `File cannot be larger than ${APP_DOCUMENT_UPLOAD_SIZE_LIMIT}MB`,
+    message: `File cannot be larger than ${formatMegabyteLimit(APP_DOCUMENT_UPLOAD_SIZE_LIMIT)}`,
   });
 };
 
@@ -34,7 +34,7 @@ export const zfdBrandingImageFile = () => {
   return zfd
     .file()
     .refine((file) => file.size <= BRANDING_LOGO_MAX_SIZE_BYTES, {
-      message: `File cannot be larger than ${BRANDING_LOGO_MAX_SIZE_MB}MB`,
+      message: `File cannot be larger than ${formatMegabyteLimit(BRANDING_LOGO_MAX_SIZE_MB)}`,
     })
     .refine((file) => BRANDING_LOGO_ALLOWED_TYPES.includes(file.type), {
       message: 'File must be a JPG, PNG, or WebP image',
@@ -49,7 +49,7 @@ export const zfdContentImageFile = () => {
   return zfd
     .file()
     .refine((file) => file.size <= megabytesToBytes(APP_CONTENT_IMAGE_UPLOAD_SIZE_LIMIT), {
-      message: `File cannot be larger than ${APP_CONTENT_IMAGE_UPLOAD_SIZE_LIMIT}MB`,
+      message: `File cannot be larger than ${formatMegabyteLimit(APP_CONTENT_IMAGE_UPLOAD_SIZE_LIMIT)}`,
     })
     .refine((file) => APP_CONTENT_IMAGE_MIME_TYPES.some((accepted) => accepted === file.type), {
       message: 'File must be a PNG, JPEG or WebP image',

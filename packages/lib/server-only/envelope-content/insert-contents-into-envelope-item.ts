@@ -7,8 +7,8 @@ import { getFileServerSide } from '../../universal/upload/get-file.server';
 import { putPdfFileServerSide } from '../../universal/upload/put-file.server';
 import type { EnvelopeContentSnapshot } from '../../utils/envelope-content';
 import { areEnvelopeContentsEqual } from '../../utils/envelope-content';
-import { generatePartialSignedPdf } from '../pdf/generate-partial-signed-pdf';
 import type { OverlayContent } from '../pdf/insert-field-in-pdf-v2';
+import { generatePartialSignedPdfIsolated } from '../pdf-child/isolated-pdf';
 
 /**
  * Each render holds the item's PDF several times over (bytes, parsed document,
@@ -27,12 +27,14 @@ type RenderContentsOntoPdfOptions = {
  * Throws `MISSING_CONTENT_IMAGE` if an image content's image cannot be loaded,
  * since exporting it would silently drop it from the document.
  */
-export const renderContentsOntoPdf = async ({ pdfData, contents, images }: RenderContentsOntoPdfOptions) => {
+export const renderContentsOntoPdf = async ({ pdfData, contents }: RenderContentsOntoPdfOptions) => {
   if (contents.length === 0) {
     return pdfData;
   }
 
-  return await generatePartialSignedPdf({ pdfData, fields: [], contents, images });
+  // Solid Ten (AUD-2 follow-up): rendered in the PDF child; the child loads the content images
+  // from their bytes (a caller's decoded images are not needed).
+  return await generatePartialSignedPdfIsolated({ pdfData, fields: [], contents });
 };
 
 export type RenderedEnvelopeItem = {

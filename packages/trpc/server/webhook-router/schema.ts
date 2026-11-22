@@ -1,4 +1,4 @@
-import { isPrivateUrl } from '@documenso/lib/server-only/webhooks/is-private-url';
+import { isWebhookUrlAllowedHere } from '@documenso/lib/server-only/webhooks/webhook-url-rule';
 import { URL_PATTERN } from '@documenso/lib/types/name';
 import { WebhookTriggerEvents } from '@prisma/client';
 import { z } from 'zod';
@@ -6,7 +6,7 @@ import { z } from 'zod';
 export const ZWebhookUrlSchema = z
   .string()
   .url()
-  .refine((url) => !isPrivateUrl(url), {
+  .refine((url) => isWebhookUrlAllowedHere(url), {
     message: 'Webhook URL cannot point to a private or loopback address',
   })
   /*

@@ -6,8 +6,8 @@ import { chunk } from 'remeda';
 import { AppError, AppErrorCode } from '../../../../errors/app-error';
 import { getFileServerSide } from '../../../../universal/upload/get-file.server';
 import { getEnvelopeById } from '../../../envelope/get-envelope-by-id';
+import { pdfToImagesIsolated } from '../../../pdf-child/isolated-pdf';
 import { vertex } from '../../google';
-import { pdfToImages } from '../../pdf-to-images';
 import { SYSTEM_PROMPT } from './prompt';
 import type { TDetectedRecipientSchema } from './schema';
 import { ZDetectedRecipientsSchema } from './schema';
@@ -74,7 +74,7 @@ export type DetectRecipientsFromPdfOptions = {
 };
 
 export const detectRecipientsFromPdf = async ({ pdfBytes, onProgress }: DetectRecipientsFromPdfOptions) => {
-  const pageImages = await pdfToImages(pdfBytes);
+  const pageImages = await pdfToImagesIsolated(pdfBytes);
 
   if (pageImages.length === 0) {
     return [];

@@ -19,7 +19,10 @@ import { APP_I18N_OPTIONS } from '../../constants/i18n';
 import { getSignatureFontFamily } from '../../constants/pdf';
 import { RECIPIENT_ROLE_SIGNING_REASONS, RECIPIENT_ROLES_DESCRIPTION } from '../../constants/recipient-roles';
 import type { TDocumentAuditLogBaseSchema } from '../../types/document-audit-logs';
+import type { TInPersonHostMarker } from '../../types/solidten-audit-logs';
 import { svgToPng } from '../../utils/images/svg-to-png';
+import { formatInPersonHost } from '../../utils/in-person-audit';
+import { getFirstSigningLinkDelivery, getSigningLinkChannel } from '../../utils/sms/certificate';
 import { ensureFontLibrary } from './helpers';
 
 type ColumnWidths = [number, number, number];
@@ -37,8 +40,12 @@ export type CertificateRecipient = {
     signature?: Pick<Signature, 'signatureImageAsBase64' | 'typedSignature'> | null;
   };
   authLevel: string;
+  /** Solid Ten: the staff user who hosted this signer in person, if any. */
+  inPersonHost?: TInPersonHostMarker | null;
   logs: {
     emailed: BaseAuditLog | null;
+    /** Solid Ten: first SMS_SENT entry for this recipient. */
+    texted?: BaseAuditLog | null;
     sent: BaseAuditLog | null;
     opened: BaseAuditLog | null;
     completed: BaseAuditLog | null;
@@ -420,11 +427,13 @@ const renderColumnThree = (options: RenderColumnOptions) => {
     valueFill?: string;
   };
 
+  const firstDelivery = getFirstSigningLinkDelivery(recipient.logs);
+
   const itemsToRender: DetailItem[] = [
     {
       label: i18n._(msg`Sent`),
-      value: recipient.logs.emailed
-        ? DateTime.fromJSDate(recipient.logs.emailed.createdAt)
+      value: firstDelivery
+        ? DateTime.fromJSDate(firstDelivery.createdAt)
             .setLocale(APP_I18N_OPTIONS.defaultLocale)
             .toFormat('yyyy-MM-dd hh:mm:ss a (ZZZZ)')
         : recipient.logs.sent
@@ -443,6 +452,15 @@ const renderColumnThree = (options: RenderColumnOptions) => {
     },
   ];
 
+  const deliveryChannel = getSigningLinkChannel(recipient.logs);
+
+  if (deliveryChannel) {
+    itemsToRender.push({
+      label: i18n._(msg`Delivered by`),
+      value: deliveryChannel === 'SMS' ? i18n._(msg`Text message`) : i18n._(msg`Email and text message`),
+    });
+  }
+
   if (recipient.logs.rejected) {
     itemsToRender.push({
       label: i18n._(msg`Rejected`),
@@ -460,6 +478,15 @@ const renderColumnThree = (options: RenderColumnOptions) => {
             .setLocale(APP_I18N_OPTIONS.defaultLocale)
             .toFormat('yyyy-MM-dd hh:mm:ss a (ZZZZ)')
         : i18n._(msg`Unknown`),
+    });
+  }
+
+  if (recipient.inPersonHost) {
+    itemsToRender.push({
+      label: i18n._(msg`Signed in person`),
+      value: recipient.inPersonHost.emailCodeVerified
+        ? i18n._(msg`Hosted by ${formatInPersonHost(recipient.inPersonHost)}; email code confirmed`)
+        : i18n._(msg`Hosted by ${formatInPersonHost(recipient.inPersonHost)}`),
     });
   }
 

@@ -1,3 +1,4 @@
+import { useSession } from '@documenso/lib/client-only/providers/session';
 import { ZNameSchema } from '@documenso/lib/types/name';
 import { trpc } from '@documenso/trpc/react';
 import { cn } from '@documenso/ui/lib/utils';
@@ -23,6 +24,8 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import { getCredentialStepUpError } from '~/utils/credential-step-up-error';
+
 export type SettingsSecurityPasskeyTableActionsProps = {
   className?: string;
   passkeyId: string;
@@ -31,6 +34,8 @@ export type SettingsSecurityPasskeyTableActionsProps = {
 
 const ZUpdatePasskeySchema = z.object({
   name: ZNameSchema,
+  // Solid Ten Sign (AUD-C10 follow-up): needed when the account has 2FA on.
+  twoFactorCode: z.string().max(64).optional(),
 });
 
 type TUpdatePasskeySchema = z.infer<typeof ZUpdatePasskeySchema>;
@@ -42,7 +47,9 @@ export const SettingsSecurityPasskeyTableActions = ({
 }: SettingsSecurityPasskeyTableActionsProps) => {
   const { _ } = useLingui();
   const { toast } = useToast();
+  const { user } = useSession();
 
+  const [deleteTwoFactorCode, setDeleteTwoFactorCode] = useState('');
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
 
@@ -50,6 +57,7 @@ export const SettingsSecurityPasskeyTableActions = ({
     resolver: zodResolver(ZUpdatePasskeySchema),
     defaultValues: {
       name: passkeyName,
+      twoFactorCode: '',
     },
   });
 
@@ -62,10 +70,13 @@ export const SettingsSecurityPasskeyTableActions = ({
 
       setIsUpdateDialogOpen(false);
     },
-    onError: () => {
+    onError: (err) => {
       toast({
         title: _(msg`Something went wrong`),
-        description: _(msg`We are unable to update this passkey at the moment. Please try again later.`),
+        description: _(
+          getCredentialStepUpError(err) ??
+            msg`We are unable to update this passkey at the moment. Please try again later.`,
+        ),
         duration: 10000,
         variant: 'destructive',
       });
@@ -81,10 +92,13 @@ export const SettingsSecurityPasskeyTableActions = ({
 
       setIsDeleteDialogOpen(false);
     },
-    onError: () => {
+    onError: (err) => {
       toast({
         title: _(msg`Something went wrong`),
-        description: _(msg`We are unable to remove this passkey at the moment. Please try again later.`),
+        description: _(
+          getCredentialStepUpError(err) ??
+            msg`We are unable to remove this passkey at the moment. Please try again later.`,
+        ),
         duration: 10000,
         variant: 'destructive',
       });
@@ -115,10 +129,11 @@ export const SettingsSecurityPasskeyTableActions = ({
 
           <Form {...form}>
             <form
-              onSubmit={form.handleSubmit(async ({ name }) =>
+              onSubmit={form.handleSubmit(async ({ name, twoFactorCode }) =>
                 updatePasskey({
                   passkeyId,
                   name,
+                  twoFactorCode: user.twoFactorEnabled ? twoFactorCode : undefined,
                 }),
               )}
             >
@@ -138,6 +153,24 @@ export const SettingsSecurityPasskeyTableActions = ({
                     </FormItem>
                   )}
                 />
+
+                {user.twoFactorEnabled && (
+                  <FormField
+                    control={form.control}
+                    name="twoFactorCode"
+                    render={({ field }) => (
+                      <FormItem className="mt-4 w-full">
+                        <FormLabel required>
+                          <Trans>Authenticator code</Trans>
+                        </FormLabel>
+                        <FormControl>
+                          <Input autoComplete="one-time-code" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <DialogFooter className="mt-4">
                   <DialogClose asChild>
@@ -177,6 +210,20 @@ export const SettingsSecurityPasskeyTableActions = ({
           </DialogHeader>
 
           <fieldset disabled={isDeletingPasskey}>
+            {user.twoFactorEnabled && (
+              <div className="mb-4 flex flex-col gap-2">
+                <label htmlFor={`passkey-delete-code-${passkeyId}`} className="font-medium text-sm">
+                  <Trans>Authenticator code</Trans>
+                </label>
+                <Input
+                  id={`passkey-delete-code-${passkeyId}`}
+                  autoComplete="one-time-code"
+                  value={deleteTwoFactorCode}
+                  onChange={(event) => setDeleteTwoFactorCode(event.target.value)}
+                />
+              </div>
+            )}
+
             <DialogFooter>
               <DialogClose asChild>
                 <Button type="button" variant="secondary">
@@ -188,6 +235,7 @@ export const SettingsSecurityPasskeyTableActions = ({
                 onClick={async () =>
                   deletePasskey({
                     passkeyId,
+                    twoFactorCode: user.twoFactorEnabled ? deleteTwoFactorCode : undefined,
                   })
                 }
                 variant="destructive"

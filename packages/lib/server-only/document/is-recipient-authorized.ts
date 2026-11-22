@@ -7,17 +7,22 @@ import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { TDocumentAuth, TDocumentAuthMethods } from '../../types/document-auth';
 import { DocumentAuth } from '../../types/document-auth';
 import type { TAuthenticationResponseJSONSchema } from '../../types/webauthn';
+import type { RequestMetadata } from '../../universal/extract-request-metadata';
 import { getAuthenticatorOptions } from '../../utils/authenticator';
 import { extractDocumentAuthMethods } from '../../utils/document-auth';
-import { validateTwoFactorTokenFromEmail } from '../2fa/email/validate-2fa-token-from-email';
+import { checkEmailAccessCodeWithLimit } from '../2fa/email/email-access-code-lockout';
 import { verifyTwoFactorAuthenticationToken } from '../2fa/verify-2fa-token';
 import { verifyPassword } from '../2fa/verify-password';
+import { isSessionUserTheRecipient } from './is-session-user-the-recipient';
 
 type IsRecipientAuthorizedOptions = {
   // !: Probably find a better name than 'ACCESS_2FA' if requirements change.
   type: 'ACCESS' | 'ACCESS_2FA' | 'ACTION';
   documentAuthOptions: Envelope['authOptions'];
-  recipient: Pick<Recipient, 'authOptions' | 'email' | 'envelopeId'>;
+  recipient: Pick<Recipient, 'authOptions' | 'email' | 'envelopeId'> & Partial<Pick<Recipient, 'id' | 'name'>>;
+
+  /** Solid Ten Sign: written to the audit entry when the emailed code locks. */
+  requestMetadata?: RequestMetadata;
 
   /**
    * The ID of the user who initiated the request.
@@ -56,6 +61,7 @@ export const isRecipientAuthorized = async ({
   recipient,
   userId,
   authOptions,
+  requestMetadata,
 }: IsRecipientAuthorizedOptions): Promise<boolean> => {
   const { derivedRecipientAccessAuth, derivedRecipientActionAuth } = extractDocumentAuthMethods({
     documentAuth: documentAuthOptions,
@@ -109,6 +115,11 @@ export const isRecipientAuthorized = async ({
         return false;
       }
 
+      // Solid Ten (AUD-10): the credential must be the recipient's own account.
+      if (!(await isSessionUserTheRecipient({ userId, recipientEmail: recipient.email }))) {
+        return false;
+      }
+
       return await isPasskeyAuthValid({
         userId,
         authenticationResponse,
@@ -121,15 +132,24 @@ export const isRecipientAuthorized = async ({
       }
 
       if (type === 'ACCESS_2FA' && method === 'email') {
-        return await validateTwoFactorTokenFromEmail({
-          envelopeId: recipient.envelopeId,
-          email: recipient.email,
+        // Solid Ten Sign (AUD-1): the emailed code has an attempt limit.
+        if (recipient.id === undefined) {
+          throw new AppError(AppErrorCode.INVALID_REQUEST, { message: 'Recipient id is required to check the code' });
+        }
+
+        return await checkEmailAccessCodeWithLimit({
+          recipient: { ...recipient, id: recipient.id, name: recipient.name ?? '' },
           code: token,
-          window: 10, // 5 minutes worth of tokens
+          requestMetadata,
         });
       }
 
       if (!userId) {
+        return false;
+      }
+
+      // Solid Ten (AUD-10): the credential must be the recipient's own account.
+      if (!(await isSessionUserTheRecipient({ userId, recipientEmail: recipient.email }))) {
         return false;
       }
 
@@ -155,6 +175,11 @@ export const isRecipientAuthorized = async ({
     })
     .with({ type: DocumentAuth.PASSWORD }, async ({ password }) => {
       if (!userId) {
+        return false;
+      }
+
+      // Solid Ten (AUD-10): the credential must be the recipient's own account.
+      if (!(await isSessionUserTheRecipient({ userId, recipientEmail: recipient.email }))) {
         return false;
       }
 

@@ -2,6 +2,8 @@
 
 import { AppError, AppErrorCode } from '../errors/app-error';
 
+const isSmsProviderNameValid = (value: string | undefined) => value === 'twilio' || value === 'fake';
+
 declare global {
   interface Window {
     __ENV__?: Record<string, string | undefined>;
@@ -71,4 +73,8 @@ export const createPublicEnv = () => ({
       ? 'true'
       : 'false',
   NEXT_PUBLIC_OIDC_PROVIDER_LABEL: process.env.NEXT_PRIVATE_OIDC_PROVIDER_LABEL ?? '',
+  // Solid Ten: true/false only; the host list itself can name internal hosts and stays private.
+  NEXT_PUBLIC_WEBHOOK_SSRF_BYPASS_ACTIVE: process.env.NEXT_PRIVATE_WEBHOOK_SSRF_BYPASS_HOSTS?.trim() ? 'true' : 'false',
+  // Solid Ten: derived so the client can hide text message UI without seeing the provider config.
+  NEXT_PUBLIC_SMS_ENABLED: isSmsProviderNameValid(process.env.NEXT_PRIVATE_SMS_PROVIDER) ? 'true' : 'false',
 });

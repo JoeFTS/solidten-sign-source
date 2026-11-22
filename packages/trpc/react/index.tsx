@@ -6,6 +6,7 @@ import { createTRPCReact } from '@trpc/react-query';
 import { useMemo, useState } from 'react';
 
 import type { AppRouter } from '../server/router';
+import { TRPC_MAX_BATCH_SIZE } from '../utils/batch-limit';
 import { dataTransformer } from '../utils/data-transformer';
 
 export { getQueryKey } from '@trpc/react-query';
@@ -53,6 +54,7 @@ export function TrpcProvider({ children, headers }: TrpcProviderProps) {
               url: `${getBaseUrl()}/api/trpc`,
               headers,
               transformer: dataTransformer,
+              maxItems: TRPC_MAX_BATCH_SIZE,
             }),
           }),
         ],

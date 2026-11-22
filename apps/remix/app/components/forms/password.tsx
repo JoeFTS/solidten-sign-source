@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { match } from 'ts-pattern';
 import type { z } from 'zod';
-
+import { getCredentialStepUpError } from '~/utils/credential-step-up-error';
 import { hasTwoFactorCode, TwoFactorCodeDialog, ZTwoFactorCodeFieldSchema } from './2fa/two-factor-code-dialog';
 
 export const ZPasswordFormSchema = ZTwoFactorCodeFieldSchema.extend({
@@ -88,18 +88,21 @@ export const PasswordForm = ({ className, user }: PasswordFormProps) => {
     } catch (err) {
       const error = AppError.parseError(err);
 
-      const errorMessage = match(error.code)
-        .with(AppErrorCode.NO_PASSWORD, () => msg`User has no password.`)
-        .with(AppErrorCode.INCORRECT_PASSWORD, () => msg`Current password is incorrect.`)
-        .with(AppErrorCode.SAME_PASSWORD, () => msg`Your new password cannot be the same as your old password.`)
-        .with(
-          AppErrorCode.INCORRECT_TWO_FACTOR_CODE,
-          AppErrorCode.TWO_FACTOR_MISSING_CREDENTIALS,
-          () => msg`The two factor code you provided is invalid. Please try again.`,
-        )
-        .otherwise(
-          () => msg`We encountered an unknown error while attempting to update your password. Please try again later.`,
-        );
+      const errorMessage =
+        getCredentialStepUpError(err) ??
+        match(error.code)
+          .with(AppErrorCode.NO_PASSWORD, () => msg`User has no password.`)
+          .with(AppErrorCode.INCORRECT_PASSWORD, () => msg`Current password is incorrect.`)
+          .with(AppErrorCode.SAME_PASSWORD, () => msg`Your new password cannot be the same as your old password.`)
+          .with(
+            AppErrorCode.INCORRECT_TWO_FACTOR_CODE,
+            AppErrorCode.TWO_FACTOR_MISSING_CREDENTIALS,
+            () => msg`The two factor code you provided is invalid. Please try again.`,
+          )
+          .otherwise(
+            () =>
+              msg`We encountered an unknown error while attempting to update your password. Please try again later.`,
+          );
 
       toast({
         title: _(msg`An error occurred`),

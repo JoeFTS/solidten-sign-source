@@ -58,6 +58,7 @@ export const createSession = async (
     ipAddress: metadata.ipAddress ?? null,
     userAgent: metadata.userAgent ?? null,
     isEmbed,
+    stInPersonSessionId: null,
   };
 
   await tx.session.create({

@@ -1,3 +1,5 @@
+import { megabytesToBytes } from '../universal/unit-convertions';
+
 /**
  * Maximum length (in characters) of the user-supplied custom CSS for branding.
  * Bound enforced at the TRPC request boundary on both the organisation and
@@ -16,6 +18,6 @@ export const BRANDING_CSS_MAX_LENGTH = 256 * 1024;
  */
 export const BRANDING_LOGO_MAX_SIZE_MB = 5;
 
-export const BRANDING_LOGO_MAX_SIZE_BYTES = BRANDING_LOGO_MAX_SIZE_MB * 1024 * 1024;
+export const BRANDING_LOGO_MAX_SIZE_BYTES = megabytesToBytes(BRANDING_LOGO_MAX_SIZE_MB);
 
 export const BRANDING_LOGO_ALLOWED_TYPES: string[] = ['image/jpeg', 'image/png', 'image/webp'];

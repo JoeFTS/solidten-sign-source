@@ -62,7 +62,7 @@ describe('assertNotPrivateUrl', () => {
     it('should allow hostnames that resolve to public addresses', async () => {
       const lookup = fakeLookup([{ address: '93.184.216.34', family: 4 }]);
 
-      await expect(assertNotPrivateUrl('https://example.com', { lookup })).resolves.toBeUndefined();
+      await expect(assertNotPrivateUrl('https://example.com', { lookup })).resolves.toHaveProperty('pinned');
     });
 
     it('should handle a single address result (non-array)', async () => {
@@ -74,7 +74,7 @@ describe('assertNotPrivateUrl', () => {
     it('should handle a single public address result', async () => {
       const lookup = fakeLookupSingle('93.184.216.34', 4);
 
-      await expect(assertNotPrivateUrl('https://example.com', { lookup })).resolves.toBeUndefined();
+      await expect(assertNotPrivateUrl('https://example.com', { lookup })).resolves.toHaveProperty('pinned');
     });
   });
 
@@ -88,10 +88,13 @@ describe('assertNotPrivateUrl', () => {
   });
 
   describe('DNS failure handling', () => {
-    it('should silently allow when DNS lookup throws', async () => {
+    // Solid Ten Sign (S-L4): fail closed.
+    it('should refuse when DNS lookup throws', async () => {
       const lookup = vi.fn().mockRejectedValue(new Error('ENOTFOUND'));
 
-      await expect(assertNotPrivateUrl('https://nonexistent.example.com', { lookup })).resolves.toBeUndefined();
+      await expect(assertNotPrivateUrl('https://nonexistent.example.com', { lookup })).rejects.toThrow(
+        'could not be resolved',
+      );
     });
 
     it('should re-throw AppError even within the catch block', async () => {
@@ -100,12 +103,20 @@ describe('assertNotPrivateUrl', () => {
       await expect(assertNotPrivateUrl('https://evil.example.com', { lookup })).rejects.toThrow(AppError);
     });
 
-    it('should silently allow when DNS lookup times out (returns null)', async () => {
+    it('should refuse when DNS lookup times out', async () => {
       const lookup = vi.fn().mockReturnValue(new Promise(() => {}));
 
-      // withTimeout races the lookup against a 250ms timer and returns null
-      // if the lookup doesn't settle in time, so the function returns early.
-      await expect(assertNotPrivateUrl('https://slow.example.com', { lookup })).resolves.toBeUndefined();
+      await expect(assertNotPrivateUrl('https://slow.example.com', { lookup })).rejects.toThrow(
+        'could not be resolved',
+      );
     }, 10_000);
+
+    it('returns the checked address so the request can be pinned to it', async () => {
+      const lookup = vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+
+      await expect(assertNotPrivateUrl('https://public.example.com', { lookup })).resolves.toEqual({
+        pinned: { address: '93.184.216.34', family: 4 },
+      });
+    });
   });
 });

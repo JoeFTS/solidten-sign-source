@@ -17,6 +17,7 @@ import {
   ZEmbedPopupAuthProviderSchema,
 } from '@documenso/lib/constants/embed-auth';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { getInPersonLockId } from '@documenso/lib/server-only/in-person/in-person-lock';
 import { createRateLimitMiddleware } from '@documenso/lib/server-only/rate-limit/rate-limit-middleware';
 import { embedAuthRedeemRateLimit, embedAuthStartRateLimit } from '@documenso/lib/server-only/rate-limit/rate-limits';
 import { logger } from '@documenso/lib/utils/logger';
@@ -62,7 +63,9 @@ const recordEmbedSessionHandoff = async (
 ): Promise<boolean> => {
   const { session, user } = await getOptionalSession(c);
 
-  if (!session || !user) {
+  // Solid Ten Sign (AUD-11): a sign-in locked for in-person signing, or an embed
+  // session, must not seed a new session.
+  if (!session || !user || session.isEmbed || (await getInPersonLockId(session))) {
     return false;
   }
 

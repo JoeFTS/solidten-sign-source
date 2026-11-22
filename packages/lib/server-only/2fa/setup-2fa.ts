@@ -5,13 +5,17 @@ import crypto from 'crypto';
 import { createTOTPKeyURI } from 'oslo/otp';
 
 import { DOCUMENSO_ENCRYPTION_KEY } from '../../constants/crypto';
+import { AppError, AppErrorCode } from '../../errors/app-error';
 import { symmetricEncrypt } from '../../universal/crypto';
 
 type SetupTwoFactorAuthenticationOptions = {
   user: Pick<User, 'id' | 'email'>;
 };
 
-const ISSUER = 'Documenso';
+const ISSUER = 'Solid Ten Sign';
+
+export const TWO_FACTOR_ALREADY_ENABLED_MESSAGE =
+  'Two-factor authentication is already on. Turn it off with a code before you set it up again.';
 
 export const setupTwoFactorAuthentication = async ({ user }: SetupTwoFactorAuthenticationOptions) => {
   const key = DOCUMENSO_ENCRYPTION_KEY;
@@ -31,12 +35,14 @@ export const setupTwoFactorAuthentication = async ({ user }: SetupTwoFactorAuthe
   const uri = createTOTPKeyURI(ISSUER, accountName, secret);
   const encodedSecret = base32.encode(new Uint8Array(secret));
 
-  await prisma.user.update({
+  // Solid Ten Sign (AUD-12): setup never touches 2FA that is on. Turning it off needs a
+  // code (disable-2fa). The condition is in the write, so a race cannot pass it.
+  const { count } = await prisma.user.updateMany({
     where: {
       id: user.id,
+      twoFactorEnabled: false,
     },
     data: {
-      twoFactorEnabled: false,
       twoFactorBackupCodes: symmetricEncrypt({
         data: JSON.stringify(backupCodes),
         key: key,
@@ -47,6 +53,14 @@ export const setupTwoFactorAuthentication = async ({ user }: SetupTwoFactorAuthe
       }),
     },
   });
+
+  if (count === 0) {
+    throw new AppError(AppErrorCode.INVALID_REQUEST, {
+      message: TWO_FACTOR_ALREADY_ENABLED_MESSAGE,
+      userMessage: TWO_FACTOR_ALREADY_ENABLED_MESSAGE,
+      statusCode: 400,
+    });
+  }
 
   return {
     secret: encodedSecret,

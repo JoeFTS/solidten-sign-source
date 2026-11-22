@@ -5,10 +5,13 @@ import { unsafeGetEntireEnvelope } from '@documenso/lib/server-only/admin/get-en
 import { decryptSecondaryData } from '@documenso/lib/server-only/crypto/decrypt';
 import { getDocumentCertificateAuditLogs } from '@documenso/lib/server-only/document/get-document-certificate-audit-logs';
 import { getOrganisationClaimByTeamId } from '@documenso/lib/server-only/organisation/get-organisation-claims';
+import { getPublicFormVerificationByRecipient } from '@documenso/lib/server-only/public-form/public-form-responses';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
+import { CERTIFICATE_AUTH_LEVEL_LABELS, getCertificateAuthLevel } from '@documenso/lib/utils/certificate-auth-level';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
 import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
 import { getTranslations } from '@documenso/lib/utils/i18n';
+import { formatPublicFormAuthLevel } from '@documenso/lib/utils/public-form-certificate';
 import { Card, CardContent } from '@documenso/ui/primitives/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@documenso/ui/primitives/table';
 import { msg } from '@lingui/core/macro';
@@ -18,12 +21,9 @@ import { EnvelopeType, FieldType, SigningStatus } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { redirect } from 'react-router';
 import { prop, sortBy } from 'remeda';
-import { match } from 'ts-pattern';
 import { UAParser } from 'ua-parser-js';
 import { renderSVG } from 'uqr';
-
 import { BrandingLogo } from '~/components/general/branding-logo';
-
 import type { Route } from './+types/certificate';
 
 const FRIENDLY_SIGNING_REASONS = {
@@ -68,6 +68,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const messages = await getTranslations(documentLanguage);
 
+  const publicFormVerification = Object.fromEntries(await getPublicFormVerificationByRecipient(envelope.id));
+
   return {
     document: {
       id: mapSecondaryIdToDocumentId(envelope.secondaryId),
@@ -89,6 +91,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     documentLanguage,
     auditLogs,
     messages,
+    publicFormVerification,
   };
 }
 
@@ -102,7 +105,7 @@ export async function loader({ request }: Route.LoaderArgs) {
  * Update: Maybe <Trans> tags work now after RR7 migration.
  */
 export default function SigningCertificate({ loaderData }: Route.ComponentProps) {
-  const { document, documentLanguage, hidePoweredBy, auditLogs, messages } = loaderData;
+  const { document, documentLanguage, hidePoweredBy, auditLogs, messages, publicFormVerification } = loaderData;
 
   const { i18n, _ } = useLingui();
 
@@ -147,26 +150,17 @@ export default function SigningCertificate({ loaderData }: Route.ComponentProps)
 
     const actionAuthMethod = insertedAuditLogsWithFieldAuth.at(0)?.data?.fieldSecurity?.type;
 
-    let authLevel = match(actionAuthMethod)
-      .with('ACCOUNT', () => _(msg`Account Re-Authentication`))
-      .with('TWO_FACTOR_AUTH', () => _(msg`Two-Factor Re-Authentication`))
-      .with('PASSWORD', () => _(msg`Password Re-Authentication`))
-      .with('PASSKEY', () => _(msg`Passkey Re-Authentication`))
-      .with('EXPLICIT_NONE', () => _(msg`Email`))
-      .with(undefined, () => null)
-      .exhaustive();
+    // Solid Ten Sign (FINDINGS 11): "no action auth" no longer hides the access check.
+    const authLevel = _(
+      CERTIFICATE_AUTH_LEVEL_LABELS[
+        getCertificateAuthLevel({
+          actionAuth: actionAuthMethod,
+          accessAuth: extractedAuthMethods.derivedRecipientAccessAuth.at(0),
+        })
+      ],
+    );
 
-    if (!authLevel) {
-      const accessAuthMethod = extractedAuthMethods.derivedRecipientAccessAuth.at(0);
-
-      authLevel = match(accessAuthMethod)
-        .with('ACCOUNT', () => _(msg`Account Authentication`))
-        .with('TWO_FACTOR_AUTH', () => _(msg`Two-Factor Authentication`))
-        .with(undefined, () => _(msg`Email`))
-        .exhaustive();
-    }
-
-    return authLevel;
+    return formatPublicFormAuthLevel(publicFormVerification[recipientId], i18n) ?? authLevel;
   };
 
   const getRecipientAuditLogs = (recipientId: number) => {

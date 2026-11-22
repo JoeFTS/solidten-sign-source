@@ -2,7 +2,14 @@ import type { PeriodSelectorValue } from '@documenso/lib/server-only/document/fi
 import { kyselyPrisma, prisma, sql } from '@documenso/prisma';
 import type { DB } from '@documenso/prisma/generated/types';
 import { ExtendedDocumentStatus } from '@documenso/prisma/types/extended-document-status';
-import { DocumentStatus, EnvelopeType, RecipientRole, SigningStatus, TeamMemberRole } from '@prisma/client';
+import {
+  DocumentStatus,
+  type DocumentVisibility,
+  EnvelopeType,
+  RecipientRole,
+  SigningStatus,
+  TeamMemberRole,
+} from '@prisma/client';
 import type { Expression, ExpressionBuilder, SelectQueryBuilder, SqlBool } from 'kysely';
 import { DateTime } from 'luxon';
 
@@ -42,15 +49,30 @@ const recipientExists = (
 
 /**
  * Reusable EXISTS subquery: checks that the envelope's sender (User) has the given email.
+ *
+ * Solid Ten (AUD-4): a team-email sender match covers only envelopes of the caller's own team, at a
+ * visibility the caller's role may see; never another team's or organisation's envelopes.
  */
-const senderEmailIs = (eb: EnvelopeExpressionBuilder, email: string) =>
-  eb.exists(
-    eb
-      .selectFrom('User')
-      .whereRef('User.id', '=', 'Envelope.userId')
-      .where('User.email', '=', email)
-      .select(sql.lit(1).as('one')),
-  );
+const senderEmailIs = (
+  eb: EnvelopeExpressionBuilder,
+  email: string,
+  scope: { teamId: number; visibilities: readonly DocumentVisibility[] },
+) =>
+  eb.and([
+    eb('Envelope.teamId', '=', scope.teamId),
+    eb(
+      'Envelope.visibility',
+      'in',
+      scope.visibilities.map((v) => sql.lit(v)),
+    ),
+    eb.exists(
+      eb
+        .selectFrom('User')
+        .whereRef('User.id', '=', 'Envelope.userId')
+        .where('User.email', '=', email)
+        .select(sql.lit(1).as('one')),
+    ),
+  ]);
 
 export type GetStatsInput = {
   userId: number;
@@ -167,7 +189,12 @@ export const getStats = async ({ userId, teamId, period, search = '', folderId, 
     const branches = [eb.and([eb('Envelope.teamId', '=', team.id), eb('Envelope.deletedAt', 'is', null)])];
 
     if (teamEmail) {
-      branches.push(eb.and([senderEmailIs(eb, teamEmail), eb('Envelope.deletedAt', 'is', null)]));
+      branches.push(
+        eb.and([
+          senderEmailIs(eb, teamEmail, { teamId: team.id, visibilities: allowedVisibilities }),
+          eb('Envelope.deletedAt', 'is', null),
+        ]),
+      );
       branches.push(recipientExists(eb, teamEmail, (reb) => reb('Recipient.documentDeletedAt', 'is', null)));
     }
 
@@ -183,7 +210,7 @@ export const getStats = async ({ userId, teamId, period, search = '', folderId, 
       const accessBranches = [eb('Envelope.teamId', '=', team.id)];
 
       if (teamEmail) {
-        accessBranches.push(senderEmailIs(eb, teamEmail));
+        accessBranches.push(senderEmailIs(eb, teamEmail, { teamId: team.id, visibilities: allowedVisibilities }));
       }
 
       return eb.and([teamDeletedFilter(eb), visibilityFilter(eb), eb.or(accessBranches)]);
@@ -196,7 +223,7 @@ export const getStats = async ({ userId, teamId, period, search = '', folderId, 
       const accessBranches = [eb('Envelope.teamId', '=', team.id)];
 
       if (teamEmail) {
-        accessBranches.push(senderEmailIs(eb, teamEmail));
+        accessBranches.push(senderEmailIs(eb, teamEmail, { teamId: team.id, visibilities: allowedVisibilities }));
         accessBranches.push(
           recipientExists(eb, teamEmail, (reb) =>
             reb.and([
@@ -217,7 +244,7 @@ export const getStats = async ({ userId, teamId, period, search = '', folderId, 
       const accessBranches = [eb('Envelope.teamId', '=', team.id)];
 
       if (teamEmail) {
-        accessBranches.push(senderEmailIs(eb, teamEmail));
+        accessBranches.push(senderEmailIs(eb, teamEmail, { teamId: team.id, visibilities: allowedVisibilities }));
         accessBranches.push(recipientExists(eb, teamEmail));
       }
 
@@ -231,7 +258,7 @@ export const getStats = async ({ userId, teamId, period, search = '', folderId, 
       const accessBranches = [eb('Envelope.teamId', '=', team.id)];
 
       if (teamEmail) {
-        accessBranches.push(senderEmailIs(eb, teamEmail));
+        accessBranches.push(senderEmailIs(eb, teamEmail, { teamId: team.id, visibilities: allowedVisibilities }));
         accessBranches.push(
           recipientExists(eb, teamEmail, (reb) => reb('Recipient.signingStatus', '=', sql.lit(SigningStatus.REJECTED))),
         );
@@ -247,7 +274,7 @@ export const getStats = async ({ userId, teamId, period, search = '', folderId, 
       const accessBranches = [eb('Envelope.teamId', '=', team.id)];
 
       if (teamEmail) {
-        accessBranches.push(senderEmailIs(eb, teamEmail));
+        accessBranches.push(senderEmailIs(eb, teamEmail, { teamId: team.id, visibilities: allowedVisibilities }));
         accessBranches.push(recipientExists(eb, teamEmail));
       }
 
@@ -260,7 +287,7 @@ export const getStats = async ({ userId, teamId, period, search = '', folderId, 
     const accessBranches = [eb('Envelope.teamId', '=', team.id)];
 
     if (teamEmail) {
-      accessBranches.push(senderEmailIs(eb, teamEmail));
+      accessBranches.push(senderEmailIs(eb, teamEmail, { teamId: team.id, visibilities: allowedVisibilities }));
       accessBranches.push(recipientExists(eb, teamEmail));
     }
 

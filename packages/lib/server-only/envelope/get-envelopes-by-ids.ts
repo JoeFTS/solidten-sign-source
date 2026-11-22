@@ -156,8 +156,10 @@ export const getMultipleEnvelopeWhereInput = async ({
 
   const envelopeOrInput: Prisma.EnvelopeWhereInput[] = [
     // Allow access if they own the document.
+    // Solid Ten (AUD-9): only in the team of this request (an API token's team, or x-team-id).
     {
       userId,
+      teamId: team.id,
     },
     // Or, if they belong to the team that the document is associated with.
     {
@@ -169,10 +171,15 @@ export const getMultipleEnvelopeWhereInput = async ({
   ];
 
   // Allow access to documents sent from the team email.
+  // Solid Ten (AUD-4): only this team's envelopes, at a visibility the caller's role may see.
   if (team.teamEmail) {
     envelopeOrInput.push({
       user: {
         email: team.teamEmail.email,
+      },
+      teamId: team.id,
+      visibility: {
+        in: TEAM_DOCUMENT_VISIBILITY_MAP[team.currentTeamRole],
       },
     });
   }

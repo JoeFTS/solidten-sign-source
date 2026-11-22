@@ -2,8 +2,8 @@ import { DEFAULT_DOCUMENT_DATE_FORMAT } from '@documenso/lib/constants/date-form
 import { DEFAULT_DOCUMENT_TIME_ZONE } from '@documenso/lib/constants/time-zones';
 import { DOCUMENT_AUDIT_LOG_TYPE, RECIPIENT_DIFF_TYPE } from '@documenso/lib/types/document-audit-logs';
 import type { RequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
-import { fieldsContainUnsignedRequiredField } from '@documenso/lib/utils/advanced-fields-helpers';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
+import { fieldsContainUnsignedRequiredVisibleField, getHiddenFieldIds } from '@documenso/lib/utils/field-conditions';
 import { prisma } from '@documenso/prisma';
 import {
   DocumentSigningOrder,
@@ -22,15 +22,31 @@ import { jobs } from '../../jobs/client';
 import type { TRecipientAccessAuth } from '../../types/document-auth';
 import { DocumentAuth } from '../../types/document-auth';
 import { isTspEnvelope } from '../../types/signature-level';
+import type { TInPersonHostMarker } from '../../types/solidten-audit-logs';
 import { mapEnvelopeToWebhookDocumentPayload, ZWebhookDocumentSchema } from '../../types/webhook-payload';
 import { extractDocumentAuthMethods } from '../../utils/document-auth';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapSecondaryIdToDocumentId, unsafeBuildEnvelopeIdQuery } from '../../utils/envelope';
 import { getRecipientsInActiveSigningStep, isRecipientTurnBySigningOrder } from '../../utils/recipient-groups';
 import { assertRecipientNotExpired, isRecipientBefore } from '../../utils/recipients';
+import {
+  assertEnvelopeOpenForRecipientAction,
+  lockPendingEnvelope,
+  RECIPIENT_ALREADY_ACTED_MESSAGE,
+} from '../envelope/envelope-transition-lock';
+import { assertRecipientFieldsCompleteUnderLock } from '../field/lock-field-write';
+import { deleteStoredFieldFiles, type StoredFieldFile } from '../field-file/remove-field-files-in-transaction';
+import { applyFieldLogic } from '../field-logic/apply-field-logic';
 import { getIsRecipientsTurnToSign } from '../recipient/get-is-recipient-turn';
+import { lockNextRecipientForDictation } from '../recipient-reassign/lock-dictated-next-signer';
+import {
+  applyRecipientHandoverInTransaction,
+  assertDictatedNextSignerEmailAvailable,
+  buildRecipientHandoverData,
+} from '../recipient-reassign/recipient-handover';
 import { assertSenderNotDisabled } from '../user/assert-user-not-disabled';
 import { triggerWebhook } from '../webhooks/trigger/trigger-webhook';
+import { assertCompletionActorIsRecipient } from './assert-completion-actor';
 import { isRecipientAuthorized } from './is-recipient-authorized';
 
 export type CompleteDocumentWithTokenOptions = {
@@ -51,6 +67,8 @@ export type CompleteDocumentWithTokenOptions = {
     email?: string;
     name?: string;
   };
+  /** Solid Ten Sign: the staff user who hosted this signer in person. */
+  inPersonHost?: TInPersonHostMarker | null;
 };
 
 export const completeDocumentWithToken = async ({
@@ -61,6 +79,7 @@ export const completeDocumentWithToken = async ({
   requestMetadata,
   nextSigner: dictatedNextSigner,
   recipientOverride,
+  inPersonHost,
 }: CompleteDocumentWithTokenOptions) => {
   const envelope = await prisma.envelope.findFirst({
     where: {
@@ -133,9 +152,20 @@ export const completeDocumentWithToken = async ({
 
   assertRecipientNotExpired(recipient);
 
+  // Solid Ten: refuse a dictated email another recipient already has, before anything is written.
+  if (dictatedNextSigner && envelope.documentMeta?.allowDictateNextSigner) {
+    await assertDictatedNextSignerEmailAvailable({
+      envelopeId: envelope.id,
+      currentRecipientId: recipient.id,
+      newEmail: dictatedNextSigner.email,
+    });
+  }
+
   if (recipient.signingStatus === SigningStatus.REJECTED) {
     throw new AppError(AppErrorCode.UNKNOWN_ERROR, {
-      message: 'Recipient has already rejected the document',
+      // Solid Ten Sign (SEC3-L1): the same wording as the decision inside the lock.
+      message: RECIPIENT_ALREADY_ACTED_MESSAGE,
+      userMessage: RECIPIENT_ALREADY_ACTED_MESSAGE,
       statusCode: 400,
     });
   }
@@ -152,6 +182,9 @@ export const completeDocumentWithToken = async ({
       });
     }
   }
+
+  // Solid Ten Sign (AUD-C11): with action auth, another signed-in account cannot complete.
+  await assertCompletionActorIsRecipient({ documentAuth: envelope.authOptions, recipient, userId });
 
   // Check ACCESS AUTH 2FA validation during document completion
   const { derivedRecipientAccessAuth } = extractDocumentAuthMethods({
@@ -178,6 +211,7 @@ export const completeDocumentWithToken = async ({
       recipient: recipient,
       userId, // Can be undefined for non-account recipients
       authOptions: accessAuthOptions,
+      requestMetadata,
     });
 
     if (!isValid) {
@@ -218,8 +252,12 @@ export const completeDocumentWithToken = async ({
     },
   });
 
+  const hiddenFieldIds = getHiddenFieldIds(fields);
+
   // This should be scoped to the current recipient.
-  const uninsertedDateFields = fields.filter((field) => field.type === FieldType.DATE && !field.inserted);
+  const uninsertedDateFields = fields.filter(
+    (field) => field.type === FieldType.DATE && !field.inserted && !hiddenFieldIds.has(field.id),
+  );
 
   let recipientName = recipient.name;
   let recipientEmail = recipient.email;
@@ -311,7 +349,19 @@ export const completeDocumentWithToken = async ({
     });
   }
 
-  if (fieldsContainUnsignedRequiredField(fields)) {
+  const { changedFields } = await prisma.$transaction(async (tx) =>
+    applyFieldLogic({
+      tx,
+      envelopeId: envelope.id,
+      recipientId: recipient.id,
+      user: { name: recipientName, email: recipientEmail },
+      requestMetadata,
+    }),
+  );
+
+  fields = fields.map((field) => changedFields.find((changedField) => changedField.id === field.id) ?? field);
+
+  if (fieldsContainUnsignedRequiredVisibleField(fields)) {
     throw new AppError(AppErrorCode.RECIPIENT_HAS_UNSIGNED_FIELDS, {
       message: `Recipient ${recipient.id} has unsigned fields`,
       statusCode: 400,
@@ -319,15 +369,34 @@ export const completeDocumentWithToken = async ({
   }
 
   await prisma.$transaction(async (tx) => {
+    // Solid Ten: hold the envelope lock so a cancel, reject or delete cannot interleave.
+    await lockPendingEnvelope(tx, envelope.id);
+
+    // Solid Ten Sign (FS2-C1): another recipient's decline already ends the document.
+    await assertEnvelopeOpenForRecipientAction(tx, envelope.id, recipient.id);
+
+    // Solid Ten Sign (AUD-C2): field rules and the required-field check again, under the lock.
+    await assertRecipientFieldsCompleteUnderLock(tx, {
+      envelopeId: envelope.id,
+      recipientId: recipient.id,
+      user: { name: recipientName, email: recipientEmail },
+      requestMetadata,
+    });
+
     // Conditional update so two concurrent completion requests can't both
     // proceed: only the request that transitions the recipient to SIGNED
     // continues, the loser sees a count of 0 and aborts.
     const { count: updatedRecipientCount } = await tx.recipient.updateMany({
+      // Solid Ten Sign (FS2-C1): only from NOT_SIGNED. "Not SIGNED" also matched a recipient
+      // who had just declined, so a decline and a completion could both win.
       where: {
         id: recipient.id,
-        signingStatus: {
-          not: SigningStatus.SIGNED,
-        },
+        // The link the signer used: a handover in the meantime gives a new token.
+        token: recipient.token,
+        signingStatus: SigningStatus.NOT_SIGNED,
+        // Still inside the signing window at the moment of the write (the expiry sweep may
+        // have run since the first check).
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
       data: {
         signingStatus: SigningStatus.SIGNED,
@@ -341,6 +410,35 @@ export const completeDocumentWithToken = async ({
     // and this transaction. Abort so the winning request handles all side
     // effects, the router resolves this code idempotently.
     if (updatedRecipientCount === 0) {
+      const current = await tx.recipient.findUnique({
+        where: { id: recipient.id },
+        select: { signingStatus: true, expiresAt: true },
+      });
+
+      if (current?.signingStatus === SigningStatus.NOT_SIGNED) {
+        assertRecipientNotExpired(current);
+
+        // Not signed, not expired: the request was handed to someone else and this link died.
+        throw new AppError(AppErrorCode.INVALID_REQUEST, {
+          message: 'This signing request was passed to someone else. This link no longer works.',
+          userMessage: 'This signing request was passed to someone else. This link no longer works.',
+          statusCode: 400,
+        });
+      }
+
+      if (!current) {
+        throw new AppError(AppErrorCode.NOT_FOUND, { message: 'Recipient not found', statusCode: 404 });
+      }
+
+      // A decline won the race: refuse cleanly, nothing is written.
+      if (current?.signingStatus === SigningStatus.REJECTED) {
+        throw new AppError(AppErrorCode.INVALID_REQUEST, {
+          message: RECIPIENT_ALREADY_ACTED_MESSAGE,
+          userMessage: RECIPIENT_ALREADY_ACTED_MESSAGE,
+          statusCode: 400,
+        });
+      }
+
       throw new AppError(AppErrorCode.RECIPIENT_ALREADY_SIGNED, {
         message: `Recipient ${recipient.id} has already signed`,
         statusCode: 400,
@@ -399,6 +497,9 @@ export const completeDocumentWithToken = async ({
           recipientId: recipient.id,
           recipientRole: recipient.role,
           actionAuth: authOptions.derivedRecipientActionAuth,
+          // Solid Ten (AUD-8): what this recipient passed to open the document.
+          accessAuth: authOptions.derivedRecipientAccessAuth,
+          ...(inPersonHost ? { inPersonHost } : {}),
         },
       }),
     });
@@ -432,6 +533,8 @@ export const completeDocumentWithToken = async ({
       name: true,
       email: true,
       role: true,
+      expiresAt: true,
+      token: true,
     },
     where: {
       envelopeId: envelope.id,
@@ -479,9 +582,23 @@ export const completeDocumentWithToken = async ({
           Boolean(envelope.documentMeta?.allowDictateNextSigner) &&
           nextRecipients.length === 1;
 
+        // Solid Ten Sign (AUD-C1): set when the dictation found the next recipient changed.
+        let isDictationSkipped = false;
+
         if (canDictateNextSigner && dictatedNextSigner) {
-          await prisma.$transaction(async (tx) => {
+          const removedFiles: StoredFieldFile[] = [];
+
+          isDictationSkipped = !(await prisma.$transaction(async (tx) => {
             const [nextRecipient] = nextRecipients;
+
+            // Solid Ten Sign (AUD-C1): envelope lock, then the next recipient must be unchanged.
+            if (!(await lockNextRecipientForDictation(tx, envelope.id, nextRecipient))) {
+              return false;
+            }
+
+            // Solid Ten: a different person means a new link. The sender may already have
+            // copied the old one (manual link sharing), and it must not sign as the new person.
+            const isHandover = nextRecipient.email.toLowerCase() !== dictatedNextSigner.email.toLowerCase();
 
             await tx.recipient.update({
               where: { id: nextRecipient.id },
@@ -490,8 +607,30 @@ export const completeDocumentWithToken = async ({
                 sentAt: new Date(),
                 name: dictatedNextSigner.name,
                 email: dictatedNextSigner.email.toLowerCase(),
+                ...(isHandover
+                  ? buildRecipientHandoverData({
+                      previousExpiresAt: nextRecipient.expiresAt,
+                      envelopeExpirationPeriod: envelope.documentMeta?.envelopeExpirationPeriod,
+                    })
+                  : {}),
               },
             });
+
+            if (isHandover) {
+              await applyRecipientHandoverInTransaction(tx, {
+                envelopeId: envelope.id,
+                internalVersion: envelope.internalVersion,
+                recipient: nextRecipient,
+                toName: dictatedNextSigner.name,
+                toEmail: dictatedNextSigner.email.toLowerCase(),
+                newPhone: null,
+                reassignedBy: 'SIGNER',
+                trigger: 'DICTATED_NEXT_SIGNER',
+                auditUser: { name: recipientName, email: recipientEmail },
+                requestMetadata,
+                removedFiles,
+              });
+            }
 
             await tx.documentAuditLog.create({
               data: createDocumentAuditLogData({
@@ -522,7 +661,11 @@ export const completeDocumentWithToken = async ({
                 },
               }),
             });
-          });
+
+            return true;
+          }));
+
+          await deleteStoredFieldFiles(removedFiles);
         } else {
           await prisma.recipient.updateMany({
             where: {
@@ -538,7 +681,7 @@ export const completeDocumentWithToken = async ({
         }
 
         await Promise.allSettled(
-          nextRecipients.map((nextRecipient) =>
+          (isDictationSkipped ? [] : nextRecipients).map((nextRecipient) =>
             jobs.triggerJob({
               name: 'send.signing.requested.email',
               payload: {

@@ -17,6 +17,7 @@ import {
 } from '@documenso/lib/types/document-meta';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
 import { isHttpUrl } from '@documenso/lib/utils/is-http-url';
+import { parseSigningChannel, ZSigningChannelSchema } from '@documenso/lib/utils/sms/channels';
 import { canAccessTeamDocument, DocumentSignatureType, extractTeamSignatureSettings } from '@documenso/lib/utils/teams';
 import { zEmail } from '@documenso/lib/utils/zod';
 import { trpc } from '@documenso/trpc/react';
@@ -84,6 +85,8 @@ import { useForm } from 'react-hook-form';
 import { match } from 'ts-pattern';
 import { z } from 'zod';
 
+import { SigningChannelFormField } from '~/components/general/sms/signing-channel-form-field';
+import { useTeamSmsEnabled } from '~/components/general/sms/use-team-sms';
 import { useCurrentTeam } from '~/providers/team';
 
 export const ZAddSettingsFormSchema = z.object({
@@ -120,6 +123,7 @@ export const ZAddSettingsFormSchema = z.object({
     }),
     envelopeExpirationPeriod: ZEnvelopeExpirationPeriod.nullish(),
     reminderSettings: ZEnvelopeReminderSettings.nullish(),
+    signingChannel: ZSigningChannelSchema.nullish(),
   }),
 });
 
@@ -210,6 +214,7 @@ export const EnvelopeEditorSettingsDialog = ({ trigger, ...props }: EnvelopeEdit
         signatureTypes: extractTeamSignatureSettings(envelope.documentMeta),
         envelopeExpirationPeriod: envelope.documentMeta?.envelopeExpirationPeriod ?? null,
         reminderSettings: envelope.documentMeta?.reminderSettings ?? null,
+        signingChannel: parseSigningChannel(envelope.documentMeta?.signingChannel),
       },
     };
   };
@@ -228,6 +233,8 @@ export const EnvelopeEditorSettingsDialog = ({ trigger, ...props }: EnvelopeEdit
   const emailSettings = form.watch('meta.emailSettings');
   const distributionMethod = form.watch('meta.distributionMethod');
   const isEmailDistribution = distributionMethod === DocumentDistributionMethod.EMAIL;
+
+  const isSmsEnabled = useTeamSmsEnabled(envelope.teamId, isEmbedded);
 
   const { data: emailData, isLoading: isLoadingEmails } = trpc.enterprise.organisation.email.find.useQuery(
     {
@@ -259,6 +266,7 @@ export const EnvelopeEditorSettingsDialog = ({ trigger, ...props }: EnvelopeEdit
       emailReplyTo,
       envelopeExpirationPeriod,
       reminderSettings,
+      signingChannel,
     } = data.meta;
 
     const parsedGlobalAccessAuth = z.array(ZDocumentAccessAuthTypesSchema).safeParse(data.globalAccessAuth);
@@ -288,6 +296,7 @@ export const EnvelopeEditorSettingsDialog = ({ trigger, ...props }: EnvelopeEdit
           uploadSignatureEnabled: signatureTypes.includes(DocumentSignatureType.UPLOAD),
           envelopeExpirationPeriod,
           reminderSettings,
+          signingChannel: isSmsEnabled ? signingChannel : undefined,
         },
       });
 
@@ -755,6 +764,14 @@ export const EnvelopeEditorSettingsDialog = ({ trigger, ...props }: EnvelopeEdit
                   ))
                   .with({ activeTab: 'notifications', settings: { allowConfigureDistribution: true } }, () => (
                     <>
+                      {isSmsEnabled && envelope.type === EnvelopeType.DOCUMENT && envelope.internalVersion === 2 && (
+                        <SigningChannelFormField
+                          control={form.control}
+                          name="meta.signingChannel"
+                          disabled={!isEmailDistribution}
+                        />
+                      )}
+
                       {settings.allowConfigureEmailSender && organisation.organisationClaim.flags.emailDomains && (
                         <FormField
                           control={form.control}
@@ -783,7 +800,7 @@ export const EnvelopeEditorSettingsDialog = ({ trigger, ...props }: EnvelopeEdit
                                       </SelectItem>
                                     ))}
 
-                                    <SelectItem value={'-1'}>Documenso</SelectItem>
+                                    <SelectItem value={'-1'}>Solid Ten Sign</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </FormControl>

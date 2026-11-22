@@ -18,6 +18,8 @@ import { GripVerticalIcon, TrashIcon } from 'lucide-react';
 import { memo } from 'react';
 import { useFormContext } from 'react-hook-form';
 
+import { RecipientPhoneField } from '../sms/recipient-phone-field';
+
 type TEditorSigner = TEditorRecipientsFormSchema['signers'][number];
 
 export type RecipientRowProps = {
@@ -201,6 +203,13 @@ const RecipientRowInner = ({
           <TrashIcon className="h-4 w-4" />
         </Button>
       </div>
+
+      <RecipientPhoneField
+        recipientId={signer.id}
+        role={signer.role}
+        disabled={isFieldDisabled}
+        className={cn({ 'pl-6': isSequential })}
+      />
 
       {showAdvancedSettings && organisation.organisationClaim.flags.cfr21 && (
         <FormField

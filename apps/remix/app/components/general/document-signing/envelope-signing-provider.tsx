@@ -9,11 +9,20 @@ import { extractFieldInsertionValues } from '@documenso/lib/utils/envelope-signi
 import { getNextDictatableRecipient } from '@documenso/lib/utils/recipient-groups';
 import { isRecipientBefore } from '@documenso/lib/utils/recipients';
 import { trpc } from '@documenso/trpc/react';
-import type { TSignEnvelopeFieldValue } from '@documenso/trpc/server/envelope-router/sign-envelope-field.types';
+import type {
+  TSignEnvelopeFieldResponse,
+  TSignEnvelopeFieldValue,
+} from '@documenso/trpc/server/envelope-router/sign-envelope-field.types';
 import { EnvelopeType, type Field, FieldType, type Recipient, RecipientRole, SigningStatus } from '@prisma/client';
 import { DateTime } from 'luxon';
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useMemo, useRef, useState } from 'react';
 import { prop, sortBy } from 'remeda';
+
+import {
+  applyFieldLogicToSigningData,
+  confirmValuesClearedByChange,
+  mergeSignedFields,
+} from '~/utils/field-signing/field-logic-view';
 
 export type EnvelopeSigningContextValue = {
   isDirectTemplate: boolean;
@@ -50,6 +59,11 @@ export type EnvelopeSigningContextValue = {
     _value: TSignEnvelopeFieldValue,
     authOptions?: TRecipientActionAuth,
   ) => Promise<Pick<Field, 'id' | 'inserted'>>;
+
+  /**
+   * Solid Ten: apply a field change made outside `signField`, such as a file upload.
+   */
+  applySignedFieldResponse: (_response: TSignEnvelopeFieldResponse) => void;
 };
 
 const EnvelopeSigningContext = createContext<EnvelopeSigningContextValue | null>(null);
@@ -129,7 +143,13 @@ export const EnvelopeSigningProvider = ({
   envelopeData: initialEnvelopeData,
   children,
 }: EnvelopeSigningProviderProps) => {
-  const [envelopeData, setEnvelopeData] = useState(() => prefillDateFields(initialEnvelopeData));
+  const [storedEnvelopeData, setEnvelopeData] = useState(() => prefillDateFields(initialEnvelopeData));
+
+  const envelopeData = useMemo(() => applyFieldLogicToSigningData(storedEnvelopeData), [storedEnvelopeData]);
+
+  // The page renderer keeps old `signField` closures, so the latest data is read from a ref.
+  const storedEnvelopeDataRef = useRef(storedEnvelopeData);
+  storedEnvelopeDataRef.current = storedEnvelopeData;
 
   const { envelope, recipient } = envelopeData;
 
@@ -143,26 +163,7 @@ export const EnvelopeSigningProvider = ({
   const { mutateAsync: signEnvelopeField } = trpc.envelope.field.sign.useMutation({
     ...DO_NOT_INVALIDATE_QUERY_ON_MUTATION,
     onSuccess: (data) => {
-      setEnvelopeData((prev) => ({
-        ...prev,
-        envelope: {
-          ...prev.envelope,
-          recipients: prev.envelope.recipients.map((recipient) =>
-            recipient.id === data.signedField.recipientId
-              ? {
-                  ...recipient,
-                  fields: recipient.fields.map((field) =>
-                    field.id === data.signedField.id ? data.signedField : field,
-                  ),
-                }
-              : recipient,
-          ),
-        },
-        recipient: {
-          ...prev.recipient,
-          fields: prev.recipient.fields.map((field) => (field.id === data.signedField.id ? data.signedField : field)),
-        },
-      }));
+      setEnvelopeData((prev) => mergeSignedFields(prev, data));
     },
   });
 
@@ -310,6 +311,13 @@ export const EnvelopeSigningProvider = ({
     fieldValue: TSignEnvelopeFieldValue,
     authOptions?: TRecipientActionAuth,
   ) => {
+    // Solid Ten: a change that hides fields the signer filled asks first.
+    if (!(await confirmValuesClearedByChange(storedEnvelopeDataRef.current, fieldId, fieldValue))) {
+      const unchangedField = recipient.fields.find((field) => field.id === fieldId);
+
+      return { id: fieldId, inserted: unchangedField?.inserted ?? false };
+    }
+
     // Set the field locally for direct templates.
     if (isDirectTemplate) {
       const signedField = handleDirectTemplateFieldInsertion(fieldId, fieldValue);
@@ -413,6 +421,7 @@ export const EnvelopeSigningProvider = ({
         selectedAssistantRecipientFields,
 
         signField,
+        applySignedFieldResponse: (response) => setEnvelopeData((prev) => mergeSignedFields(prev, response)),
       }}
     >
       {children}

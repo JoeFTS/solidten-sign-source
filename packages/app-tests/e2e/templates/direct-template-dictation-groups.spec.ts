@@ -109,10 +109,15 @@ const seedDirectTemplateWithPeer = async (options: { peerSigningOrder: number })
   };
 };
 
-const signDirectTemplate = async (seeded: Awaited<ReturnType<typeof seedDirectTemplateWithPeer>>) =>
-  await createDocumentFromDirectTemplate({
+const signDirectTemplate = async (seeded: Awaited<ReturnType<typeof seedDirectTemplateWithPeer>>) => {
+  // Solid Ten Sign (AUD-C4): only a signer whose email is verified (here: signed in with it)
+  // may dictate the next signer.
+  const { user: signer } = await seedUser();
+
+  return await createDocumentFromDirectTemplate({
     directRecipientName: 'Direct Signer',
-    directRecipientEmail: 'direct-signer@documenso.com',
+    directRecipientEmail: signer.email,
+    user: { id: signer.id, name: signer.name ?? undefined, email: signer.email },
     directTemplateToken: seeded.directLinkToken,
     templateUpdatedAt: seeded.templateUpdatedAt,
     signedFieldValues: [
@@ -126,6 +131,7 @@ const signDirectTemplate = async (seeded: Awaited<ReturnType<typeof seedDirectTe
     nextSigner: DICTATED,
     requestMetadata,
   });
+};
 
 test('[DIRECT_TEMPLATE_DICTATION]: does not dictate a recipient sharing the direct recipient step', async () => {
   const seeded = await seedDirectTemplateWithPeer({ peerSigningOrder: 1 });

@@ -1,6 +1,10 @@
 import { ORGANISATION_MEMBER_ROLE_PERMISSIONS_MAP } from '@documenso/lib/constants/organisations';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { getMemberOrganisationRole } from '@documenso/lib/server-only/team/get-member-roles';
+import {
+  getUserIdsOfOrganisationMembers,
+  reassignEnvelopesAfterAccessLoss,
+} from '@documenso/lib/server-only/team/reassign-envelopes-after-access-loss';
 import { generateDatabaseId } from '@documenso/lib/universal/id';
 import { buildOrganisationWhereQuery, isOrganisationRoleWithinUserHierarchy } from '@documenso/lib/utils/organisations';
 import { prisma } from '@documenso/prisma';
@@ -122,6 +126,15 @@ export const updateOrganisationGroupRoute = authenticatedProcedure
             groupId: organisationGroup.id,
             organisationMemberId: { in: membersToDelete.map((m) => m.organisationMemberId) },
           },
+        });
+
+        // Solid Ten: a member who lost their last path to a team hands its envelopes to the owner.
+        await reassignEnvelopesAfterAccessLoss(tx, {
+          organisationId: organisationGroup.organisationId,
+          userIds: await getUserIdsOfOrganisationMembers(
+            tx,
+            membersToDelete.map((m) => m.organisationMemberId),
+          ),
         });
       }
 

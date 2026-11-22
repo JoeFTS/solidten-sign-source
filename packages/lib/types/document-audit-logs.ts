@@ -9,10 +9,18 @@ import { z } from 'zod';
 
 import { zEmail } from '../utils/zod';
 import { ZRecipientAccessAuthTypesSchema, ZRecipientActionAuthTypesSchema } from './document-auth';
+import { ZDocumentAuditLogEventSmsFailedSchema, ZDocumentAuditLogEventSmsSentSchema } from './sms-audit-logs';
+import {
+  SOLIDTEN_AUDIT_LOG_TYPES,
+  ZInPersonHostMarkerSchema,
+  ZSolidTenDocumentAuditLogEventSchemas,
+} from './solidten-audit-logs';
 
 export const ZDocumentAuditLogTypeSchema = z.enum([
   // Document actions.
   'EMAIL_SENT',
+  'SMS_SENT', // Solid Ten: signing link sent by text message.
+  'SMS_FAILED', // Solid Ten: text message could not be sent.
 
   // Document modification events.
   'CONTENT_CREATED',
@@ -39,6 +47,8 @@ export const ZDocumentAuditLogTypeSchema = z.enum([
   'DOCUMENT_FIELD_INSERTED', // When a field is inserted (signed/approved/etc) by a recipient.
   'DOCUMENT_FIELD_UNINSERTED', // When a field is uninserted by a recipient.
   'DOCUMENT_FIELD_PREFILLED', // When a field is prefilled by an assistant.
+  'DOCUMENT_FIELD_CONDITION_CLEARED', // Solid Ten: when a value is cleared because its field's condition became false.
+  'DOCUMENT_FIELD_CALCULATED', // Solid Ten: when the server sets the value of a calculated field.
   'DOCUMENT_VISIBILITY_UPDATED', // When the document visibility scope is updated
   'DOCUMENT_GLOBAL_AUTH_ACCESS_UPDATED', // When the global access authentication is updated.
   'DOCUMENT_GLOBAL_AUTH_ACTION_UPDATED', // When the global action authentication is updated.
@@ -65,6 +75,8 @@ export const ZDocumentAuditLogTypeSchema = z.enum([
   'DOCUMENT_RECIPIENT_CSC_SIGN_REQUESTED', // Recipient clicked Sign; CSC session created with captured per-item hashes.
   'DOCUMENT_RECIPIENT_CSC_AUTHORIZED', // Credential-scope OAuth complete; SAD attached to the CSC session.
   'DOCUMENT_RECIPIENT_CSC_SIGNED', // TSP returned signatures and they were embedded into the recipient's PDF bytes.
+
+  ...SOLIDTEN_AUDIT_LOG_TYPES,
 ]);
 
 export const ZDocumentAuditLogEmailTypeSchema = z.enum([
@@ -273,6 +285,12 @@ export const ZDocumentAuditLogEventEmailSentSchema = z.object({
   data: ZBaseRecipientDataSchema.extend({
     emailType: ZDocumentAuditLogEmailTypeSchema,
     isResending: z.boolean(),
+    // Solid Ten: how an email that carries the document delivered it (attached, or a download
+    // link because the files were above NEXT_PRIVATE_ST_EMAIL_ATTACHMENT_LIMIT_MB).
+    documentDelivery: z.enum(['ATTACHMENT', 'LINK']).optional(),
+    // Solid Ten: the app stopped during the send, so it is not known whether the email reached the
+    // mail server (FS2-L2). It was not sent again.
+    deliveryUnconfirmed: z.boolean().optional(),
   }),
 });
 
@@ -382,6 +400,10 @@ export const ZDocumentAuditLogEventDocumentFieldInsertedSchema = z.object({
         type: z.literal(FieldType.NUMBER),
         data: z.string(),
       }),
+      z.object({
+        type: z.literal(FieldType.FILE),
+        data: z.string(),
+      }),
     ]),
     fieldSecurity: z.preprocess(
       (input) => {
@@ -429,6 +451,32 @@ export const ZDocumentAuditLogEventDocumentFieldUninsertedSchema = z.object({
   data: z.object({
     field: z.nativeEnum(FieldType),
     fieldId: z.string(),
+  }),
+});
+
+/**
+ * Event: Document field value cleared because the field's condition became false.
+ */
+export const ZDocumentAuditLogEventDocumentFieldConditionClearedSchema = z.object({
+  type: z.literal(DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_FIELD_CONDITION_CLEARED),
+  data: z.object({
+    field: z.nativeEnum(FieldType),
+    fieldId: z.string(),
+    recipientId: z.number(),
+    conditionFieldKey: z.string(),
+  }),
+});
+
+/**
+ * Event: Document calculated field value set by the server.
+ */
+export const ZDocumentAuditLogEventDocumentFieldCalculatedSchema = z.object({
+  type: z.literal(DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_FIELD_CALCULATED),
+  data: z.object({
+    fieldId: z.string(),
+    recipientId: z.number(),
+    formula: z.string(),
+    value: z.string(),
   }),
 });
 
@@ -581,6 +629,13 @@ export const ZDocumentAuditLogEventDocumentRecipientCompleteSchema = z.object({
 
       return Array.isArray(unknownValue) ? unknownValue : [unknownValue];
     }, z.array(ZRecipientActionAuthTypesSchema)),
+    /**
+     * Solid Ten (AUD-8): the access methods required of this recipient when they acted, recorded so
+     * the certificate prints what they passed, not the settings at seal time. Absent on older rows.
+     */
+    accessAuth: z.array(ZRecipientAccessAuthTypesSchema).optional(),
+    /** Solid Ten Sign: set when a staff user hosted this signing in person. */
+    inPersonHost: ZInPersonHostMarkerSchema.optional(),
   }),
 });
 
@@ -603,6 +658,13 @@ export const ZDocumentAuditLogEventDocumentRecipientRejectedSchema = z.object({
      */
     onBehalfOfUserEmail: z.string().optional(),
     onBehalfOfUserName: z.string().nullable().optional(),
+    /**
+     * Solid Ten (AUD-8): the access methods required of this recipient when they acted, recorded so
+     * the certificate prints what they passed, not the settings at seal time. Absent on older rows.
+     */
+    accessAuth: z.array(ZRecipientAccessAuthTypesSchema).optional(),
+    /** Solid Ten Sign: set when a staff user hosted this signing in person. */
+    inPersonHost: ZInPersonHostMarkerSchema.optional(),
   }),
 });
 
@@ -885,6 +947,8 @@ export const ZDocumentAuditLogSchema = ZDocumentAuditLogBaseSchema.and(
     ZDocumentAuditLogEventEnvelopeItemUpdatedSchema,
     ZDocumentAuditLogEventEnvelopeItemPdfReplacedSchema,
     ZDocumentAuditLogEventEmailSentSchema,
+    ZDocumentAuditLogEventSmsSentSchema,
+    ZDocumentAuditLogEventSmsFailedSchema,
     ZDocumentAuditLogEventDocumentCompletedSchema,
     ZDocumentAuditLogEventDocumentCreatedSchema,
     ZDocumentAuditLogEventDocumentDeletedSchema,
@@ -895,6 +959,8 @@ export const ZDocumentAuditLogSchema = ZDocumentAuditLogBaseSchema.and(
     ZDocumentAuditLogEventDocumentFieldInsertedSchema,
     ZDocumentAuditLogEventDocumentFieldUninsertedSchema,
     ZDocumentAuditLogEventDocumentFieldPrefilledSchema,
+    ZDocumentAuditLogEventDocumentFieldConditionClearedSchema,
+    ZDocumentAuditLogEventDocumentFieldCalculatedSchema,
     ZDocumentAuditLogEventDocumentVisibilitySchema,
     ZDocumentAuditLogEventDocumentGlobalAuthAccessUpdatedSchema,
     ZDocumentAuditLogEventDocumentGlobalAuthActionUpdatedSchema,
@@ -924,6 +990,7 @@ export const ZDocumentAuditLogSchema = ZDocumentAuditLogBaseSchema.and(
     ZDocumentAuditLogEventDocumentRecipientCscSignRequestedSchema,
     ZDocumentAuditLogEventDocumentRecipientCscAuthorizedSchema,
     ZDocumentAuditLogEventDocumentRecipientCscSignedSchema,
+    ...ZSolidTenDocumentAuditLogEventSchemas,
   ]),
 );
 

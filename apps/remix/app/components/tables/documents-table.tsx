@@ -14,11 +14,15 @@ import { msg } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react';
 import { Loader } from 'lucide-react';
 import { DateTime } from 'luxon';
-import { useMemo, useTransition } from 'react';
+import { useMemo, useRef, useTransition } from 'react';
 import { Link } from 'react-router';
 import { match } from 'ts-pattern';
 
 import { DocumentStatus } from '~/components/general/document/document-status';
+import {
+  ScheduledSendBadge,
+  ScheduledSendLookupProvider,
+} from '~/components/general/scheduled-send/scheduled-send-badge';
 import { useCurrentTeam } from '~/providers/team';
 
 import { StackAvatarsWithTooltip } from '../general/stack-avatars-with-tooltip';
@@ -52,6 +56,14 @@ export const DocumentsTable = ({
   const [isPending, startTransition] = useTransition();
 
   const updateSearchParams = useUpdateSearchParams();
+
+  // Solid Ten: the page passes a new `onMoveDocument` function on every render. With it in the
+  // column dependencies, each page re-render made new cell components, so React remounted
+  // every cell, and an open row menu or dialog (such as "Save as Template") closed at once.
+  const onMoveDocumentRef = useRef(onMoveDocument);
+  onMoveDocumentRef.current = onMoveDocument;
+
+  const hasMoveDocument = onMoveDocument !== undefined;
 
   const columns = useMemo(() => {
     const cols: DataTableColumnDef<DocumentsTableRow>[] = [];
@@ -106,7 +118,12 @@ export const DocumentsTable = ({
       {
         header: _(msg`Status`),
         accessorKey: 'status',
-        cell: ({ row }) => <DocumentStatus status={row.original.status} />,
+        cell: ({ row }) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <DocumentStatus status={row.original.status} />
+            {row.original.status === 'DRAFT' && <ScheduledSendBadge envelopeId={row.original.envelopeId} />}
+          </div>
+        ),
         size: 140,
       },
       {
@@ -117,7 +134,9 @@ export const DocumentsTable = ({
               <DocumentsTableActionButton row={row.original} />
               <DocumentsTableActionDropdown
                 row={row.original}
-                onMoveDocument={onMoveDocument ? () => onMoveDocument(row.original.envelopeId) : undefined}
+                onMoveDocument={
+                  hasMoveDocument ? () => onMoveDocumentRef.current?.(row.original.envelopeId) : undefined
+                }
               />
             </div>
           ),
@@ -125,7 +144,7 @@ export const DocumentsTable = ({
     );
 
     return cols;
-  }, [team, onMoveDocument, enableSelection]);
+  }, [team, hasMoveDocument, enableSelection]);
 
   const onPaginationChange = (page: number, perPage: number) => {
     startTransition(() => {
@@ -143,65 +162,72 @@ export const DocumentsTable = ({
     totalPages: 1,
   };
 
-  return (
-    <div className="relative">
-      <DataTable
-        columns={columns}
-        data={results.data}
-        perPage={results.perPage}
-        currentPage={results.currentPage}
-        totalPages={results.totalPages}
-        onPaginationChange={onPaginationChange}
-        columnVisibility={{
-          sender: team !== undefined,
-        }}
-        error={{
-          enable: isLoadingError || false,
-        }}
-        skeleton={{
-          enable: isLoading || false,
-          rows: 5,
-          component: (
-            <>
-              {enableSelection && (
-                <TableCell>
-                  <Skeleton className="h-4 w-4 rounded" />
-                </TableCell>
-              )}
-              <TableCell>
-                <Skeleton className="h-4 w-40 rounded-full" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-20 rounded-full" />
-              </TableCell>
-              <TableCell className="py-4">
-                <div className="flex w-full flex-row items-center">
-                  <Skeleton className="h-10 w-10 flex-shrink-0 rounded-full" />
-                </div>
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-20 rounded-full" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-10 w-24 rounded" />
-              </TableCell>
-            </>
-          ),
-        }}
-        enableRowSelection={enableSelection}
-        rowSelection={rowSelection}
-        onRowSelectionChange={onRowSelectionChange}
-        getRowId={(row) => row.envelopeId}
-      >
-        {(table) => <DataTablePagination additionalInformation="VisibleCount" table={table} />}
-      </DataTable>
+  const draftEnvelopeIds = useMemo(
+    () => results.data.filter((row) => row.status === 'DRAFT').map((row) => row.envelopeId),
+    [results.data],
+  );
 
-      {isPending && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/50">
-          <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      )}
-    </div>
+  return (
+    <ScheduledSendLookupProvider envelopeIds={draftEnvelopeIds}>
+      <div className="relative">
+        <DataTable
+          columns={columns}
+          data={results.data}
+          perPage={results.perPage}
+          currentPage={results.currentPage}
+          totalPages={results.totalPages}
+          onPaginationChange={onPaginationChange}
+          columnVisibility={{
+            sender: team !== undefined,
+          }}
+          error={{
+            enable: isLoadingError || false,
+          }}
+          skeleton={{
+            enable: isLoading || false,
+            rows: 5,
+            component: (
+              <>
+                {enableSelection && (
+                  <TableCell>
+                    <Skeleton className="h-4 w-4 rounded" />
+                  </TableCell>
+                )}
+                <TableCell>
+                  <Skeleton className="h-4 w-40 rounded-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20 rounded-full" />
+                </TableCell>
+                <TableCell className="py-4">
+                  <div className="flex w-full flex-row items-center">
+                    <Skeleton className="h-10 w-10 flex-shrink-0 rounded-full" />
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20 rounded-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-10 w-24 rounded" />
+                </TableCell>
+              </>
+            ),
+          }}
+          enableRowSelection={enableSelection}
+          rowSelection={rowSelection}
+          onRowSelectionChange={onRowSelectionChange}
+          getRowId={(row) => row.envelopeId}
+        >
+          {(table) => <DataTablePagination additionalInformation="VisibleCount" table={table} />}
+        </DataTable>
+
+        {isPending && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+            <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        )}
+      </div>
+    </ScheduledSendLookupProvider>
   );
 };
 

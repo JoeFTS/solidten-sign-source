@@ -1,3 +1,4 @@
+import { NEXT_PUBLIC_ST_SOURCE_URL } from '@documenso/lib/constants/source-code';
 import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
 import { Badge } from '@documenso/ui/primitives/badge';
 import { Button } from '@documenso/ui/primitives/button';
@@ -10,7 +11,7 @@ import {
 import { Separator } from '@documenso/ui/primitives/separator';
 import { Plural, Trans } from '@lingui/react/macro';
 import { EnvelopeType, RecipientRole } from '@prisma/client';
-import { BanIcon, DownloadCloudIcon } from 'lucide-react';
+import { BanIcon, DownloadCloudIcon, MessageSquareIcon, UserRoundPenIcon } from 'lucide-react';
 import { Link } from 'react-router';
 import { match } from 'ts-pattern';
 
@@ -20,8 +21,10 @@ import { BrandingLogo } from '~/components/general/branding-logo';
 import { PublicLegalLinksDropdownMenuItems } from '~/components/general/public-legal-links';
 
 import { BrandingLogoIcon } from '../branding-logo-icon';
+import { SignerCommentsDialog } from '../comments/signer-comments-dialog';
 import { DocumentSigningRejectDialog } from '../document-signing/document-signing-reject-dialog';
 import { useRequiredEnvelopeSigningContext } from '../document-signing/envelope-signing-provider';
+import { SignerReassignDialog } from '../recipient-reassign/recipient-reassign-dialog';
 import { EnvelopeSignerCompleteDialog } from './envelope-signing-complete-dialog';
 
 export const EnvelopeSignerHeader = () => {
@@ -57,7 +60,7 @@ export const EnvelopeSignerHeader = () => {
         <div className="hidden items-center space-x-2 md:flex">
           <h1 className="whitespace-nowrap font-medium text-foreground text-sm">{envelope.title}</h1>
 
-          <Badge>
+          <Badge className="bg-documenso-100 text-documenso-700 ring-documenso-700/10 dark:bg-documenso-300/10 dark:text-documenso-300 dark:ring-documenso-300/30">
             {match(recipient.role)
               .with(RecipientRole.VIEWER, () => <Trans>Viewer</Trans>)
               .with(RecipientRole.SIGNER, () => <Trans>Signer</Trans>)
@@ -91,7 +94,7 @@ const MobileDropdownMenu = () => {
   const embedSigningContext = useEmbedSigningContext();
 
   const isEmbedSigning = embedSigningContext !== null;
-  const { allowDocumentRejection, allowDownloadPDF } = embedSigningContext || {};
+  const { allowDocumentRejection, allowDownloadPDF, onDocumentRejected } = embedSigningContext || {};
 
   return (
     <DropdownMenu>
@@ -123,6 +126,17 @@ const MobileDropdownMenu = () => {
           <DocumentSigningRejectDialog
             documentId={mapSecondaryIdToDocumentId(envelope.secondaryId)}
             token={recipient.token}
+            onRejected={
+              onDocumentRejected &&
+              ((reason) =>
+                onDocumentRejected({
+                  token: recipient.token,
+                  documentId: mapSecondaryIdToDocumentId(envelope.secondaryId),
+                  envelopeId: envelope.id,
+                  recipientId: recipient.id,
+                  reason,
+                }))
+            }
             trigger={
               <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
                 <div>
@@ -134,7 +148,47 @@ const MobileDropdownMenu = () => {
           />
         )}
 
+        {envelope.type === EnvelopeType.DOCUMENT && !isEmbedSigning && (
+          <SignerReassignDialog
+            token={recipient.token}
+            trigger={
+              <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+                <div>
+                  <UserRoundPenIcon className="mr-2 h-4 w-4" />
+                  <Trans>Reassign</Trans>
+                </div>
+              </DropdownMenuItem>
+            }
+          />
+        )}
+
+        {envelope.type === EnvelopeType.DOCUMENT && (
+          <SignerCommentsDialog
+            token={recipient.token}
+            renderTrigger={(onOpen) => (
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  onOpen();
+                }}
+              >
+                <MessageSquareIcon className="mr-2 h-4 w-4" />
+                <Trans>Questions and comments</Trans>
+              </DropdownMenuItem>
+            )}
+          />
+        )}
+
         {!isEmbedSigning && <PublicLegalLinksDropdownMenuItems />}
+
+        {/* Solid Ten Sign: the AGPL source link (not in embeds). */}
+        {!isEmbedSigning && (
+          <DropdownMenuItem asChild className="text-muted-foreground text-xs">
+            <a href={NEXT_PUBLIC_ST_SOURCE_URL()} target="_blank" rel="noopener noreferrer">
+              <Trans>Source code</Trans>
+            </a>
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

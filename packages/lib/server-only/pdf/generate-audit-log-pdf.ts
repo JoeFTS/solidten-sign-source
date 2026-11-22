@@ -6,6 +6,7 @@ import { i18n } from '@lingui/core';
 import { ZSupportedLanguageCodeSchema } from '../../constants/i18n';
 import { parseDocumentAuditLogData } from '../../utils/document-audit-logs';
 import { getTranslations } from '../../utils/i18n';
+import { attachCommentBodiesToAuditLogs } from '../envelope-comments/comment-records';
 import { getOrganisationClaimByTeamId } from '../organisation/get-organisation-claims';
 import type { GenerateCertificatePdfOptions } from './generate-certificate-pdf';
 import { renderAuditLogs } from './render-audit-logs';
@@ -40,7 +41,11 @@ export const generateAuditLogPdf = async (options: GenerateAuditLogPdfOptions) =
     messages,
   });
 
-  const auditLogs: TDocumentAuditLog[] = [...additionalAuditLogs, ...partialAuditLogs];
+  // Solid Ten Sign: comment entries show the comment text in the PDF.
+  const auditLogs: TDocumentAuditLog[] = await attachCommentBodiesToAuditLogs([
+    ...additionalAuditLogs,
+    ...partialAuditLogs,
+  ]);
 
   const auditLogPages = await renderAuditLogs({
     envelope,

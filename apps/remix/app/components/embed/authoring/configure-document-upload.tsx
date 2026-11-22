@@ -1,5 +1,5 @@
 import { APP_DOCUMENT_UPLOAD_SIZE_LIMIT } from '@documenso/lib/constants/app';
-import { formatFileSize } from '@documenso/lib/universal/unit-convertions';
+import { formatFileSize, megabytesToBytes } from '@documenso/lib/universal/unit-convertions';
 import { buildDropzoneRejectionDescription } from '@documenso/ui/lib/handle-dropzone-rejection';
 import { cn } from '@documenso/ui/lib/utils';
 import { Button } from '@documenso/ui/primitives/button';
@@ -103,7 +103,7 @@ export const ConfigureDocumentUpload = ({ isSubmitting = false }: ConfigureDocum
     accept: {
       'application/pdf': ['.pdf'],
     },
-    maxSize: APP_DOCUMENT_UPLOAD_SIZE_LIMIT * 1024 * 1024,
+    maxSize: megabytesToBytes(APP_DOCUMENT_UPLOAD_SIZE_LIMIT),
     multiple: false,
     disabled: isSubmitting || isLoading || isPersisted,
     onDrop: (files) => {

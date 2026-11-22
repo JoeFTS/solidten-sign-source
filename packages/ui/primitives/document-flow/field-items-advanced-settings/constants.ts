@@ -1,18 +1,17 @@
+// Solid Ten: labels only. The grammar of each format lives in
+// packages/lib/utils/field-number-value.ts, so there is one pattern per format.
 export const numberFormatValues = [
   {
     label: '123,456,789.00',
     value: '123,456,789.00',
-    regex: /^(?:\d{1,3}(?:,\d{3})*|\d+)(?:\.\d{1,2})?$/,
   },
   {
     label: '123.456.789,00',
     value: '123.456.789,00',
-    regex: /^(?:\d{1,3}(?:\.\d{3})*|\d+)(?:,\d{1,2})?$/,
   },
   {
     label: '123456,789.00',
     value: '123456,789.00',
-    regex: /^(?:\d+)(?:,\d{1,3}(?:\.\d{1,2})?)?$/,
   },
 ];
 

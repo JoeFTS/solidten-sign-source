@@ -7,6 +7,7 @@ import {
   type TNumberFieldMeta as NumberFieldMeta,
   ZNumberFieldMeta,
 } from '@documenso/lib/types/field-meta';
+import { checkNumberInput } from '@documenso/lib/utils/field-number-value';
 import { numberFormatValues } from '@documenso/ui/primitives/document-flow/field-items-advanced-settings/constants';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@documenso/ui/primitives/form/form';
 import { Input } from '@documenso/ui/primitives/input';
@@ -57,6 +58,11 @@ const ZNumberFieldFormSchema = ZNumberFieldMeta.pick({
       path: ['minValue'],
     },
   )
+  .refine((data) => !data.value || checkNumberInput(data.value, data.numberFormat) === null, {
+    // Solid Ten: the same grammar the server uses, so an invalid default is never saved.
+    message: 'The value does not match the number format',
+    path: ['value'],
+  })
   .refine(
     (data) => {
       // A read-only field must have a value greater than 0

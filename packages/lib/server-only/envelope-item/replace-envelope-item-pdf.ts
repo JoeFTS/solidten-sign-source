@@ -1,16 +1,15 @@
-import { normalizePdf } from '@documenso/lib/server-only/pdf/normalize-pdf';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
-import { putPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
+import { putPreparedPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
 import { prisma } from '@documenso/prisma';
 import { type Envelope, type EnvelopeContent, EnvelopeType, type Field, type Recipient } from '@prisma/client';
 
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
 import { assertContentCanBeChanged } from '../envelope-content/assert-content-can-be-changed';
-import { convertPlaceholdersToFieldInputs, extractPdfPlaceholders } from '../pdf/auto-place-fields';
+import { convertPlaceholdersToFieldInputs } from '../pdf/auto-place-fields';
 import { findRecipientByPlaceholder } from '../pdf/helpers';
-import { insertFormValuesInPdf } from '../pdf/insert-form-values-in-pdf';
+import { prepareUploadedPdfIsolated } from '../pdf-child/isolated-pdf';
 
 type UnsafeReplaceEnvelopeItemPdfOptions = {
   envelope: Pick<Envelope, 'id' | 'type' | 'status' | 'formValues'>;
@@ -78,23 +77,17 @@ export const UNSAFE_replaceEnvelopeItemPdf = async ({
   user,
   apiRequestMetadata,
 }: UnsafeReplaceEnvelopeItemPdfOptions): Promise<UnsafeReplaceEnvelopeItemPdfResult> => {
-  let buffer = Buffer.from(await data.file.arrayBuffer());
-
-  if (envelope.formValues) {
-    buffer = await insertFormValuesInPdf({ pdf: buffer, formValues: envelope.formValues });
-  }
-
-  const { pdf: normalized } = await normalizePdf(buffer, {
-    flattenForm: envelope.type !== 'TEMPLATE',
-  });
-
-  const { cleanedPdf, placeholders } = await extractPdfPlaceholders(normalized);
+  // Solid Ten (AUD-5): in the PDF child and the heavy-PDF queue at every size (isolated-pdf.ts).
+  const { cleanedPdf, placeholders, pageCount } = await prepareUploadedPdfIsolated(
+    Buffer.from(await data.file.arrayBuffer()),
+    { flattenForm: envelope.type !== 'TEMPLATE', formValues: envelope.formValues },
+  );
 
   // Upload the new PDF and get a new DocumentData record.
-  const { documentData: newDocumentData, filePageCount } = await putPdfFileServerSide({
+  const { documentData: newDocumentData, filePageCount } = await putPreparedPdfFileServerSide({
     name: data.file.name,
-    type: 'application/pdf',
-    arrayBuffer: async () => Promise.resolve(cleanedPdf),
+    pdf: cleanedPdf,
+    pageCount,
   });
 
   let didFieldsChange = false;

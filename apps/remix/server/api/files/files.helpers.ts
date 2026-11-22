@@ -1,14 +1,17 @@
 import { getOptionalNonEmbedSession } from '@documenso/auth/server/lib/session/embed-session-restrictions';
+import { TEAM_DOCUMENT_VISIBILITY_MAP } from '@documenso/lib/constants/teams';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embedding-presign/verify-embedding-presign-token';
-import { generatePartialSignedPdf } from '@documenso/lib/server-only/pdf/generate-partial-signed-pdf';
+import { generatePartialSignedPdfIsolated } from '@documenso/lib/server-only/pdf-child/isolated-pdf';
 import { getTeamById } from '@documenso/lib/server-only/team/get-team';
 import { sha256 } from '@documenso/lib/universal/crypto';
 import { getFileServerSide } from '@documenso/lib/universal/upload/get-file.server';
+import { canAccessTeamDocument, getHighestTeamRoleInGroup } from '@documenso/lib/utils/teams';
 import { prisma } from '@documenso/prisma';
 import {
   type DocumentDataType,
   DocumentStatus,
+  type DocumentVisibility,
   type EnvelopeType,
   EnvelopeType as EnvelopeTypeEnum,
   type RecipientRole,
@@ -240,7 +243,8 @@ const handlePendingFileRequest = async ({
     },
   });
 
-  const pdf = await generatePartialSignedPdf({
+  // Solid Ten (AUD-2 follow-up): rendered in the PDF child.
+  const pdf = await generatePartialSignedPdfIsolated({
     pdfData: file,
     fields,
     contents,
@@ -271,6 +275,9 @@ type CheckEnvelopeFileAccessOptions = {
   teamId: number;
   envelopeType: EnvelopeType;
   templateType: TemplateType;
+  /** Solid Ten (AUD-7): the envelope's visibility and owner, checked as getEnvelopeWhereInput does. */
+  visibility: DocumentVisibility;
+  ownerId: number;
 };
 
 /**
@@ -285,39 +292,34 @@ export const checkEnvelopeFileAccess = async ({
   teamId,
   envelopeType,
   templateType,
+  visibility,
+  ownerId,
 }: CheckEnvelopeFileAccessOptions): Promise<boolean> => {
   const team = await getTeamById({ userId, teamId }).catch(() => null);
 
+  // Solid Ten (AUD-7): a team member gets the file of a document they own, or one whose visibility
+  // their team role may see; not every document of the team.
   if (team) {
-    return true;
+    return (
+      ownerId === userId || TEAM_DOCUMENT_VISIBILITY_MAP[team.currentTeamRole].some((allowed) => allowed === visibility)
+    );
   }
 
   if (envelopeType === EnvelopeTypeEnum.TEMPLATE && templateType === TemplateTypeEnum.ORGANISATION) {
-    const orgAccess = await prisma.team.findFirst({
+    // Solid Ten (AUD-7 follow-up): the organisation-template rule of getOrganisationTemplateById, so
+    // visibility applies here too. A file request names no team, so the member's highest role in any
+    // team of the organisation is used.
+    const memberTeamGroups = await prisma.teamGroup.findMany({
       where: {
-        id: teamId,
-        organisation: {
-          teams: {
-            some: {
-              teamGroups: {
-                some: {
-                  organisationGroup: {
-                    organisationGroupMembers: {
-                      some: {
-                        organisationMember: { userId },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+        team: { organisation: { teams: { some: { id: teamId } } } },
+        organisationGroup: { organisationGroupMembers: { some: { organisationMember: { userId } } } },
       },
-      select: { id: true },
     });
 
-    return orgAccess !== null;
+    return (
+      memberTeamGroups.length > 0 &&
+      (ownerId === userId || canAccessTeamDocument(getHighestTeamRoleInGroup(memberTeamGroups), visibility))
+    );
   }
 
   return false;

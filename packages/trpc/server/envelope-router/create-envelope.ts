@@ -3,16 +3,15 @@ import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { convertToPdf } from '@documenso/lib/server-only/document-conversion';
 import { createEnvelope } from '@documenso/lib/server-only/envelope/create-envelope';
 import { createEnvelopeContentImages } from '@documenso/lib/server-only/envelope-content/create-envelope-content-images';
-import { extractPdfPlaceholders } from '@documenso/lib/server-only/pdf/auto-place-fields';
-import { normalizePdf } from '@documenso/lib/server-only/pdf/normalize-pdf';
+import { runHeavyPdfWork } from '@documenso/lib/server-only/pdf/heavy-pdf-queue';
+import { prepareUploadedPdfIsolated } from '@documenso/lib/server-only/pdf-child/isolated-pdf';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
-import { putPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
+import { putPreparedPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
 import { assertEnvelopeContentSaveWithinLimits } from '@documenso/lib/utils/envelope-content';
 import { EnvelopeType } from '@prisma/client';
 import type { Logger } from 'pino';
 import { match, P } from 'ts-pattern';
 
-import { insertFormValuesInPdf } from '../../../lib/server-only/pdf/insert-form-values-in-pdf';
 import type { TCreateEmbeddingEnvelopeRequest } from '../embedding-router/create-embedding-envelope.types';
 import { authenticatedProcedure } from '../trpc';
 import {
@@ -72,7 +71,17 @@ type CreateEnvelopeRouteOptions = {
   };
 };
 
-export const createEnvelopeRouteCaller = async ({
+/**
+ * Solid Ten: creating from large files holds the heavy-PDF slot for the PDF work and the create
+ * transaction, so a second large upload waits instead of stalling this transaction (LD2-A).
+ */
+export const createEnvelopeRouteCaller = async (options: CreateEnvelopeRouteOptions) =>
+  await runHeavyPdfWork(
+    [...options.input.files, ...(options.input.contentImages ?? [])].reduce((total, file) => total + file.size, 0),
+    async () => await createEnvelopeRouteCallerUnqueued(options),
+  );
+
+const createEnvelopeRouteCallerUnqueued = async ({
   userId,
   teamId,
   input,
@@ -132,27 +141,20 @@ export const createEnvelopeRouteCaller = async ({
   // For each file: convert to PDF if needed, normalize, extract & clean placeholders, then upload.
   const envelopeItems = await Promise.all(
     files.map(async (file) => {
-      let pdf = await convertToPdf(file, logger);
+      const pdf = await convertToPdf(file, logger);
 
-      if (formValues) {
-        // eslint-disable-next-line require-atomic-updates
-        pdf = await insertFormValuesInPdf({
-          pdf,
-          formValues,
-        });
-      }
-
-      const { pdf: normalized } = await normalizePdf(pdf, {
+      // Solid Ten: form values, normalisation and placeholder extraction run in a PDF child
+      // process for large files (LD3-H1, LD3-M1); the page count comes back with the result.
+      // Todo: Embeds - Might need to add this for client-side embeds in the future.
+      const { cleanedPdf, placeholders, pageCount } = await prepareUploadedPdfIsolated(pdf, {
         flattenForm: type !== EnvelopeType.TEMPLATE,
+        formValues,
       });
 
-      // Todo: Embeds - Might need to add this for client-side embeds in the future.
-      const { cleanedPdf, placeholders } = await extractPdfPlaceholders(normalized);
-
-      const { documentData, filePageCount } = await putPdfFileServerSide({
+      const { documentData, filePageCount } = await putPreparedPdfFileServerSide({
         name: file.name,
-        type: 'application/pdf',
-        arrayBuffer: async () => Promise.resolve(cleanedPdf),
+        pdf: cleanedPdf,
+        pageCount,
       });
 
       return {

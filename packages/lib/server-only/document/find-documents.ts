@@ -98,15 +98,30 @@ const recipientExists = (
 
 /**
  * Reusable EXISTS subquery: checks that the envelope's sender (User) has the given email.
+ *
+ * Solid Ten (AUD-4): a team-email sender match covers only envelopes of the caller's own team, at a
+ * visibility the caller's role may see; never another team's or organisation's envelopes.
  */
-const senderEmailIs = (eb: EnvelopeExpressionBuilder, email: string) =>
-  eb.exists(
-    eb
-      .selectFrom('User')
-      .whereRef('User.id', '=', 'Envelope.userId')
-      .where('User.email', '=', email)
-      .select(sql.lit(1).as('one')),
-  );
+const senderEmailIs = (
+  eb: EnvelopeExpressionBuilder,
+  email: string,
+  scope: { teamId: number; visibilities: readonly DocumentVisibility[] },
+) =>
+  eb.and([
+    eb('Envelope.teamId', '=', scope.teamId),
+    eb(
+      'Envelope.visibility',
+      'in',
+      scope.visibilities.map((v) => sql.lit(v)),
+    ),
+    eb.exists(
+      eb
+        .selectFrom('User')
+        .whereRef('User.id', '=', 'Envelope.userId')
+        .where('User.email', '=', email)
+        .select(sql.lit(1).as('one')),
+    ),
+  ]);
 
 export const findDocuments = async ({
   userId,
@@ -363,7 +378,12 @@ export const findDocuments = async ({
       const branches = [eb.and([eb('Envelope.teamId', '=', teamData.id), eb('Envelope.deletedAt', 'is', null)])];
 
       if (teamEmail) {
-        branches.push(eb.and([senderEmailIs(eb, teamEmail), eb('Envelope.deletedAt', 'is', null)]));
+        branches.push(
+          eb.and([
+            senderEmailIs(eb, teamEmail, { teamId: teamData.id, visibilities: allowedVisibilities }),
+            eb('Envelope.deletedAt', 'is', null),
+          ]),
+        );
         branches.push(recipientExists(eb, teamEmail, (reb) => reb('Recipient.documentDeletedAt', 'is', null)));
       }
 
@@ -376,7 +396,9 @@ export const findDocuments = async ({
           const accessBranches = [eb('Envelope.teamId', '=', teamData.id)];
 
           if (teamEmail) {
-            accessBranches.push(senderEmailIs(eb, teamEmail));
+            accessBranches.push(
+              senderEmailIs(eb, teamEmail, { teamId: teamData.id, visibilities: allowedVisibilities }),
+            );
             accessBranches.push(
               eb.and([eb('status', '!=', sql.lit(ExtendedDocumentStatus.DRAFT)), recipientExists(eb, teamEmail)]),
             );
@@ -411,7 +433,9 @@ export const findDocuments = async ({
           const accessBranches = [eb('Envelope.teamId', '=', teamData.id)];
 
           if (teamEmail) {
-            accessBranches.push(senderEmailIs(eb, teamEmail));
+            accessBranches.push(
+              senderEmailIs(eb, teamEmail, { teamId: teamData.id, visibilities: allowedVisibilities }),
+            );
           }
 
           return eb.and([teamDeletedFilter(eb), visibilityFilter(eb), eb.or(accessBranches)]);
@@ -422,7 +446,9 @@ export const findDocuments = async ({
           const accessBranches = [eb('Envelope.teamId', '=', teamData.id)];
 
           if (teamEmail) {
-            accessBranches.push(senderEmailIs(eb, teamEmail));
+            accessBranches.push(
+              senderEmailIs(eb, teamEmail, { teamId: teamData.id, visibilities: allowedVisibilities }),
+            );
             accessBranches.push(
               recipientExists(eb, teamEmail, (reb) =>
                 reb.and([
@@ -441,7 +467,9 @@ export const findDocuments = async ({
           const accessBranches = [eb('Envelope.teamId', '=', teamData.id)];
 
           if (teamEmail) {
-            accessBranches.push(senderEmailIs(eb, teamEmail));
+            accessBranches.push(
+              senderEmailIs(eb, teamEmail, { teamId: teamData.id, visibilities: allowedVisibilities }),
+            );
             accessBranches.push(recipientExists(eb, teamEmail));
           }
 
@@ -453,7 +481,9 @@ export const findDocuments = async ({
           const accessBranches = [eb('Envelope.teamId', '=', teamData.id)];
 
           if (teamEmail) {
-            accessBranches.push(senderEmailIs(eb, teamEmail));
+            accessBranches.push(
+              senderEmailIs(eb, teamEmail, { teamId: teamData.id, visibilities: allowedVisibilities }),
+            );
             accessBranches.push(
               recipientExists(eb, teamEmail, (reb) =>
                 reb('Recipient.signingStatus', '=', sql.lit(SigningStatus.REJECTED)),
@@ -469,7 +499,9 @@ export const findDocuments = async ({
           const accessBranches = [eb('Envelope.teamId', '=', teamData.id)];
 
           if (teamEmail) {
-            accessBranches.push(senderEmailIs(eb, teamEmail));
+            accessBranches.push(
+              senderEmailIs(eb, teamEmail, { teamId: teamData.id, visibilities: allowedVisibilities }),
+            );
             accessBranches.push(recipientExists(eb, teamEmail));
           }
 
@@ -481,7 +513,9 @@ export const findDocuments = async ({
           const accessBranches = [eb('Envelope.teamId', '=', teamData.id)];
 
           if (teamEmail) {
-            accessBranches.push(senderEmailIs(eb, teamEmail));
+            accessBranches.push(
+              senderEmailIs(eb, teamEmail, { teamId: teamData.id, visibilities: allowedVisibilities }),
+            );
             accessBranches.push(recipientExists(eb, teamEmail));
           }
 

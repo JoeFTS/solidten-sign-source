@@ -14,6 +14,7 @@ import { unsafeBuildEnvelopeIdQuery } from '../../../utils/envelope';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import { getEmailContext } from '../../email/get-email-context';
 import { TWO_FACTOR_EMAIL_EXPIRATION_MINUTES } from './constants';
+import { resetEmailAccessCodeAttempts } from './email-access-code-lockout';
 import { generateTwoFactorTokenFromEmail } from './generate-2fa-token-from-email';
 
 export type Send2FATokenEmailOptions = {
@@ -118,6 +119,9 @@ export const send2FATokenEmail = async ({ token, envelopeId }: Send2FATokenEmail
     html,
     text,
   });
+
+  // Solid Ten Sign (AUD-1): a new code gives a full set of attempts again.
+  await resetEmailAccessCodeAttempts(recipient.id);
 
   await prisma.documentAuditLog.create({
     data: createDocumentAuditLogData({

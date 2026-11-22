@@ -9,6 +9,8 @@ export interface TemplateDocumentCompletedProps {
   documentName: string;
   assetBaseUrl: string;
   customBody?: string;
+  /** Solid Ten: false when the signed document was too large to attach; the button is the way to get it. */
+  isDocumentAttached?: boolean;
 }
 
 export const TemplateDocumentCompleted = ({
@@ -16,6 +18,7 @@ export const TemplateDocumentCompleted = ({
   documentName,
   assetBaseUrl,
   customBody,
+  isDocumentAttached = true,
 }: TemplateDocumentCompletedProps) => {
   return (
     <>
@@ -40,7 +43,13 @@ export const TemplateDocumentCompleted = ({
         </Text>
 
         <Text className="my-1 text-center text-base text-muted-foreground">
-          <Trans>Continue by downloading the document.</Trans>
+          {isDocumentAttached ? (
+            <Trans>Continue by downloading the document.</Trans>
+          ) : (
+            <Trans>
+              The signed document is too large to attach to this email. Use the button below to download it.
+            </Trans>
+          )}
         </Text>
 
         <Section className="mt-8 mb-6 text-center">
@@ -53,7 +62,7 @@ export const TemplateDocumentCompleted = ({
               className="mr-2 mb-0.5 inline h-5 w-5 align-middle"
               alt=""
             />
-            <Trans>Download</Trans>
+            {isDocumentAttached ? <Trans>Download</Trans> : <Trans>Download your signed document</Trans>}
           </Button>
         </Section>
       </Section>

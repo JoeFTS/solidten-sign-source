@@ -1,17 +1,21 @@
 import { PDF } from '@libpdf/core';
 import { i18n } from '@lingui/core';
-import { msg } from '@lingui/core/macro';
 import type { DocumentMeta, Envelope, Field, Recipient, Signature } from '@prisma/client';
 import { FieldType } from '@prisma/client';
 import { prop, sortBy } from 'remeda';
-import { match } from 'ts-pattern';
-
 import { ZSupportedLanguageCodeSchema } from '../../constants/i18n';
 import type { TDocumentAuditLogBaseSchema } from '../../types/document-audit-logs';
+import { CERTIFICATE_AUTH_LEVEL_LABELS, getCertificateAuthLevel } from '../../utils/certificate-auth-level';
+import { getRecordedAccessAuth } from '../../utils/certificate-recorded-access';
 import { extractDocumentAuthMethods } from '../../utils/document-auth';
 import { getTranslations } from '../../utils/i18n';
+import { getInPersonHostFromAuditLog } from '../../utils/in-person-audit';
+import { formatPublicFormAuthLevel } from '../../utils/public-form-certificate';
 import { getDocumentCertificateAuditLogs } from '../document/get-document-certificate-audit-logs';
+import { getCertificateAttachedFiles } from '../field-file/field-file-access';
 import { getOrganisationClaimByTeamId } from '../organisation/get-organisation-claims';
+import { getPublicFormVerificationByRecipient } from '../public-form/public-form-responses';
+import { renderAttachedFilesCertificate } from './render-attached-files-certificate';
 import { renderCertificate } from './render-certificate';
 
 export type GenerateCertificatePdfOptions = {
@@ -56,6 +60,8 @@ export const generateCertificatePdf = async (options: GenerateCertificatePdfOpti
     messages,
   });
 
+  const publicFormVerification = await getPublicFormVerificationByRecipient(envelope.id);
+
   const payload = {
     recipients: recipients.map((recipient) => {
       const recipientId = recipient.id;
@@ -66,6 +72,10 @@ export const generateCertificatePdf = async (options: GenerateCertificatePdfOpti
 
       const emailSent: TDocumentAuditLogBaseSchema | undefined = auditLogs['EMAIL_SENT'].find(
         (log) => log.type === 'EMAIL_SENT' && log.data.recipientId === recipientId,
+      );
+
+      const smsSent: TDocumentAuditLogBaseSchema | undefined = auditLogs['SMS_SENT'].find(
+        (log) => log.type === 'SMS_SENT' && log.data.recipientId === recipientId,
       );
 
       const documentSent: TDocumentAuditLogBaseSchema | undefined = auditLogs['DOCUMENT_SENT'].find(
@@ -98,24 +108,24 @@ export const generateCertificatePdf = async (options: GenerateCertificatePdfOpti
 
       const actionAuthMethod = insertedAuditLogsWithFieldAuth.at(0)?.data?.fieldSecurity?.type;
 
-      let authLevel = match(actionAuthMethod)
-        .with('ACCOUNT', () => i18n._(msg`Account Re-Authentication`))
-        .with('TWO_FACTOR_AUTH', () => i18n._(msg`Two-Factor Re-Authentication`))
-        .with('PASSWORD', () => i18n._(msg`Password Re-Authentication`))
-        .with('PASSKEY', () => i18n._(msg`Passkey Re-Authentication`))
-        .with('EXPLICIT_NONE', () => i18n._(msg`Email`))
-        .with(undefined, () => null)
-        .exhaustive();
+      // Solid Ten Sign (FINDINGS 11): "no action auth" no longer hides the access check.
+      let authLevel = i18n._(
+        CERTIFICATE_AUTH_LEVEL_LABELS[
+          getCertificateAuthLevel({
+            actionAuth: actionAuthMethod,
+            // Solid Ten (AUD-8): the access recorded when the recipient acted; older documents
+            // without that record print the settings at seal time, as before.
+            accessAuth: (
+              getRecordedAccessAuth(
+                [...auditLogs.DOCUMENT_RECIPIENT_COMPLETED, ...auditLogs.DOCUMENT_RECIPIENT_REJECTED],
+                recipientId,
+              ) ?? extractedAuthMethods.derivedRecipientAccessAuth
+            ).at(0),
+          })
+        ],
+      );
 
-      if (!authLevel) {
-        const accessAuthMethod = extractedAuthMethods.derivedRecipientAccessAuth.at(0);
-
-        authLevel = match(accessAuthMethod)
-          .with('ACCOUNT', () => i18n._(msg`Account Authentication`))
-          .with('TWO_FACTOR_AUTH', () => i18n._(msg`Two-Factor Authentication`))
-          .with(undefined, () => i18n._(msg`Email`))
-          .exhaustive();
-      }
+      authLevel = formatPublicFormAuthLevel(publicFormVerification.get(recipient.id), i18n) ?? authLevel;
 
       return {
         id: recipient.id,
@@ -126,8 +136,13 @@ export const generateCertificatePdf = async (options: GenerateCertificatePdfOpti
         signatureField,
         rejectionReason: recipient.rejectionReason,
         authLevel,
+        inPersonHost: getInPersonHostFromAuditLog(
+          auditLogs.DOCUMENT_RECIPIENT_COMPLETED.find((log) => log.data.recipientId === recipientId) ??
+            auditLogs.DOCUMENT_RECIPIENT_REJECTED.find((log) => log.data.recipientId === recipientId),
+        ),
         logs: {
           emailed: emailSent ?? null,
+          texted: smsSent ?? null,
           sent: documentSent ?? null,
           opened: documentOpened ?? null,
           completed: documentRecipientCompleted ?? null,
@@ -146,5 +161,14 @@ export const generateCertificatePdf = async (options: GenerateCertificatePdfOpti
 
   const certificatePages = await renderCertificate(payload);
 
-  return await PDF.merge(certificatePages);
+  // Solid Ten: files signers attached get their own pages after the signer table.
+  const attachedFilePages = await renderAttachedFilesCertificate({
+    files: await getCertificateAttachedFiles(envelope.id),
+    envelopeId: envelope.id,
+    i18n,
+    pageWidth,
+    pageHeight,
+  });
+
+  return await PDF.merge([...certificatePages, ...attachedFilePages]);
 };

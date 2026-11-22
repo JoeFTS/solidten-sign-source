@@ -9,6 +9,9 @@ import { nanoid } from 'nanoid';
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { type EnvelopeIdOptions, mapSecondaryIdToTemplateId } from '../../utils/envelope';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
+import { assertNoFileFieldsForDirectTemplate } from '../field-file/assert-file-fields';
+import { assertFieldLogicReadyToSend } from '../field-logic/assert-field-logic';
+import { createPublicFormForDirectLink } from '../public-form/public-form-settings';
 
 export type CreateTemplateDirectLinkOptions = {
   id: EnvelopeIdOptions;
@@ -45,6 +48,17 @@ export const createTemplateDirectLink = async ({
   if (envelope.directLink) {
     throw new AppError(AppErrorCode.ALREADY_EXISTS, { message: 'Direct template already exists' });
   }
+
+  const templateFields = await prisma.field.findMany({ where: { envelopeId: envelope.id } });
+
+  // Solid Ten: a direct link (public form) cannot take file uploads yet.
+  assertNoFileFieldsForDirectTemplate(templateFields);
+
+  assertFieldLogicReadyToSend({
+    envelope,
+    fields: templateFields,
+    recipients: envelope.recipients,
+  });
 
   if (directRecipientId && !envelope.recipients.find((recipient) => recipient.id === directRecipientId)) {
     throw new AppError(AppErrorCode.NOT_FOUND, { message: 'Recipient not found' });
@@ -84,7 +98,7 @@ export const createTemplateDirectLink = async ({
       });
     }
 
-    return await tx.templateDirectLink.create({
+    const directLink = await tx.templateDirectLink.create({
       data: {
         envelopeId: envelope.id,
         enabled: true,
@@ -92,6 +106,10 @@ export const createTemplateDirectLink = async ({
         directTemplateRecipientId: recipient.id,
       },
     });
+
+    await createPublicFormForDirectLink({ tx, envelope, directLinkId: directLink.id });
+
+    return directLink;
   });
 
   return {

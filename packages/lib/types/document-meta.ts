@@ -9,6 +9,7 @@ import { msg } from '@lingui/core/macro';
 import { DocumentDistributionMethod, DocumentSigningOrder } from '@prisma/client';
 import { z } from 'zod';
 
+import { ZSigningChannelSchema } from '../utils/sms/channels';
 import { ZDocumentEmailSettingsSchema } from './document-email';
 
 /**
@@ -105,6 +106,16 @@ export const ZDocumentMetaUploadSignatureEnabledSchema = z
   .boolean()
   .describe('Whether to allow recipients to sign using an uploaded signature.');
 
+// A plain string on input so callers can pass a stored DocumentMeta value straight back.
+export const ZDocumentMetaSigningChannelSchema = z
+  .string()
+  .refine((value) => ZSigningChannelSchema.safeParse(value).success, {
+    message: 'Must be EMAIL, SMS or EMAIL_AND_SMS',
+  })
+  .describe(
+    'Solid Ten: how the signing link is delivered. EMAIL, SMS or EMAIL_AND_SMS. Text delivery needs text messages to be set up for the team.',
+  );
+
 /**
  * Note: Any updates to this will cause public API changes. You will need to update
  * all corresponding areas where this is used (some places that use this needs to pass
@@ -128,6 +139,7 @@ export const ZDocumentMetaCreateSchema = z.object({
   emailSettings: ZDocumentEmailSettingsSchema.nullish(),
   envelopeExpirationPeriod: ZEnvelopeExpirationPeriod.nullish(),
   reminderSettings: ZEnvelopeReminderSettings.nullish(),
+  signingChannel: ZDocumentMetaSigningChannelSchema.nullish(),
 });
 
 export type TDocumentMetaCreate = z.infer<typeof ZDocumentMetaCreateSchema>;

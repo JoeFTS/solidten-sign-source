@@ -3,6 +3,7 @@ import { EnvelopeType, type Webhook } from '@prisma/client';
 
 import { mapSecondaryIdToDocumentId } from '../../../utils/envelope';
 import { getWebhooksByTeamId } from '../get-webhooks-by-team-id';
+import { stripWebhookRecipientTokens } from '../webhook-recipient-tokens';
 import { validateApiToken } from './validateApiToken';
 
 export const listDocumentsHandler = async (req: Request) => {
@@ -81,7 +82,7 @@ export const listDocumentsHandler = async (req: Request) => {
       },
     };
 
-    return Response.json([testWebhook]);
+    return Response.json([stripWebhookRecipientTokens(testWebhook)]);
   } catch (err) {
     console.error(err);
 

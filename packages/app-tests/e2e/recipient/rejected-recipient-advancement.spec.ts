@@ -1,3 +1,4 @@
+import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { completeDocumentWithToken } from '@documenso/lib/server-only/document/complete-document-with-token';
 import { prisma } from '@documenso/prisma';
 import { seedPendingDocumentWithFullFields } from '@documenso/prisma/seed/documents';
@@ -73,10 +74,23 @@ test('[REJECTED_ADVANCEMENT]: no step is activated past a rejected recipient', a
   expect(rejected.sentAt).toBeNull();
   expect(later.sentAt).toBeNull();
 
-  await completeDocumentWithToken({
+  // Solid Ten Sign (FS2-C1): once a recipient has declined, the envelope waits for its seal and
+  // no other recipient can complete; the completion is refused under the envelope lock.
+  // The code is upstream's ENVELOPE_REJECTED, so the signing page shows its "Document rejected" toast.
+  const refusal = await completeDocumentWithToken({
     token: first.token,
     id: { type: 'envelopeId', id: first.envelopeId },
-  });
+  }).then(
+    () => null,
+    (err: unknown) => AppError.parseError(err),
+  );
+
+  expect(refusal?.code).toBe(AppErrorCode.ENVELOPE_REJECTED);
+  expect(refusal?.message).toContain('Another recipient declined this document');
+
+  expect((await prisma.recipient.findUniqueOrThrow({ where: { id: first.id } })).signingStatus).toBe(
+    SigningStatus.NOT_SIGNED,
+  );
 
   const rejectedAfter = await prisma.recipient.findUniqueOrThrow({ where: { id: rejected.id } });
   const laterAfter = await prisma.recipient.findUniqueOrThrow({ where: { id: later.id } });

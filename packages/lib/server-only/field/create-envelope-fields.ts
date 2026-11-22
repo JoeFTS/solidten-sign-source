@@ -5,7 +5,6 @@ import { getFileServerSide } from '@documenso/lib/universal/upload/get-file.serv
 import { putPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
 import { prisma } from '@documenso/prisma';
-import { PDF } from '@libpdf/core';
 import { EnvelopeType } from '@prisma/client';
 
 import { AppError, AppErrorCode } from '../../errors/app-error';
@@ -14,7 +13,9 @@ import { mapFieldToLegacyField } from '../../utils/fields';
 import { canRecipientFieldsBeModified } from '../../utils/recipients';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
-import { type BoundingBox, whiteoutRegions } from '../pdf/auto-place-fields';
+import { assertFieldLogicAllowed, toFieldLogicDefinitions } from '../field-logic/assert-field-logic';
+import type { BoundingBox } from '../pdf/auto-place-fields';
+import { findTextInPdfIsolated, whiteoutRegionsIsolated } from '../pdf-child/isolated-pdf';
 
 type CoordinatePosition = {
   page: number;
@@ -113,19 +114,40 @@ export const createEnvelopeFields = async ({
   const hasPlaceholderFields = fields.some((field) => isPlaceholderPosition(field));
 
   /*
-    Cache of loaded PDF documents keyed by envelope item ID.
-    Only loaded when at least one field uses placeholder positioning.
-    We keep the full PDF objects so we can both read text and draw white boxes
-    over resolved placeholders before saving back.
+    Solid Ten (AUD-2 follow-up): placeholder text is searched in the PDF child (never in this
+    process), once per envelope item that has placeholder fields. Only the match boxes and page
+    sizes come back; the bytes are kept for the whiteout below, which also runs in the child.
   */
-  const pdfCache = new Map<string, PDF>();
+  const pdfCache = new Map<
+    string,
+    {
+      bytes: Uint8Array;
+      pages: Array<{ width: number; height: number }>;
+      textMatches: Record<string, Array<{ pageIndex: number; bbox: BoundingBox }>>;
+    }
+  >();
 
   if (hasPlaceholderFields) {
-    for (const item of envelope.envelopeItems) {
-      const bytes = await getFileServerSide(item.documentData);
-      const pdfDoc = await PDF.load(new Uint8Array(bytes));
+    const needlesByItem = new Map<string, Set<string>>();
 
-      pdfCache.set(item.id, pdfDoc);
+    for (const field of fields) {
+      if (isPlaceholderPosition(field)) {
+        const itemId = field.envelopeItemId || firstEnvelopeItem.id;
+        needlesByItem.set(itemId, (needlesByItem.get(itemId) ?? new Set()).add(field.placeholder));
+      }
+    }
+
+    for (const item of envelope.envelopeItems) {
+      const needles = needlesByItem.get(item.id);
+
+      if (!needles) {
+        continue;
+      }
+
+      const bytes = new Uint8Array(await getFileServerSide(item.documentData));
+      const { pages, textMatches } = await findTextInPdfIsolated(bytes, [...needles]);
+
+      pdfCache.set(item.id, { bytes, pages, textMatches });
     }
   }
 
@@ -179,7 +201,7 @@ export const createEnvelopeFields = async ({
         });
       }
 
-      const matches = pdfDoc.findText(field.placeholder);
+      const matches = pdfDoc.textMatches[field.placeholder] ?? [];
 
       if (matches.length === 0) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
@@ -188,7 +210,7 @@ export const createEnvelopeFields = async ({
       }
 
       const matchesToProcess = field.matchAll ? matches : [matches[0]];
-      const pages = pdfDoc.getPages();
+      const { pages } = pdfDoc;
 
       return matchesToProcess.map((match) => {
         const page = pages[match.pageIndex];
@@ -242,6 +264,12 @@ export const createEnvelopeFields = async ({
       width: field.width,
       height: field.height,
     };
+  });
+
+  await assertFieldLogicAllowed({
+    envelope,
+    fields: toFieldLogicDefinitions([...envelope.fields, ...validatedFields]),
+    existingFields: envelope.fields,
   });
 
   const createdFields = await prisma.$transaction(async (tx) => {
@@ -299,9 +327,7 @@ export const createEnvelopeFields = async ({
       continue;
     }
 
-    whiteoutRegions(pdfDoc, whiteouts);
-
-    const modifiedPdfBytes = await pdfDoc.save();
+    const modifiedPdfBytes = await whiteoutRegionsIsolated(pdfDoc.bytes, whiteouts);
 
     const envelopeItem = envelope.envelopeItems.find((item) => item.id === envelopeItemId);
 

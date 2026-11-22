@@ -7,16 +7,22 @@ import { assertRecipientNotExpired } from '@documenso/lib/utils/recipients';
 import { prisma } from '@documenso/prisma';
 import { DocumentStatus, RecipientRole, SigningStatus } from '@prisma/client';
 
+import { assertActionAuthActorIsRecipient } from '../document/assert-completion-actor';
+import { lockEnvelopeForFieldWrite } from './lock-field-write';
+
 export type RemovedSignedFieldWithTokenOptions = {
   token: string;
   fieldId: number;
   requestMetadata?: RequestMetadata;
+  /** Solid Ten Sign (AUD-C11 follow-up): the signed-in user, if any. */
+  userId?: number;
 };
 
 export const removeSignedFieldWithToken = async ({
   token,
   fieldId,
   requestMetadata,
+  userId,
 }: RemovedSignedFieldWithTokenOptions) => {
   const recipient = await prisma.recipient.findFirstOrThrow({
     where: {
@@ -52,6 +58,9 @@ export const removeSignedFieldWithToken = async ({
 
   assertRecipientNotExpired(recipient);
 
+  // Solid Ten Sign (AUD-C11 follow-up): with action auth, only the recipient's own session un-signs.
+  await assertActionAuthActorIsRecipient({ documentAuth: envelope.authOptions, recipient, userId });
+
   if (recipient?.signingStatus === SigningStatus.SIGNED || field.recipient.signingStatus === SigningStatus.SIGNED) {
     throw new Error(`Recipient ${recipient.id} has already signed`);
   }
@@ -62,6 +71,9 @@ export const removeSignedFieldWithToken = async ({
   }
 
   await prisma.$transaction(async (tx) => {
+    // Solid Ten Sign (AUD-C2): under the envelope lock, both recipients must still be NOT_SIGNED.
+    await lockEnvelopeForFieldWrite(tx, { envelopeId: envelope.id, recipientIds: [recipient.id, field.recipientId] });
+
     await tx.field.update({
       where: {
         id: field.id,

@@ -21,6 +21,7 @@ import { ZFieldMetaPrefillFieldsSchema } from '@documenso/lib/types/field-meta';
 import { ZRecipientEmailSchema } from '@documenso/lib/types/recipient';
 import { ZFindResultResponse, ZFindSearchParamsSchema } from '@documenso/lib/types/search-params';
 import { ZTemplateLiteSchema, ZTemplateManySchema, ZTemplateSchema } from '@documenso/lib/types/template';
+import { zSingleLineText } from '@documenso/lib/utils/safe-text';
 import { zEmail } from '@documenso/lib/utils/zod';
 import { LegacyTemplateDirectLinkSchema } from '@documenso/prisma/types/template-legacy-schema';
 import { ZDocumentExternalIdSchema } from '@documenso/trpc/server/document-router/schema';
@@ -30,6 +31,8 @@ import { zfd } from 'zod-form-data';
 
 import { zfdFile, zodFormData } from '../../utils/zod-form-data';
 import { ZSignFieldWithTokenMutationSchema } from '../field-router/schema';
+
+import { ZPublicFormSubmissionSchema } from '../public-form-router/schema';
 
 export const MAX_TEMPLATE_PUBLIC_TITLE_LENGTH = 50;
 export const MAX_TEMPLATE_PUBLIC_DESCRIPTION_LENGTH = 256;
@@ -71,7 +74,8 @@ export const ZTemplateMetaUpsertSchema = z.object({
 });
 
 export const ZCreateDocumentFromDirectTemplateRequestSchema = z.object({
-  directRecipientName: z.string().max(255).optional(),
+  // Solid Ten Sign (S-L5): public forms and direct links take a stranger's name.
+  directRecipientName: zSingleLineText(255).optional(),
   directRecipientEmail: zEmail().max(254),
   directTemplateToken: z.string().min(1),
   directTemplateExternalId: z.string().optional(),
@@ -80,9 +84,11 @@ export const ZCreateDocumentFromDirectTemplateRequestSchema = z.object({
   nextSigner: z
     .object({
       email: zEmail().max(254),
-      name: z.string().min(1).max(255),
+      // Solid Ten Sign (AUD-C5): one clean line, like directRecipientName.
+      name: zSingleLineText(255).pipe(z.string().min(1)),
     })
     .optional(),
+  publicForm: ZPublicFormSubmissionSchema.optional(),
 });
 
 export const ZCreateDocumentFromTemplateRequestSchema = z.object({

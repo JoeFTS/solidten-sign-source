@@ -1,5 +1,5 @@
 import { z } from 'zod';
-
+import type { TAtMostOnceAlongside, TAtMostOnceOptions } from '../at-most-once-task';
 import type { Json } from './json';
 
 export type SimpleTriggerJobOptions = {
@@ -47,7 +47,13 @@ export type JobDefinition<Name extends string = string, Schema = any> = {
 
 export interface JobRunIO {
   // stableRun<T extends Json | void>(cacheKey: string, callback: (io: JobRunIO) => T | Promise<T>): Promise<T>;
-  runTask<T extends Json | void | undefined>(cacheKey: string, callback: () => Promise<T>): Promise<T>;
+  runTask<T extends Json | void | undefined>(
+    cacheKey: string,
+    // Solid Ten: with `atMostOnce`, the local provider passes `markSending` (at-most-once-task.ts).
+    callback: (markSending?: (alongside?: TAtMostOnceAlongside) => Promise<void>) => Promise<T>,
+    // Solid Ten: see client/at-most-once-task.ts. Only the local provider honours it.
+    options?: { atMostOnce?: boolean } & TAtMostOnceOptions,
+  ): Promise<T>;
   triggerJob(cacheKey: string, options: SimpleTriggerJobOptions): Promise<unknown>;
   wait(cacheKey: string, ms: number): Promise<void>;
   logger: {

@@ -5,6 +5,8 @@ import { z } from 'zod';
 export const ZCreatePasskeyRequestSchema = z.object({
   passkeyName: ZNameSchema,
   verificationResponse: ZRegistrationResponseJSONSchema,
+  /** Solid Ten Sign (AUD-C10): an authenticator or backup code, required when 2FA is on. */
+  twoFactorCode: z.string().max(64).optional(),
 });
 
 export const ZCreatePasskeyResponseSchema = z.void();

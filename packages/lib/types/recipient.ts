@@ -30,6 +30,8 @@ export const ZRecipientSchema = RecipientSchema.pick({
   signingOrder: true,
   rejectionReason: true,
 }).extend({
+  // Solid Ten: set when the signing-request email could not be delivered after every retry.
+  deliveryFailedAt: z.date().nullish(),
   fields: ZFieldSchema.array(),
 
   // Backwards compatibility.
@@ -59,6 +61,8 @@ export const ZRecipientLiteSchema = RecipientSchema.pick({
   signingOrder: true,
   rejectionReason: true,
 }).extend({
+  // Solid Ten: set when the signing-request email could not be delivered after every retry.
+  deliveryFailedAt: z.date().nullish(),
   // Backwards compatibility.
   documentId: z.number().nullish(),
   templateId: z.number().nullish(),
@@ -86,6 +90,8 @@ export const ZRecipientManySchema = RecipientSchema.pick({
   signingOrder: true,
   rejectionReason: true,
 }).extend({
+  // Solid Ten: set when the signing-request email could not be delivered after every retry.
+  deliveryFailedAt: z.date().nullish(),
   user: UserSchema.pick({
     id: true,
     name: true,

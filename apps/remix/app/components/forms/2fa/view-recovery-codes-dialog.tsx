@@ -1,5 +1,6 @@
 import { authClient } from '@documenso/auth/client';
 import { downloadFile } from '@documenso/lib/client-only/download-file';
+import { SIGN_IN_AGAIN_TO_CHANGE_SIGN_IN_CODE } from '@documenso/lib/constants/credential-step-up';
 import { AppError } from '@documenso/lib/errors/app-error';
 import { Alert, AlertDescription } from '@documenso/ui/primitives/alert';
 import { Button } from '@documenso/ui/primitives/button';
@@ -147,6 +148,12 @@ export const ViewRecoveryCodesDialog = () => {
                     <AlertDescription>
                       {match(AppError.parseError(error).message)
                         .with('INCORRECT_TWO_FACTOR_CODE', () => <Trans>Invalid code. Please try again.</Trans>)
+                        .with(SIGN_IN_AGAIN_TO_CHANGE_SIGN_IN_CODE, () => (
+                          <Trans>
+                            For your security, sign in again to change how you sign in. Then make the change within 10
+                            minutes.
+                          </Trans>
+                        ))
                         .otherwise(() => (
                           <Trans>Something went wrong. Please try again or contact support.</Trans>
                         ))}

@@ -20,6 +20,7 @@ import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapFieldToLegacyField } from '../../utils/fields';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
+import { assertFieldLogicAllowed, toFieldLogicDefinitions } from '../field-logic/assert-field-logic';
 
 export type SetFieldsForTemplateOptions = {
   userId: number;
@@ -103,6 +104,12 @@ export const setFieldsForTemplate = async ({ userId, teamId, id, fields }: SetFi
       _persisted: existing,
       _recipient: recipient,
     };
+  });
+
+  await assertFieldLogicAllowed({
+    envelope,
+    fields: toFieldLogicDefinitions(linkedFields),
+    existingFields,
   });
 
   const persistedFields = await Promise.all(

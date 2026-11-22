@@ -7,7 +7,7 @@ export const buildDropzoneRejectionDescription = (fileRejections: FileRejection[
   const errorCode = fileRejections[0]?.errors[0]?.code;
 
   return match(errorCode)
-    .with(ErrorCode.FileTooLarge, () => msg`File is larger than ${APP_DOCUMENT_UPLOAD_SIZE_LIMIT}MB`)
+    .with(ErrorCode.FileTooLarge, () => msg`File is larger than ${APP_DOCUMENT_UPLOAD_SIZE_LIMIT} MB`)
     .with(ErrorCode.FileInvalidType, () => msg`Only PDF files are allowed`)
     .with(ErrorCode.FileTooSmall, () => msg`File is too small`)
     .with(ErrorCode.TooManyFiles, () => msg`Only one file can be uploaded at a time`)

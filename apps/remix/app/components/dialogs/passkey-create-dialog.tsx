@@ -1,3 +1,4 @@
+import { useSession } from '@documenso/lib/client-only/providers/session';
 import { MAXIMUM_PASSKEYS } from '@documenso/lib/constants/auth';
 import { AppError } from '@documenso/lib/errors/app-error';
 import { ZNameSchema } from '@documenso/lib/types/name';
@@ -33,6 +34,8 @@ export type PasskeyCreateDialogProps = {
 
 const ZCreatePasskeyFormSchema = z.object({
   passkeyName: ZNameSchema,
+  // Solid Ten Sign (AUD-C10): needed when the account has 2FA on.
+  twoFactorCode: z.string().max(64).optional(),
 });
 
 type TCreatePasskeyFormSchema = z.infer<typeof ZCreatePasskeyFormSchema>;
@@ -45,11 +48,13 @@ export const PasskeyCreateDialog = ({ trigger, onSuccess, ...props }: PasskeyCre
 
   const { t } = useLingui();
   const { toast } = useToast();
+  const { user } = useSession();
 
   const form = useForm<TCreatePasskeyFormSchema>({
     resolver: zodResolver(ZCreatePasskeyFormSchema),
     defaultValues: {
       passkeyName: '',
+      twoFactorCode: '',
     },
   });
 
@@ -58,7 +63,7 @@ export const PasskeyCreateDialog = ({ trigger, onSuccess, ...props }: PasskeyCre
 
   const { mutateAsync: createPasskey } = trpc.auth.passkey.create.useMutation();
 
-  const onFormSubmit = async ({ passkeyName }: TCreatePasskeyFormSchema) => {
+  const onFormSubmit = async ({ passkeyName, twoFactorCode }: TCreatePasskeyFormSchema) => {
     setFormError(null);
 
     try {
@@ -71,6 +76,7 @@ export const PasskeyCreateDialog = ({ trigger, onSuccess, ...props }: PasskeyCre
       await createPasskey({
         passkeyName,
         verificationResponse: registrationResult,
+        twoFactorCode: user.twoFactorEnabled ? twoFactorCode : undefined,
       });
 
       toast({
@@ -117,6 +123,7 @@ export const PasskeyCreateDialog = ({ trigger, onSuccess, ...props }: PasskeyCre
 
       form.reset({
         passkeyName: defaultPasskeyName,
+        twoFactorCode: '',
       });
 
       setFormError(null);
@@ -164,6 +171,24 @@ export const PasskeyCreateDialog = ({ trigger, onSuccess, ...props }: PasskeyCre
                 )}
               />
 
+              {user.twoFactorEnabled && (
+                <FormField
+                  control={form.control}
+                  name="twoFactorCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel required>
+                        <Trans>Authenticator code</Trans>
+                      </FormLabel>
+                      <FormControl>
+                        <Input className="bg-background" autoComplete="one-time-code" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               <Alert variant="neutral">
                 <AlertDescription>
                   <Trans>
@@ -186,6 +211,16 @@ export const PasskeyCreateDialog = ({ trigger, onSuccess, ...props }: PasskeyCre
                     .with('ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED', () => (
                       <AlertDescription>
                         <Trans>This passkey has already been registered.</Trans>
+                      </AlertDescription>
+                    ))
+                    .with('SIGN_IN_AGAIN_TO_ADD_PASSKEY', () => (
+                      <AlertDescription>
+                        <Trans>For your security, sign in again to add a passkey. Then add it within 10 minutes.</Trans>
+                      </AlertDescription>
+                    ))
+                    .with('TWO_FACTOR_CODE_REQUIRED_TO_ADD_PASSKEY', () => (
+                      <AlertDescription>
+                        <Trans>Enter a valid code from your authenticator app to add a passkey.</Trans>
                       </AlertDescription>
                     ))
                     .with('TOO_MANY_PASSKEYS', () => (

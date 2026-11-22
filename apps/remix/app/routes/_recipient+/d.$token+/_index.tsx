@@ -4,9 +4,14 @@ import { useOptionalSession } from '@documenso/lib/client-only/providers/session
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { loadRecipientBrandingByTeamId } from '@documenso/lib/server-only/branding/load-recipient-branding';
 import { getEnvelopeForDirectTemplateSigning } from '@documenso/lib/server-only/envelope/get-envelope-for-direct-template-signing';
+import {
+  getPublicFormForVisitor,
+  type PublicFormForVisitor,
+} from '@documenso/lib/server-only/public-form/get-public-form-for-visitor';
 import { getTemplateByDirectLinkToken } from '@documenso/lib/server-only/template/get-template-by-direct-link-token';
 import { assertSenderNotDisabled } from '@documenso/lib/server-only/user/assert-user-not-disabled';
 import { DocumentAccessAuth } from '@documenso/lib/types/document-auth';
+import { extractRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
 import { getRecipientsWithMissingFields } from '@documenso/lib/utils/recipients';
 import { prisma } from '@documenso/prisma';
@@ -28,6 +33,7 @@ import { DocumentSigningPageViewV2 } from '~/components/general/document-signing
 import { DocumentSigningProvider } from '~/components/general/document-signing/document-signing-provider';
 import { DocumentSigningSenderDisabledPage } from '~/components/general/document-signing/document-signing-sender-disabled-page';
 import { EnvelopeSigningProvider } from '~/components/general/document-signing/envelope-signing-provider';
+import { PublicFormProvider } from '~/components/general/public-form/public-form-provider';
 import { RecipientBranding } from '~/components/general/recipient-branding';
 import { useCspNonce } from '~/utils/nonce';
 import { superLoaderJson, useSuperLoaderData } from '~/utils/super-json-loader';
@@ -190,10 +196,16 @@ export async function loader(loaderArgs: Route.LoaderArgs) {
   if (directEnvelope.internalVersion === 2) {
     const payloadV2 = await handleV2Loader(loaderArgs);
 
+    const publicForm = await getPublicFormForVisitor({
+      token,
+      ipAddress: extractRequestMetadata(loaderArgs.request).ipAddress,
+    });
+
     return superLoaderJson({
       isSenderDisabled: false,
       version: 2,
       payload: payloadV2,
+      publicForm,
       branding,
     } as const);
   }
@@ -219,7 +231,11 @@ export default function DirectTemplatePage() {
   return (
     <>
       <RecipientBranding branding={data.branding} cspNonce={cspNonce} />
-      {data.version === 2 ? <DirectSigningPageV2 data={data.payload} /> : <DirectSigningPageV1 data={data.payload} />}
+      {data.version === 2 ? (
+        <DirectSigningPageV2 data={data.payload} publicForm={data.publicForm} />
+      ) : (
+        <DirectSigningPageV1 data={data.payload} />
+      )}
     </>
   );
 }
@@ -283,7 +299,13 @@ const DirectSigningPageV1 = ({ data }: { data: Awaited<ReturnType<typeof handleV
   );
 };
 
-const DirectSigningPageV2 = ({ data }: { data: Awaited<ReturnType<typeof handleV2Loader>> }) => {
+const DirectSigningPageV2 = ({
+  data,
+  publicForm,
+}: {
+  data: Awaited<ReturnType<typeof handleV2Loader>>;
+  publicForm: PublicFormForVisitor | null;
+}) => {
   const { sessionData } = useOptionalSession();
 
   const user = sessionData?.user;
@@ -305,23 +327,27 @@ const DirectSigningPageV2 = ({ data }: { data: Awaited<ReturnType<typeof handleV
   const isEmailForced = derivedRecipientAccessAuth.includes(DocumentAccessAuth.ACCOUNT);
 
   return (
-    <EnvelopeSigningProvider
-      envelopeData={data.envelopeForSigning}
-      email={isEmailForced ? user?.email || '' : ''} // Doing this allows us to let users change the email if they want to for non-auth templates.
-      fullName={user?.name}
-      signature={user?.signature}
-    >
-      <DocumentSigningAuthProvider documentAuthOptions={envelope.authOptions} recipient={recipient} user={user}>
-        <EnvelopeRenderProvider
-          version="current"
-          envelope={envelope}
-          envelopeItems={envelope.envelopeItems}
-          contents={envelope.contents}
-          token={recipient.token}
+    <PublicFormProvider form={publicForm} title={envelope.title}>
+      {({ verifiedEmail }) => (
+        <EnvelopeSigningProvider
+          envelopeData={data.envelopeForSigning}
+          email={isEmailForced ? user?.email || '' : verifiedEmail || ''} // Doing this allows us to let users change the email if they want to for non-auth templates.
+          fullName={user?.name}
+          signature={user?.signature}
         >
-          <DocumentSigningPageViewV2 />
-        </EnvelopeRenderProvider>
-      </DocumentSigningAuthProvider>
-    </EnvelopeSigningProvider>
+          <DocumentSigningAuthProvider documentAuthOptions={envelope.authOptions} recipient={recipient} user={user}>
+            <EnvelopeRenderProvider
+              version="current"
+              envelope={envelope}
+              envelopeItems={envelope.envelopeItems}
+              contents={envelope.contents}
+              token={recipient.token}
+            >
+              <DocumentSigningPageViewV2 />
+            </EnvelopeRenderProvider>
+          </DocumentSigningAuthProvider>
+        </EnvelopeSigningProvider>
+      )}
+    </PublicFormProvider>
   );
 };

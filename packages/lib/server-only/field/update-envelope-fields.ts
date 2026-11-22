@@ -12,6 +12,7 @@ import { mapFieldToLegacyField } from '../../utils/fields';
 import { canRecipientFieldsBeModified } from '../../utils/recipients';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
+import { assertFieldLogicAllowed, toFieldLogicDefinitions } from '../field-logic/assert-field-logic';
 
 export interface UpdateEnvelopeFieldsOptions {
   userId: number;
@@ -124,6 +125,23 @@ export const updateEnvelopeFields = async ({
       },
       recipientEmail: recipient.email,
     };
+  });
+
+  await assertFieldLogicAllowed({
+    envelope,
+    fields: toFieldLogicDefinitions(
+      envelope.fields.map((existingField) => {
+        const update = fieldsToUpdate.find(({ originalField }) => originalField.id === existingField.id)?.updateData;
+
+        return {
+          ...existingField,
+          type: update?.type ?? existingField.type,
+          envelopeItemId: update?.envelopeItemId ?? existingField.envelopeItemId,
+          fieldMeta: update?.fieldMeta ?? existingField.fieldMeta,
+        };
+      }),
+    ),
+    existingFields: envelope.fields,
   });
 
   const updatedFields = await prisma.$transaction(async (tx) => {

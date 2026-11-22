@@ -153,17 +153,22 @@ test('[TEAMS]: check signature modes work for templates', async ({ page }) => {
     // Check the send document checkbox to true
     await page.getByLabel('Send document').click();
     await page.getByRole('button', { name: 'Create and send' }).click();
-    await page.waitForTimeout(1000);
 
-    const document = await prisma.envelope.findFirst({
-      where: {
-        // Created from template
-        templateId: mapSecondaryIdToTemplateId(template.secondaryId),
-      },
-      include: {
-        documentMeta: true,
-      },
-    });
+    const findDocument = async () =>
+      await prisma.envelope.findFirst({
+        where: {
+          // Created from template
+          templateId: mapSecondaryIdToTemplateId(template.secondaryId),
+        },
+        include: {
+          documentMeta: true,
+        },
+      });
+
+    // Create-from-template runs in the PDF child; wait for the document instead of a fixed second.
+    await expect.poll(async () => (await findDocument())?.documentMeta ?? null, { timeout: 30_000 }).not.toBeNull();
+
+    const document = await findDocument();
 
     // Test kinda flaky, debug here.
     // console.log({

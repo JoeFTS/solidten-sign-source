@@ -11,18 +11,22 @@ import {
   ArrowLeftIcon,
   BanIcon,
   DownloadCloudIcon,
+  MessageSquareIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   PaperclipIcon,
+  UserRoundPenIcon,
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { match } from 'ts-pattern';
 
 import { EnvelopeDownloadDialog } from '~/components/dialogs/envelope-download-dialog';
+import { FieldLogicClearConfirmDialog } from '~/components/dialogs/field-logic-clear-confirm-dialog';
 import { SignFieldCheckboxDialog } from '~/components/dialogs/sign-field-checkbox-dialog';
 import { SignFieldDropdownDialog } from '~/components/dialogs/sign-field-dropdown-dialog';
 import { SignFieldEmailDialog } from '~/components/dialogs/sign-field-email-dialog';
+import { SignFieldFileDialog } from '~/components/dialogs/sign-field-file-dialog';
 import { SignFieldInitialsDialog } from '~/components/dialogs/sign-field-initials-dialog';
 import { SignFieldNameDialog } from '~/components/dialogs/sign-field-name-dialog';
 import { SignFieldNumberDialog } from '~/components/dialogs/sign-field-number-dialog';
@@ -32,15 +36,19 @@ import { useEmbedSigningContext } from '~/components/embed/embed-signing-context
 import { EnvelopeSignerPageRenderer } from '~/components/general/envelope-signing/envelope-signer-page-renderer';
 import { EnvelopePdfViewer } from '~/components/general/pdf-viewer/envelope-pdf-viewer';
 import { PublicLegalLinks } from '~/components/general/public-legal-links';
+import { SourceCodeNotice } from '~/components/general/source-code-notice';
 
 import { BrandingLogo } from '../branding-logo';
+import { SignerCommentsDialog } from '../comments/signer-comments-dialog';
 import { DocumentSigningAttachmentsPopover } from '../document-signing/document-signing-attachments-popover';
 import { EnvelopeItemSelector } from '../envelope-editor/envelope-file-selector';
 import EnvelopeSignerForm from '../envelope-signing/envelope-signer-form';
 import { EnvelopeSignerHeader } from '../envelope-signing/envelope-signer-header';
+import { SignerReassignDialog } from '../recipient-reassign/recipient-reassign-dialog';
 import { DocumentSigningMobileWidget } from './document-signing-mobile-widget';
 import { DocumentSigningRejectDialog } from './document-signing-reject-dialog';
 import { useRequiredEnvelopeSigningContext } from './envelope-signing-provider';
+import { SigningLinkStatusWatcher } from './signing-link-status-watcher';
 
 export const DocumentSigningPageViewV2 = () => {
   const { envelopeItems, currentEnvelopeItem, setCurrentEnvelopeItem } = useCurrentEnvelopeRender();
@@ -83,6 +91,7 @@ export const DocumentSigningPageViewV2 = () => {
 
   return (
     <div className="min-h-screen w-screen bg-gray-50 dark:bg-background">
+      {!isEmbed && <SigningLinkStatusWatcher token={recipient.token} />}
       <SignFieldEmailDialog.Root />
       <SignFieldTextDialog.Root />
       <SignFieldNumberDialog.Root />
@@ -91,6 +100,8 @@ export const DocumentSigningPageViewV2 = () => {
       <SignFieldDropdownDialog.Root />
       <SignFieldSignatureDialog.Root />
       <SignFieldCheckboxDialog.Root />
+      <SignFieldFileDialog.Root />
+      <FieldLogicClearConfirmDialog.Root />
 
       <EnvelopeSignerHeader />
 
@@ -220,6 +231,30 @@ export const DocumentSigningPageViewV2 = () => {
                     }
                   />
                 )}
+
+                {envelope.type === EnvelopeType.DOCUMENT && (
+                  <SignerCommentsDialog
+                    token={recipient.token}
+                    renderTrigger={(onOpen) => (
+                      <Button variant="ghost" size="sm" className="w-full justify-start" onClick={onOpen}>
+                        <MessageSquareIcon className="mr-2 h-4 w-4" />
+                        <Trans>Questions and comments</Trans>
+                      </Button>
+                    )}
+                  />
+                )}
+
+                {envelope.type === EnvelopeType.DOCUMENT && !isEmbed && (
+                  <SignerReassignDialog
+                    token={recipient.token}
+                    trigger={
+                      <Button variant="ghost" size="sm" className="w-full justify-start">
+                        <UserRoundPenIcon className="mr-2 h-4 w-4" />
+                        <Trans>Reassign</Trans>
+                      </Button>
+                    }
+                  />
+                )}
               </div>
             )}
 
@@ -237,6 +272,7 @@ export const DocumentSigningPageViewV2 = () => {
               )}
 
               {!isEmbed && <PublicLegalLinks className="mt-4 justify-start px-4 pt-4" />}
+              {!isEmbed && <SourceCodeNotice className="mt-2 px-4 pb-4 text-left" />}
             </div>
           </div>
         </div>
@@ -295,7 +331,7 @@ export const DocumentSigningPageViewV2 = () => {
 
               {!hidePoweredBy && (
                 <a
-                  href="https://documenso.com"
+                  href="https://solidten.io"
                   target="_blank"
                   className="fixed right-0 bottom-0 z-40 hidden cursor-pointer rounded-tl bg-primary px-2 py-1 font-medium text-primary-foreground text-xs opacity-60 hover:opacity-100 lg:block"
                   rel="noopener"

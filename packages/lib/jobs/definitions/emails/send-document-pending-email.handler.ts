@@ -8,7 +8,7 @@ import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
-import { isRecipientEmailValidForSending } from '../../../utils/recipients';
+import { canSendMailToRecipient } from '../../../utils/recipient-mail';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import type { JobRunIO } from '../../client/_internal/job';
 import type { TSendDocumentPendingEmailJobDefinition } from './send-document-pending-email';
@@ -64,7 +64,7 @@ export const run = async ({ payload }: { payload: TSendDocumentPendingEmailJobDe
   const { email, name } = recipient;
 
   // Skip sending email if recipient has no email address
-  if (!isRecipientEmailValidForSending(recipient)) {
+  if (!canSendMailToRecipient(recipient)) {
     return;
   }
 

@@ -1,12 +1,20 @@
 /**
  * https://posthog.com/docs/advanced/proxy/remix
  */
+import { extractPostHogConfig } from '@documenso/lib/constants/feature-flags';
+import { buildIngestProxyRequestHeaders, buildIngestProxyResponseHeaders } from '@documenso/lib/utils/ingest-proxy';
+
 import type { Route } from './+types/ingest.$';
 
 const API_HOST = 'eu.i.posthog.com';
 const ASSET_HOST = 'eu-assets.i.posthog.com';
 
 const posthogProxy = async (request: Request) => {
+  // Solid Ten Sign (AUD-C9): no analytics key, no proxy.
+  if (!extractPostHogConfig()) {
+    return new Response('Not Found', { status: 404 });
+  }
+
   const url = new URL(request.url);
   const hostname = url.pathname.startsWith('/ingest/static/') ? ASSET_HOST : API_HOST;
 
@@ -16,13 +24,13 @@ const posthogProxy = async (request: Request) => {
   newUrl.port = '443';
   newUrl.pathname = newUrl.pathname.replace(/^\/ingest/, '');
 
-  const headers = new Headers(request.headers);
-  headers.set('host', hostname);
+  // Solid Ten Sign (AUD-C9): no Cookie or Authorization to the analytics host, no redirects.
+  const headers = buildIngestProxyRequestHeaders(request.headers, hostname);
 
   const fetchOptions: RequestInit = {
     method: request.method,
     headers,
-    redirect: 'follow',
+    redirect: 'manual',
   };
 
   if (!['GET', 'HEAD'].includes(request.method)) {
@@ -33,11 +41,8 @@ const posthogProxy = async (request: Request) => {
 
   const response = await fetch(newUrl, fetchOptions);
 
-  const responseHeaders = new Headers(response.headers);
-  responseHeaders.delete('content-encoding');
-  responseHeaders.delete('content-length');
-  responseHeaders.delete('transfer-encoding');
-  responseHeaders.delete('cookie');
+  // Solid Ten Sign (AUD-C9): never a Set-Cookie from the analytics host on our domain.
+  const responseHeaders = buildIngestProxyResponseHeaders(response.headers);
 
   return new Response(response.body, {
     status: response.status,

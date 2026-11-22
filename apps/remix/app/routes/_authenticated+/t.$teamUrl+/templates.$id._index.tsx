@@ -29,6 +29,7 @@ import { TemplatePageViewDocumentsTable } from '~/components/general/template/te
 import { TemplatePageViewInformation } from '~/components/general/template/template-page-view-information';
 import { TemplatePageViewRecentActivity } from '~/components/general/template/template-page-view-recent-activity';
 import { TemplatePageViewRecipients } from '~/components/general/template/template-page-view-recipients';
+import { TemplatePublicFormPanel } from '~/components/general/template/template-public-form-panel';
 import { TemplateType } from '~/components/general/template/template-type';
 import { TemplatesTableActionDropdown } from '~/components/tables/templates-table-action-dropdown';
 import { useCurrentTeam } from '~/providers/team';
@@ -287,6 +288,8 @@ export default function TemplatePage({ params }: Route.ComponentProps) {
           </div>
         </div>
       </div>
+
+      {isOwnTeamTemplate && envelope.directLink && <TemplatePublicFormPanel envelopeId={envelope.id} />}
 
       <div className="mt-16" id="documents">
         <h1 className="mb-4 font-bold text-2xl">

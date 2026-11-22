@@ -11,6 +11,7 @@ import { EmbedDocumentWaitingForTurn } from '~/components/embed/embed-document-w
 import { EmbedPaywall } from '~/components/embed/embed-paywall';
 import { EmbedRecipientExpired } from '~/components/embed/embed-recipient-expired';
 import { EmbedSenderDisabled } from '~/components/embed/embed-sender-disabled';
+import { retryAfterRouteHeaders } from '~/utils/retry-after-headers';
 
 // Note: CSP (`frame-ancestors *`), `Referrer-Policy`, and
 // `X-Content-Type-Options` are now emitted globally by
@@ -24,6 +25,9 @@ import { EmbedSenderDisabled } from '~/components/embed/embed-sender-disabled';
 export default function Layout() {
   return <Outlet />;
 }
+
+// Solid Ten: a 429 thrown by a loader below (public form over its open limit) keeps its Retry-After.
+export const headers = retryAfterRouteHeaders;
 
 export function ErrorBoundary() {
   const analytics = useAnalytics();

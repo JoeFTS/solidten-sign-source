@@ -1,3 +1,4 @@
+import { assertCredentialChangeStepUp } from '@documenso/lib/server-only/auth/credential-step-up';
 import { updatePasskey } from '@documenso/lib/server-only/auth/update-passkey';
 
 import { authenticatedProcedure } from '../trpc';
@@ -13,6 +14,17 @@ export const updatePasskeyRoute = authenticatedProcedure
       input: {
         passkeyId,
       },
+    });
+
+    // tRPC types ctx.session from the API-token branch (null); a browser sign-in has the row.
+    const session = (ctx as { session?: { id: string; createdAt: Date; isEmbed?: boolean } | null }).session ?? null;
+
+    // Solid Ten Sign (AUD-C10 follow-up): a recent sign-in, and the 2FA code when 2FA is on.
+    await assertCredentialChangeStepUp({
+      session,
+      userId: ctx.user.id,
+      twoFactorCode: input.twoFactorCode,
+      checkTwoFactor: true,
     });
 
     await updatePasskey({

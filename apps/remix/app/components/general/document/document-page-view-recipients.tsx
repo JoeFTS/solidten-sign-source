@@ -24,11 +24,17 @@ import {
   PenIcon,
   PlusIcon,
   UserIcon,
+  UserRoundPenIcon,
 } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useRevalidator, useSearchParams } from 'react-router';
 import { match } from 'ts-pattern';
+
+import { RecipientReassignDialog } from '~/components/general/recipient-reassign/recipient-reassign-dialog';
+
+import { RecipientCopyNotDeliveredBadge } from './recipient-copy-not-delivered-badge';
+import { RecipientDeliveryFailedBadge } from './recipient-delivery-failed-badge';
 
 export type DocumentPageViewRecipientsProps = {
   envelope: TEnvelope;
@@ -39,6 +45,7 @@ export const DocumentPageViewRecipients = ({ envelope, documentRootPath }: Docum
   const { _, i18n } = useLingui();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { revalidate } = useRevalidator();
 
   const recipients = envelope.recipients;
   const [shouldHighlightCopyButtons, setShouldHighlightCopyButtons] = useState(false);
@@ -174,6 +181,25 @@ export const DocumentPageViewRecipients = ({ envelope, documentRootPath }: Docum
                   </Badge>
                 ))}
 
+              {/* Solid Ten: the signing request could not be delivered; offer a resend. */}
+              {envelope.status === DocumentStatus.PENDING &&
+                recipient.signingStatus === SigningStatus.NOT_SIGNED &&
+                recipient.deliveryFailedAt && (
+                  <RecipientDeliveryFailedBadge
+                    envelopeId={envelope.id}
+                    recipientId={recipient.id}
+                    onResent={async () => revalidate()}
+                  />
+                )}
+
+              {/* Solid Ten: the signed copy could not be emailed to this recipient (marked after completion). */}
+              {envelope.status === DocumentStatus.COMPLETED &&
+                envelope.completedAt &&
+                recipient.deliveryFailedAt &&
+                new Date(recipient.deliveryFailedAt) > new Date(envelope.completedAt) && (
+                  <RecipientCopyNotDeliveredBadge envelopeId={envelope.id} recipientId={recipient.id} />
+                )}
+
               {envelope.status !== DocumentStatus.DRAFT && recipient.signingStatus === SigningStatus.REJECTED && (
                 <PopoverHover
                   trigger={
@@ -220,6 +246,24 @@ export const DocumentPageViewRecipients = ({ envelope, documentRootPath }: Docum
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
+                )}
+
+              {envelope.status === DocumentStatus.PENDING &&
+                envelope.internalVersion === 2 &&
+                recipient.signingStatus === SigningStatus.NOT_SIGNED &&
+                recipient.role !== RecipientRole.CC && (
+                  <RecipientReassignDialog
+                    mode="sender"
+                    envelopeId={envelope.id}
+                    recipientId={recipient.id}
+                    recipientEmail={recipient.email}
+                    onReassigned={async () => revalidate()}
+                    trigger={
+                      <button type="button" title={_(msg`Reassign`)} data-testid={`reassign-recipient-${recipient.id}`}>
+                        <UserRoundPenIcon className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                    }
+                  />
                 )}
             </div>
           </li>

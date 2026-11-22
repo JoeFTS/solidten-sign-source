@@ -54,10 +54,10 @@ import {
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapSecondaryIdToTemplateId } from '../../utils/envelope';
 import { buildEnvelopeContentCopyData } from '../../utils/envelope-content';
+import { findNumberFieldMetaProblem } from '../../utils/number-field-meta-check';
 import { buildTeamWhereQuery } from '../../utils/teams';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { incrementDocumentId } from '../envelope/increment-id';
-import { insertFormValuesInPdf } from '../pdf/insert-form-values-in-pdf';
 import { assertOrganisationRatesAndLimits } from '../rate-limit/assert-organisation-rates-and-limits';
 import { assignOmittedRecipientSigningOrders } from '../recipient/assign-omitted-recipient-signing-orders';
 import { assertCompatibleRecipientGrouping } from '../signature-level/assert-compatible-recipient-grouping';
@@ -183,6 +183,13 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
         value: field.value,
       };
 
+      // Solid Ten: a prefilled number must match the field's format exactly.
+      const numberProblem = findNumberFieldMetaProblem({ id: field.id, type: 'NUMBER', fieldMeta: meta });
+
+      if (numberProblem) {
+        throw new AppError(AppErrorCode.INVALID_BODY, { message: `Prefill for field ${field.id}: ${numberProblem}` });
+      }
+
       return meta;
     })
     .with({ type: 'radio' }, (field) => {
@@ -302,6 +309,14 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
     })
     .otherwise(() => field.fieldMeta);
 };
+
+/**
+ * Solid Ten: like envelope create (create-envelope.ts), this transaction copies many rows
+ * (recipients, fields, attachments); a busy server stalled it past the 10 s client default
+ * (FS2-L4). Give it the same room. A transaction that still runs out of time is a 503 "busy,
+ * try again" (trpc.ts) and leaves nothing behind.
+ */
+const CREATE_FROM_TEMPLATE_TRANSACTION_OPTIONS = { timeout: 30_000, maxWait: 15_000 };
 
 export const createDocumentFromTemplate = async ({
   id,
@@ -489,18 +504,11 @@ export const createDocumentFromTemplate = async ({
         });
       }
 
-      let buffer = await getFileServerSide(documentDataToDuplicate);
+      const buffer = await getFileServerSide(documentDataToDuplicate);
 
       const titleToUse = item.title || finalEnvelopeTitle;
 
-      if (formValues) {
-        // eslint-disable-next-line require-atomic-updates
-        buffer = await insertFormValuesInPdf({
-          pdf: Buffer.from(buffer),
-          formValues,
-        });
-      }
-
+      // Solid Ten (AUD-5): the form values are filled in the PDF child, with the normalisation.
       const { documentData: newDocumentData, filePageCount } = await putNormalizedPdfFileServerSide(
         {
           name: titleToUse,
@@ -509,6 +517,7 @@ export const createDocumentFromTemplate = async ({
         },
         {
           initialData: documentDataToDuplicate.data,
+          formValues,
         },
       );
 
@@ -585,6 +594,7 @@ export const createDocumentFromTemplate = async ({
         drawSignatureEnabled: override?.drawSignatureEnabled ?? template.documentMeta?.drawSignatureEnabled,
         allowDictateNextSigner: override?.allowDictateNextSigner ?? template.documentMeta?.allowDictateNextSigner,
         envelopeExpirationPeriod: override?.envelopeExpirationPeriod ?? template.documentMeta?.envelopeExpirationPeriod,
+        signingChannel: template.documentMeta?.signingChannel,
       },
       signatureLevel,
     ),
@@ -841,7 +851,7 @@ export const createDocumentFromTemplate = async ({
     }
 
     return { envelope, createdEnvelope };
-  });
+  }, CREATE_FROM_TEMPLATE_TRANSACTION_OPTIONS);
 
   // Trigger webhook outside the transaction to avoid holding the connection
   // open during network I/O.

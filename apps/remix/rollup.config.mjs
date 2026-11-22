@@ -12,7 +12,8 @@ const config = {
    * We specifically target the router.ts instead of the entry point so the rollup doesn't go through the
    * already prebuilt RR7 server files.
    */
-  input: 'server/router.ts',
+  // Solid Ten: the PDF child process is a second entry (server/pdf-child.ts).
+  input: ['server/router.ts', 'server/pdf-child.ts'],
   output: {
     dir: 'build/server/hono',
     format: 'esm',

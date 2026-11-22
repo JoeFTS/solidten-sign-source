@@ -2,6 +2,7 @@ import { getBaseUrl } from '@documenso/lib/universal/get-base-url';
 import { createTRPCClient, httpBatchLink, httpLink, isNonJsonSerializable, splitLink } from '@trpc/client';
 
 import type { AppRouter } from '../server/router';
+import { TRPC_MAX_BATCH_SIZE } from '../utils/batch-limit';
 import { dataTransformer } from '../utils/data-transformer';
 
 export const trpc = createTRPCClient<AppRouter>({
@@ -24,6 +25,7 @@ export const trpc = createTRPCClient<AppRouter>({
       false: httpBatchLink({
         url: `${getBaseUrl()}/api/trpc`,
         transformer: dataTransformer,
+        maxItems: TRPC_MAX_BATCH_SIZE,
         headers: (opts) => {
           const operationWithTeamId = opts.opList.find(
             (op) => op.context.teamId && typeof op.context.teamId === 'string',

@@ -3,6 +3,7 @@ import type {
   TAuthHandoffEmbedCscSadPayload,
 } from '@documenso/lib/constants/auth-handoff';
 import { AUTH_HANDOFF_TYPE, ZAuthHandoffStoredSchema } from '@documenso/lib/constants/auth-handoff';
+import { getInPersonLockId } from '@documenso/lib/server-only/in-person/in-person-lock';
 import { prisma } from '@documenso/prisma';
 import { match } from 'ts-pattern';
 
@@ -135,13 +136,17 @@ const redeemAuthHandoffById = async ({
           expiresAt: {
             gt: new Date(),
           },
+          // Solid Ten Sign (AUD-11): never from an embed session.
+          isEmbed: false,
         },
         select: {
           id: true,
+          stInPersonSessionId: true,
         },
       });
 
-      if (!originatingSession) {
+      // Solid Ten Sign (AUD-11): nor from a sign-in locked for in-person signing.
+      if (!originatingSession || (await getInPersonLockId(originatingSession))) {
         await prisma.authHandoff.deleteMany({
           where: {
             id,

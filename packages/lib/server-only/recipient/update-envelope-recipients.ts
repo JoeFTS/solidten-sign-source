@@ -13,9 +13,12 @@ import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapFieldToLegacyField } from '../../utils/fields';
 import { canRecipientBeModified } from '../../utils/recipients';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
+import { lockEnvelopeForRecipientChange } from '../envelope/envelope-transition-lock';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
+import { prepareRecipientEmailChanges } from '../recipient-reassign/recipient-email-change';
 import { assertCompatibleRecipientGrouping } from '../signature-level/assert-compatible-recipient-grouping';
 import { assertCompatibleRecipientRole } from '../signature-level/assert-compatible-recipient-role';
+import { assertAssistantRolesAllowedOnEnvelope } from './assert-assistant-signing-order';
 
 export interface UpdateEnvelopeRecipientsOptions {
   userId: number;
@@ -78,6 +81,12 @@ export const updateEnvelopeRecipients = async ({
     });
   }
 
+  // Solid Ten Sign (AUD-C12): an assistant needs sequential signing.
+  await assertAssistantRolesAllowedOnEnvelope({
+    envelopeId: envelope.id,
+    roles: recipients.map((recipient) => recipient.role),
+  });
+
   const recipientsHaveActionAuth = recipients.some(
     (recipient) => recipient.actionAuth && recipient.actionAuth.length > 0,
   );
@@ -139,8 +148,28 @@ export const updateEnvelopeRecipients = async ({
     };
   });
 
+  const emailChanges = await prepareRecipientEmailChanges({
+    envelope,
+    changes: recipientsToUpdate.map(({ originalRecipient, updateData }) => ({
+      previous: originalRecipient,
+      newEmail: updateData.email ?? originalRecipient.email,
+    })),
+    resultingRecipients: envelope.recipients.map((existing) => ({
+      id: existing.id,
+      email: recipients.find((update) => update.id === existing.id)?.email ?? existing.email,
+    })),
+  });
+
   const updatedRecipients = await prisma.$transaction(async (tx) => {
     await assertEnvelopeMutable(envelope, tx);
+
+    // Solid Ten Sign (FS2-C1): lock, and refuse when a recipient being edited signed, declined
+    // or got a new link since it was read.
+    await lockEnvelopeForRecipientChange(
+      tx,
+      envelope.id,
+      recipientsToUpdate.map(({ originalRecipient }) => originalRecipient),
+    );
 
     return await Promise.all(
       recipientsToUpdate.map(async ({ originalRecipient, updateData }) => {
@@ -172,11 +201,14 @@ export const updateEnvelopeRecipients = async ({
             sendStatus: mergedRecipient.role === RecipientRole.CC ? SendStatus.SENT : SendStatus.NOT_SENT,
             signingStatus: mergedRecipient.role === RecipientRole.CC ? SigningStatus.SIGNED : SigningStatus.NOT_SIGNED,
             authOptions,
+            ...emailChanges.resetDataFor(originalRecipient.id),
           },
           include: {
             fields: true,
           },
         });
+
+        await emailChanges.recordAudit(tx, updatedRecipient, requestMetadata);
 
         // Clear all fields if the recipient role is changed to a type that cannot have fields.
         if (
@@ -216,6 +248,8 @@ export const updateEnvelopeRecipients = async ({
       }),
     );
   });
+
+  await emailChanges.notify(requestMetadata);
 
   return {
     recipients: updatedRecipients.map((recipient) => ({

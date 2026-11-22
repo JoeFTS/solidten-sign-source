@@ -1,4 +1,5 @@
 import { AppErrorCode } from '@documenso/lib/errors/app-error';
+import type { SigningRefusal } from '@documenso/lib/utils/signing-refusal';
 import type { MessageDescriptor } from '@lingui/core';
 import { msg } from '@lingui/core/macro';
 import { match } from 'ts-pattern';
@@ -68,8 +69,18 @@ export const getDirectTemplateErrorMessage = (code: string): ToastMessageDescrip
  * (sign) a document, so the user knows whether retrying can help and what to
  * do next.
  */
+/**
+ * Solid Ten: a signing call refused by the rate limit. Nothing the signer entered is lost:
+ * fields already saved stay saved, and the page stays open.
+ */
+export const SIGNING_TOO_MANY_REQUESTS_MESSAGE: ToastMessageDescriptor = {
+  title: msg`Too many requests`,
+  description: msg`Too many requests, wait a moment and try again. Your answers so far are saved.`,
+};
+
 export const getSigningCompletionErrorMessage = (code: string): ToastMessageDescriptor => {
   return match(code)
+    .with(AppErrorCode.TOO_MANY_REQUESTS, () => SIGNING_TOO_MANY_REQUESTS_MESSAGE)
     .with(AppErrorCode.NOT_FOUND, () => ({
       title: msg`Document no longer available`,
       description: msg`This document can no longer be signed. It may have been removed by the sender, or your signing access may have been revoked. Please contact the sender for a new signing link.`,
@@ -173,3 +184,13 @@ export const getTemplateUseErrorMessage = (code: string): ToastMessageDescriptor
       description: msg`An error occurred while creating document from template.`,
     }));
 };
+
+/**
+ * Solid Ten: the title for an expected refusal; its description is the server's reason.
+ */
+export const getSigningRefusalTitle = (refusal: SigningRefusal): MessageDescriptor =>
+  match(refusal.kind)
+    .with('busy', () => msg`The server is busy`)
+    .with('rateLimited', () => msg`Too many attempts`)
+    .with('refused', () => msg`This could not be submitted`)
+    .exhaustive();

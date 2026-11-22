@@ -1,8 +1,8 @@
 import type { User } from '@prisma/client';
 
 import { AppError, AppErrorCode } from '../../errors/app-error';
+import { consumeBackupCode } from './consume-backup-code';
 import { verifyTwoFactorAuthenticationToken } from './verify-2fa-token';
-import { verifyBackupCode } from './verify-backup-code';
 
 type ValidateTwoFactorAuthenticationOptions = {
   totpCode?: string;
@@ -27,8 +27,9 @@ export const validateTwoFactorAuthentication = async ({
     return await verifyTwoFactorAuthenticationToken({ user, totpCode });
   }
 
+  // Solid Ten Sign: a backup code is used up when it is accepted.
   if (backupCode) {
-    return verifyBackupCode({ user, backupCode });
+    return await consumeBackupCode({ user, backupCode });
   }
 
   throw new AppError(AppErrorCode.TWO_FACTOR_MISSING_CREDENTIALS);

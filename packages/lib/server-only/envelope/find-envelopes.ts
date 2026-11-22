@@ -1,6 +1,6 @@
 import { kyselyPrisma, prisma, sql } from '@documenso/prisma';
 import type { DB } from '@documenso/prisma/generated/types';
-import type { DocumentSource, DocumentStatus, Envelope, EnvelopeType } from '@prisma/client';
+import type { DocumentSource, DocumentStatus, DocumentVisibility, Envelope, EnvelopeType } from '@prisma/client';
 import type { Expression, ExpressionBuilder, SelectQueryBuilder, SqlBool } from 'kysely';
 
 import { TEAM_DOCUMENT_VISIBILITY_MAP } from '../../constants/teams';
@@ -83,15 +83,30 @@ const recipientExists = (
 
 /**
  * Reusable EXISTS subquery: checks that the envelope's sender (User) has the given email.
+ *
+ * Solid Ten (AUD-4): a team-email sender match covers only envelopes of the caller's own team, at a
+ * visibility the caller's role may see; never another team's or organisation's envelopes.
  */
-const senderEmailIs = (eb: EnvelopeExpressionBuilder, email: string) =>
-  eb.exists(
-    eb
-      .selectFrom('User')
-      .whereRef('User.id', '=', 'Envelope.userId')
-      .where('User.email', '=', email)
-      .select(sql.lit(1).as('one')),
-  );
+const senderEmailIs = (
+  eb: EnvelopeExpressionBuilder,
+  email: string,
+  scope: { teamId: number; visibilities: readonly DocumentVisibility[] },
+) =>
+  eb.and([
+    eb('Envelope.teamId', '=', scope.teamId),
+    eb(
+      'Envelope.visibility',
+      'in',
+      scope.visibilities.map((v) => sql.lit(v)),
+    ),
+    eb.exists(
+      eb
+        .selectFrom('User')
+        .whereRef('User.id', '=', 'Envelope.userId')
+        .where('User.email', '=', email)
+        .select(sql.lit(1).as('one')),
+    ),
+  ]);
 
 /**
  * Find envelopes visible to the requesting user within a team.
@@ -220,7 +235,7 @@ export const findEnvelopes = async ({
 
     if (teamEmail) {
       // Docs sent by the team email user
-      accessBranches.push(senderEmailIs(eb, teamEmail));
+      accessBranches.push(senderEmailIs(eb, teamEmail, { teamId: team.id, visibilities: allowedVisibilities }));
       // Docs received by the team email
       accessBranches.push(recipientExists(eb, teamEmail));
     }

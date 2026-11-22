@@ -5,7 +5,9 @@ import { isSignupEnabledForProvider } from '@documenso/lib/constants/auth';
 import { loadRecipientBrandingByTeamId } from '@documenso/lib/server-only/branding/load-recipient-branding';
 import { getDocumentAndSenderByToken } from '@documenso/lib/server-only/document/get-document-by-token';
 import { isRecipientAuthorized } from '@documenso/lib/server-only/document/is-recipient-authorized';
+import { getCompletedCopyDelivery } from '@documenso/lib/server-only/email/completed-copy-delivery';
 import { getFieldsForToken } from '@documenso/lib/server-only/field/get-fields-for-token';
+import { getPublicFormThankYouMessage } from '@documenso/lib/server-only/public-form/public-form-responses';
 import { getRecipientByToken } from '@documenso/lib/server-only/recipient/get-recipient-by-token';
 import { getRecipientSignatures } from '@documenso/lib/server-only/recipient/get-recipient-signatures';
 import { getUserByEmail } from '@documenso/lib/server-only/user/get-user-by-email';
@@ -89,8 +91,21 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const returnToHomePath = canRedirectToFolder ? `/t/${document.team.url}/documents/f/${document.folderId}` : '/';
 
+  const publicFormThankYouMessage = await getPublicFormThankYouMessage({
+    envelopeId: document.envelopeId,
+    recipientEmail: recipient.email,
+  });
+
+  // Solid Ten Sign (RT3-L3): say "download" when the copy comes as a link, not an attachment.
+  const completedCopyDelivery = await getCompletedCopyDelivery({
+    envelopeId: document.envelopeId,
+    recipientEmail: recipient.email,
+  }).catch(() => 'ATTACHMENT' as const);
+
   return {
     isDocumentAccessValid: true,
+    publicFormThankYouMessage,
+    completedCopyDelivery,
     canSignUp,
     recipientName,
     recipientEmail: recipient.email,
@@ -119,6 +134,8 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
     recipientEmail,
     returnToHomePath,
     branding,
+    publicFormThankYouMessage,
+    completedCopyDelivery,
   } = loaderData;
 
   // Poll signing status every few seconds
@@ -187,6 +204,15 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
               {recipient.role === RecipientRole.APPROVER && <Trans>Document Approved</Trans>}
             </h2>
 
+            {publicFormThankYouMessage && (
+              <p
+                className="mt-4 max-w-[60ch] whitespace-pre-wrap text-center text-muted-foreground"
+                data-testid="public-form-thank-you"
+              >
+                {publicFormThankYouMessage}
+              </p>
+            )}
+
             {match({ status: signingStatus, deletedAt: document.deletedAt })
               .with({ status: 'COMPLETED' }, () => (
                 <div className="mt-4 flex items-center text-center text-documenso-700">
@@ -224,20 +250,37 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
             {match({ status: signingStatus, deletedAt: document.deletedAt })
               .with({ status: 'COMPLETED' }, () => (
                 <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
-                  <Trans>Everyone has signed! You will receive an email copy of the signed document.</Trans>
+                  {completedCopyDelivery === 'LINK' ? (
+                    <Trans>Everyone has signed! Download your signed copy here.</Trans>
+                  ) : (
+                    <Trans>Everyone has signed! You will receive an email copy of the signed document.</Trans>
+                  )}
                 </p>
               ))
               .with({ status: 'PROCESSING' }, () => (
                 <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
-                  <Trans>
-                    All recipients have signed. The document is being processed and you will receive an email copy
-                    shortly.
-                  </Trans>
+                  {completedCopyDelivery === 'LINK' ? (
+                    <Trans>
+                      All recipients have signed. The document is being processed; you will get an email with a link to
+                      download your signed copy shortly.
+                    </Trans>
+                  ) : (
+                    <Trans>
+                      All recipients have signed. The document is being processed and you will receive an email copy
+                      shortly.
+                    </Trans>
+                  )}
                 </p>
               ))
               .with({ deletedAt: null }, () => (
                 <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
-                  <Trans>You will receive an email copy of the signed document once everyone has signed.</Trans>
+                  {completedCopyDelivery === 'LINK' ? (
+                    <Trans>
+                      Once everyone has signed, you will get an email with a link to download your signed copy.
+                    </Trans>
+                  ) : (
+                    <Trans>You will receive an email copy of the signed document once everyone has signed.</Trans>
+                  )}
                 </p>
               ))
               .otherwise(() => (

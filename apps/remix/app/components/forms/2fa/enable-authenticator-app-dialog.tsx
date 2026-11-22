@@ -23,7 +23,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { renderSVG } from 'uqr';
 import { z } from 'zod';
-
+import { getCredentialStepUpError } from '~/utils/credential-step-up-error';
 import { RecoveryCodeList } from './recovery-code-list';
 
 export const ZEnable2FAForm = z.object({
@@ -72,7 +72,8 @@ export const EnableAuthenticatorAppDialog = ({ onSuccess }: EnableAuthenticatorA
       toast({
         title: _(msg`Unable to setup two-factor authentication`),
         description: _(
-          msg`We were unable to setup two-factor authentication for your account. Please ensure that you have entered your code correctly and try again.`,
+          getCredentialStepUpError(err) ??
+            msg`We were unable to setup two-factor authentication for your account. Please ensure that you have entered your code correctly and try again.`,
         ),
         variant: 'destructive',
       });
@@ -93,11 +94,12 @@ export const EnableAuthenticatorAppDialog = ({ onSuccess }: EnableAuthenticatorA
         title: _(msg`Two-factor authentication enabled`),
         description: _(msg`You will now be required to enter a code from your authenticator app when signing in.`),
       });
-    } catch (_err) {
+    } catch (err) {
       toast({
         title: _(msg`Unable to setup two-factor authentication`),
         description: _(
-          msg`We were unable to setup two-factor authentication for your account. Please ensure that you have entered your code correctly and try again.`,
+          getCredentialStepUpError(err) ??
+            msg`We were unable to setup two-factor authentication for your account. Please ensure that you have entered your code correctly and try again.`,
         ),
         variant: 'destructive',
       });

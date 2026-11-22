@@ -302,7 +302,7 @@ test('[DIRECT_TEMPLATES]: use direct template link with 1 recipient', async ({ p
   await expect(page.getByRole('heading', { name: 'General' })).toBeVisible();
 
   await page.waitForTimeout(100);
-  await page.getByPlaceholder('recipient@documenso.com').fill(seedTestEmail());
+  await page.getByPlaceholder('recipient@example.com').fill(seedTestEmail());
 
   await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -379,12 +379,13 @@ test('[DIRECT_TEMPLATES]: V1 use direct template link with 2 recipients with nex
     positionY: 20,
   });
 
+  // Solid Ten Sign (AUD-C4): only a signer signed in with the typed email may dictate the next signer.
+  const { user: directSigner } = await seedUser();
+  await apiSignin({ page, email: directSigner.email });
+
   // Check that the direct template link is accessible.
   await page.goto(formatDirectTemplatePath(template.directLink?.token || ''));
   await expect(page.getByRole('heading', { name: 'General' })).toBeVisible();
-
-  await page.waitForTimeout(100);
-  await page.getByPlaceholder('recipient@documenso.com').fill(seedTestEmail());
 
   await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -487,6 +488,10 @@ test('[DIRECT_TEMPLATES]: V2 use direct template link with 2 recipients with nex
     positionY: 20,
   });
 
+  // Solid Ten Sign (AUD-C4): only a signer signed in with the typed email may dictate the next signer.
+  const { user: directSigner } = await seedUser();
+  await apiSignin({ page, email: directSigner.email });
+
   // Check that the direct template link is accessible.
   await page.goto(formatDirectTemplatePath(template.directLink?.token || ''));
   await expect(page.getByRole('heading', { name: 'Team direct template link 1' })).toBeVisible();
@@ -518,10 +523,17 @@ test('[DIRECT_TEMPLATES]: V2 use direct template link with 2 recipients with nex
   await page.getByRole('button', { name: 'Complete' }).click();
 
   const currentName = 'John Doe';
-  const currentEmail = seedTestEmail();
 
-  await page.getByPlaceholder('Enter Your Name').fill(currentName);
-  await page.getByPlaceholder('Enter Your Email').fill(currentEmail);
+  // Signed in: the name and email may already be filled from the account.
+  const nameInput = page.getByPlaceholder('Enter Your Name');
+  if ((await nameInput.count()) > 0 && (await nameInput.isEditable())) {
+    await nameInput.fill(currentName);
+  }
+
+  const emailInput = page.getByPlaceholder('Enter Your Email');
+  if ((await emailInput.count()) > 0 && (await emailInput.isEditable())) {
+    await emailInput.fill(directSigner.email);
+  }
 
   await expect(page.getByText('Next Recipient Name')).toBeVisible();
 

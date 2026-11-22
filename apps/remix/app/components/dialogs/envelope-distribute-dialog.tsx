@@ -41,6 +41,10 @@ import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 import { match } from 'ts-pattern';
 import * as z from 'zod';
+import {
+  createDefaultScheduleSendValue,
+  ScheduleSendFields,
+} from '~/components/general/scheduled-send/schedule-send-fields';
 import { getDistributeErrorMessage } from '~/utils/toast-error-messages';
 
 export type EnvelopeDistributeDialogProps = {
@@ -79,6 +83,8 @@ export const EnvelopeDistributeDialog = ({
   const [isSyncing, setIsSyncing] = useState(false);
 
   const { mutateAsync: distributeEnvelope } = trpcReact.envelope.distribute.useMutation();
+  const { mutateAsync: scheduleSend } = trpcReact.lifecycle.scheduleSend.useMutation();
+  const [scheduleSendValue, setScheduleSendValue] = useState(createDefaultScheduleSendValue);
 
   const form = useForm<TEnvelopeDistributeFormSchema>({
     defaultValues: {
@@ -210,8 +216,20 @@ export const EnvelopeDistributeDialog = ({
     contentLimits,
   ]);
 
+  const isScheduling = scheduleSendValue.isEnabled && distributionMethod === DocumentDistributionMethod.EMAIL;
+
   const onFormSubmit = async ({ meta }: TEnvelopeDistributeFormSchema) => {
     try {
+      if (isScheduling) {
+        await scheduleSend({ envelopeId: envelope.id, meta, ...scheduleSendValue });
+        await navigate(documentRootPath);
+
+        toast({ title: t`Document scheduled`, description: t`It stays a draft until it is sent.`, duration: 5000 });
+        setIsOpen(false);
+
+        return;
+      }
+
       await distributeEnvelope({ envelopeId: envelope.id, meta });
 
       await onDistribute?.();
@@ -239,6 +257,12 @@ export const EnvelopeDistributeDialog = ({
         location: 'distribute_document',
         envelopeId: envelope.id,
       });
+
+      if (isScheduling) {
+        toast({ title: t`Could not schedule the document`, description: error.message, variant: 'destructive' });
+
+        return;
+      }
 
       const errorMessage = getDistributeErrorMessage(error.code);
 
@@ -391,7 +415,7 @@ export const EnvelopeDistributeDialog = ({
                                             </SelectItem>
                                           ))}
 
-                                          <SelectItem value={'-1'}>Documenso</SelectItem>
+                                          <SelectItem value={'-1'}>Solid Ten Sign</SelectItem>
                                         </SelectContent>
                                       </Select>
                                     </FormControl>
@@ -499,6 +523,14 @@ export const EnvelopeDistributeDialog = ({
                   </AnimatePresence>
                 </div>
 
+                {distributionMethod === DocumentDistributionMethod.EMAIL && envelope.internalVersion === 2 && (
+                  <ScheduleSendFields
+                    value={scheduleSendValue}
+                    onChange={setScheduleSendValue}
+                    disabled={isSubmitting}
+                  />
+                )}
+
                 <DialogFooter>
                   <DialogClose asChild>
                     <Button type="button" variant="secondary" disabled={isSubmitting}>
@@ -507,7 +539,9 @@ export const EnvelopeDistributeDialog = ({
                   </DialogClose>
 
                   <Button loading={isSubmitting} disabled={isSyncing} type="submit">
-                    {distributionMethod === DocumentDistributionMethod.EMAIL ? (
+                    {isScheduling ? (
+                      <Trans>Schedule</Trans>
+                    ) : distributionMethod === DocumentDistributionMethod.EMAIL ? (
                       <Trans>Send</Trans>
                     ) : (
                       <Trans>Generate Links</Trans>

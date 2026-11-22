@@ -1,6 +1,11 @@
 import { isBase64Image } from '@documenso/lib/constants/signatures';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { assertActionAuthActorIsRecipient } from '@documenso/lib/server-only/document/assert-completion-actor';
 import { validateFieldAuth } from '@documenso/lib/server-only/document/validate-field-auth';
+import { lockEnvelopeForFieldWrite } from '@documenso/lib/server-only/field/lock-field-write';
+import { deleteRemovedFieldFiles } from '@documenso/lib/server-only/field-file/remove-field-files-in-transaction';
+import { applyFieldLogic, assertFieldSignableByLogic } from '@documenso/lib/server-only/field-logic/apply-field-logic';
+import { findInPersonHostForRequest } from '@documenso/lib/server-only/in-person/in-person-session';
 import { assertSenderNotDisabled } from '@documenso/lib/server-only/user/assert-user-not-disabled';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
@@ -125,11 +130,33 @@ export const signEnvelopeFieldRoute = procedure
       throw new Error(`Field ${fieldId} has no recipientId`);
     }
 
+    const fieldRecipientId = field.recipientId;
+
+    await assertFieldSignableByLogic({ tx: prisma, field });
+
     const insertionValues = extractFieldInsertionValues({ fieldValue, field, documentMeta });
 
     // Early return for uninserting fields.
     if (!insertionValues.inserted) {
-      return await prisma.$transaction(async (tx) => {
+      // Solid Ten Sign (AUD-C11 follow-up): with action auth, only the recipient's own session
+      // un-signs. On a host's in-person device the signed-in user is the host, as below.
+      const isInPersonUnsign = Boolean(
+        await findInPersonHostForRequest({ authSessionId: ctx.inPersonLock?.session.id ?? ctx.session?.id, token }),
+      );
+
+      await assertActionAuthActorIsRecipient({
+        documentAuth: envelope.authOptions,
+        recipient,
+        userId: isInPersonUnsign ? undefined : user?.id,
+      });
+
+      const unsignedResult = await prisma.$transaction(async (tx) => {
+        // Solid Ten Sign (AUD-C2): under the envelope lock, both recipients must still be NOT_SIGNED.
+        await lockEnvelopeForFieldWrite(tx, {
+          envelopeId: envelope.id,
+          recipientIds: [recipient.id, fieldRecipientId],
+        });
+
         const updatedField = await tx.field.update({
           where: {
             id: field.id,
@@ -164,17 +191,34 @@ export const signEnvelopeFieldRoute = procedure
           });
         }
 
+        const { changedFields, removedFileObjects } = await applyFieldLogic({
+          tx,
+          envelopeId: envelope.id,
+          recipientId: field.recipientId,
+          user: recipient,
+          requestMetadata: metadata.requestMetadata,
+        });
+
         return {
           signedField: updatedField,
+          affectedFields: changedFields,
+          removedFileObjects,
         };
       });
+
+      return await deleteRemovedFieldFiles(unsignedResult);
     }
+
+    // Solid Ten Sign: on a host's in-person device the signed-in user is the host, never the signer.
+    const isInPersonTurn = Boolean(
+      await findInPersonHostForRequest({ authSessionId: ctx.inPersonLock?.session.id ?? ctx.session?.id, token }),
+    );
 
     const derivedRecipientActionAuth = await validateFieldAuth({
       documentAuthOptions: envelope.authOptions,
       recipient,
       field,
-      userId: user?.id,
+      userId: isInPersonTurn ? undefined : user?.id,
       authOptions,
     });
 
@@ -198,7 +242,10 @@ export const signEnvelopeFieldRoute = procedure
       }
     }
 
-    return await prisma.$transaction(async (tx) => {
+    const signedResult = await prisma.$transaction(async (tx) => {
+      // Solid Ten Sign (AUD-C2): under the envelope lock, both recipients must still be NOT_SIGNED.
+      await lockEnvelopeForFieldWrite(tx, { envelopeId: envelope.id, recipientIds: [recipient.id, fieldRecipientId] });
+
       const updatedField = await tx.field.update({
         where: {
           id: field.id,
@@ -266,6 +313,7 @@ export const signEnvelopeFieldRoute = procedure
                 type,
                 data: updatedField.customText,
               }))
+              .with(FieldType.FILE, (type) => ({ type, data: updatedField.customText }))
               .exhaustive(),
             fieldSecurity: derivedRecipientActionAuth
               ? {
@@ -276,8 +324,20 @@ export const signEnvelopeFieldRoute = procedure
         }),
       });
 
+      const { changedFields, removedFileObjects } = await applyFieldLogic({
+        tx,
+        envelopeId: envelope.id,
+        recipientId: field.recipientId,
+        user: assistant ?? recipient,
+        requestMetadata: metadata.requestMetadata,
+      });
+
       return {
         signedField: updatedField,
+        affectedFields: changedFields,
+        removedFileObjects,
       };
     });
+
+    return await deleteRemovedFieldFiles(signedResult);
   });

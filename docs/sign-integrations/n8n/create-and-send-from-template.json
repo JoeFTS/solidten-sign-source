@@ -1,0 +1,89 @@
+{
+  "name": "Solid Ten Sign: create and send from a template",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "6f9e4345-a3fc-4dcd-8549-fd395dd9af84",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"host\": \"https://sign.example.com\",\n  \"templateEnvelopeId\": \"envelope_REPLACE_ME\",\n  \"templateRecipientId\": 0,\n  \"signerName\": \"Sam Signer\",\n  \"signerEmail\": \"signer@example.com\"\n}",
+        "options": {}
+      },
+      "id": "82e31715-30f8-4c03-bafd-513d3673b3ab",
+      "name": "Document details",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.host }}/api/v2/envelope/use",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formData",
+              "name": "payload",
+              "value": "={{ JSON.stringify({ envelopeId: $json.templateEnvelopeId, recipients: [{ id: Number($json.templateRecipientId), email: $json.signerEmail, name: $json.signerName }], distributeDocument: true }) }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ada5bbd8-7f4b-4f12-a0e6-b9e60e231761",
+      "name": "Create and send",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Solid Ten Sign API token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Document details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document details": {
+      "main": [
+        [
+          {
+            "node": "Create and send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

@@ -1,8 +1,7 @@
 import { DocumentDataType } from '@prisma/client';
-import { base64 } from '@scure/base';
 import { match } from 'ts-pattern';
-
 import { formatPath } from '../../constants/app';
+import { decodeBase64 } from '../base64';
 
 export type GetFileOptions = {
   type: DocumentDataType;
@@ -32,7 +31,7 @@ const getFileFromBytes = (data: string) => {
 };
 
 const getFileFromBytes64 = (data: string) => {
-  const binaryData = base64.decode(data);
+  const binaryData = decodeBase64(data);
 
   return binaryData;
 };

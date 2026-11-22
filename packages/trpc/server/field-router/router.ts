@@ -8,6 +8,7 @@ import { setFieldsForDocument } from '@documenso/lib/server-only/field/set-field
 import { setFieldsForTemplate } from '@documenso/lib/server-only/field/set-fields-for-template';
 import { signFieldWithToken } from '@documenso/lib/server-only/field/sign-field-with-token';
 import { updateEnvelopeFields } from '@documenso/lib/server-only/field/update-envelope-fields';
+import { assertLegacyFieldRouteAllowed } from '@documenso/lib/server-only/field-logic/assert-legacy-field-route';
 import { EnvelopeType } from '@prisma/client';
 
 import { ZGenericSuccessResponse, ZSuccessResponseSchema } from '../schema';
@@ -623,6 +624,9 @@ export const fieldRouter = router({
         },
       });
 
+      // Solid Ten Sign (S-L2): no way around the field rules.
+      await assertLegacyFieldRouteAllowed({ token, fieldId });
+
       return await signFieldWithToken({
         token,
         fieldId,
@@ -662,10 +666,14 @@ export const fieldRouter = router({
           },
         });
 
+        // Solid Ten Sign (S-L2): no way around the field rules.
+        await assertLegacyFieldRouteAllowed({ token, fieldId });
+
         return await removeSignedFieldWithToken({
           token,
           fieldId,
           requestMetadata: ctx.metadata.requestMetadata,
+          userId: ctx.user?.id,
         });
       } catch (err) {
         // Log the error for debugging purposes.

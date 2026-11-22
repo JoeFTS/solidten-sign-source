@@ -21,7 +21,7 @@ import { DocumentStatus } from '@prisma/client';
 import { ChevronLeft, Users2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { match } from 'ts-pattern';
-
+import { DocumentPageViewComments } from '~/components/general/comments/document-page-view-comments';
 import { DocumentPageViewButton } from '~/components/general/document/document-page-view-button';
 import { DocumentPageViewDropdown } from '~/components/general/document/document-page-view-dropdown';
 import { DocumentPageViewInformation } from '~/components/general/document/document-page-view-information';
@@ -34,9 +34,12 @@ import {
 } from '~/components/general/document/document-status';
 import { EnvelopeRendererFileSelector } from '~/components/general/envelope-editor/envelope-file-selector';
 import { EnvelopeGenericPageRenderer } from '~/components/general/envelope-editor/envelope-generic-page-renderer';
+import { DocumentPageViewAttachedFiles } from '~/components/general/field-file/document-page-view-attached-files';
 import { GenericErrorLayout } from '~/components/general/generic-error-layout';
+import { DocumentPageViewInPerson } from '~/components/general/in-person/document-page-view-in-person';
 import { EnvelopePdfViewer } from '~/components/general/pdf-viewer/envelope-pdf-viewer';
 import PDFViewerLazy from '~/components/general/pdf-viewer/pdf-viewer-lazy';
+import { DocumentPageViewSmsStatus } from '~/components/general/sms/document-page-view-sms-status';
 import { StackAvatarsWithTooltip } from '~/components/general/stack-avatars-with-tooltip';
 import { useCurrentTeam } from '~/providers/team';
 
@@ -255,6 +258,14 @@ export default function DocumentPage({ params }: Route.ComponentProps) {
 
             {/* Recipients section. */}
             <DocumentPageViewRecipients envelope={envelope} documentRootPath={documentRootPath} />
+
+            <DocumentPageViewSmsStatus envelope={envelope} />
+
+            <DocumentPageViewAttachedFiles envelope={envelope} />
+
+            <DocumentPageViewInPerson envelope={envelope} />
+
+            <DocumentPageViewComments envelope={envelope} />
 
             {/* Recent activity section. */}
             <DocumentPageViewRecentActivity

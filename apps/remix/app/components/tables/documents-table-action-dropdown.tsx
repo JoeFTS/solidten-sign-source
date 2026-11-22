@@ -46,6 +46,7 @@ import { useCurrentTeam } from '~/providers/team';
 
 import { EnvelopeDownloadDialog } from '../dialogs/envelope-download-dialog';
 import { EnvelopeRenameDialog } from '../dialogs/envelope-rename-dialog';
+import { RowMenuDialogItem } from './row-menu-dialog-item';
 
 export type DocumentsTableActionDropdownProps = {
   row: TDocumentRow;
@@ -61,6 +62,11 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
 
   const [isRenameDialogOpen, setRenameDialogOpen] = useState(false);
   const [isSaveAsTemplateDialogOpen, setSaveAsTemplateDialogOpen] = useState(false);
+
+  // Solid Ten: the menu is controlled so it closes when a dialog opened from it closes
+  // (RowMenuDialogItem) and when "Move to Folder" hands over to the page's dialog.
+  const [isMenuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
 
   const recipient = findRecipientByEmail({
     recipients: row.recipients,
@@ -97,7 +103,7 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
   const formatPath = `${documentsPath}/${row.envelopeId}/edit`;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={isMenuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger data-testid="document-table-action-btn">
         <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
       </DropdownMenuTrigger>
@@ -157,12 +163,12 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
           isLegacy={row.internalVersion === 1}
           token={canManageDocument ? undefined : recipient?.token}
           trigger={
-            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+            <RowMenuDialogItem onDialogClose={closeMenu} asChild onSelect={(e) => e.preventDefault()}>
               <div>
                 <Download className="mr-2 h-4 w-4" />
                 <Trans>Download</Trans>
               </div>
-            </DropdownMenuItem>
+            </RowMenuDialogItem>
           }
         />
 
@@ -170,12 +176,12 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
           envelopeId={row.envelopeId}
           envelopeType={EnvelopeType.DOCUMENT}
           trigger={
-            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+            <RowMenuDialogItem onDialogClose={closeMenu} asChild onSelect={(e) => e.preventDefault()}>
               <div>
                 <Copy className="mr-2 h-4 w-4" />
                 <Trans>Duplicate</Trans>
               </div>
-            </DropdownMenuItem>
+            </RowMenuDialogItem>
           }
         />
 
@@ -185,7 +191,13 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
         </DropdownMenuItem>
 
         {onMoveDocument && canManageDocument && (
-          <DropdownMenuItem onClick={onMoveDocument} onSelect={(e) => e.preventDefault()}>
+          <DropdownMenuItem
+            onClick={() => {
+              closeMenu();
+              onMoveDocument();
+            }}
+            onSelect={(e) => e.preventDefault()}
+          >
             <FolderInput className="mr-2 h-4 w-4" />
             <Trans>Move to Folder</Trans>
           </DropdownMenuItem>
@@ -199,12 +211,12 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
               await trpcUtils.document.findDocumentsInternal.invalidate();
             }}
             trigger={
-              <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+              <RowMenuDialogItem onDialogClose={closeMenu} asChild onSelect={(e) => e.preventDefault()}>
                 <div>
                   <XCircle className="mr-2 h-4 w-4" />
                   <Trans>Cancel</Trans>
                 </div>
-              </DropdownMenuItem>
+              </RowMenuDialogItem>
             }
           />
         )}
@@ -216,12 +228,12 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
           title={row.title}
           canManageDocument={canManageDocument}
           trigger={
-            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+            <RowMenuDialogItem onDialogClose={closeMenu} asChild onSelect={(e) => e.preventDefault()}>
               <div>
                 <Trash2 className="mr-2 h-4 w-4" />
                 {canManageDocument ? _(msg`Delete`) : _(msg`Hide`)}
               </div>
-            </DropdownMenuItem>
+            </RowMenuDialogItem>
           }
         />
 
@@ -233,12 +245,17 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
           <DocumentRecipientLinkCopyDialog
             recipients={row.recipients}
             trigger={
-              <DropdownMenuItem disabled={!isPending} asChild onSelect={(e) => e.preventDefault()}>
+              <RowMenuDialogItem
+                onDialogClose={closeMenu}
+                disabled={!isPending}
+                asChild
+                onSelect={(e) => e.preventDefault()}
+              >
                 <div>
                   <Copy className="mr-2 h-4 w-4" />
                   <Trans>Signing Links</Trans>
                 </div>
-              </DropdownMenuItem>
+              </RowMenuDialogItem>
             }
           />
         )}
@@ -253,12 +270,12 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
             }}
             envelopeType={EnvelopeType.DOCUMENT}
             trigger={
-              <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+              <RowMenuDialogItem onDialogClose={closeMenu} asChild onSelect={(e) => e.preventDefault()}>
                 <div>
                   <History className="mr-2 h-4 w-4" />
                   <Trans>Resend</Trans>
                 </div>
-              </DropdownMenuItem>
+              </RowMenuDialogItem>
             }
           />
         )}
@@ -267,12 +284,16 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
           documentId={row.id}
           token={isOwner ? undefined : recipient?.token}
           trigger={({ loading, disabled }) => (
-            <DropdownMenuItem disabled={disabled || isDraft} onSelect={(e) => e.preventDefault()}>
+            <RowMenuDialogItem
+              onDialogClose={closeMenu}
+              disabled={disabled || isDraft}
+              onSelect={(e) => e.preventDefault()}
+            >
               <div className="flex items-center">
                 {loading ? <Loader className="mr-2 h-4 w-4" /> : <Share className="mr-2 h-4 w-4" />}
                 <Trans>Share Signing Card</Trans>
               </div>
-            </DropdownMenuItem>
+            </RowMenuDialogItem>
           )}
         />
       </DropdownMenuContent>

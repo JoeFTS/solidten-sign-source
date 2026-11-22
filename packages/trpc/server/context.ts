@@ -82,4 +82,10 @@ export type TrpcContext = (
   res: Response;
   metadata: ApiRequestMetadata;
   logger: Logger;
+  /**
+   * Solid Ten Sign (S-L1): a sign-in locked for in-person signing. The public and
+   * maybe-authenticated procedures treat it as anonymous (user and session are null)
+   * and keep it here for the in-person routes.
+   */
+  inPersonLock?: { session: Session; user: SessionUser } | null;
 };

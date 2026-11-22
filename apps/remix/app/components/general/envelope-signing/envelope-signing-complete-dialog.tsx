@@ -9,6 +9,7 @@ import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import type { TRecipientAccessAuth } from '@documenso/lib/types/document-auth';
 import { isTspEnvelope } from '@documenso/lib/types/signature-level';
 import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
+import { isCalculatedField } from '@documenso/lib/utils/field-conditions';
 import { trpc } from '@documenso/trpc/react';
 import { useToast } from '@documenso/ui/primitives/use-toast';
 import { useLingui } from '@lingui/react/macro';
@@ -17,6 +18,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useRevalidator, useSearchParams } from 'react-router';
 
 import { useEmbedSigningContext } from '~/components/embed/embed-signing-context';
+import { usePublicForm } from '~/components/general/public-form/public-form-provider';
 
 import { DocumentSigningCompleteDialog } from '../document-signing/document-signing-complete-dialog';
 import { useRequiredEnvelopeSigningContext } from '../document-signing/envelope-signing-provider';
@@ -46,6 +48,8 @@ export const EnvelopeSignerCompleteDialog = () => {
   } = useRequiredEnvelopeSigningContext();
 
   const { currentEnvelopeItem, setCurrentEnvelopeItem } = useCurrentEnvelopeRender();
+
+  const publicForm = usePublicForm();
 
   const { onDocumentCompleted, onDocumentError } = useEmbedSigningContext() || {};
 
@@ -252,7 +256,12 @@ export const EnvelopeSignerCompleteDialog = () => {
 
       const error = AppError.parseError(err);
 
-      if (error.code !== AppErrorCode.TWO_FACTOR_AUTH_FAILED) {
+      // Solid Ten Sign (AUD-1): a locked access code is shown in the code form, like a wrong code.
+      const isCodeError =
+        error.code === AppErrorCode.TWO_FACTOR_AUTH_FAILED ||
+        (error.code === AppErrorCode.TOO_MANY_REQUESTS && Boolean(accessAuthOptions));
+
+      if (!isCodeError) {
         analytics.captureException(err, {
           source: 'signing',
           location: 'complete_document',
@@ -288,13 +297,16 @@ export const EnvelopeSignerCompleteDialog = () => {
         throw new Error('Recipient direct token is required');
       }
 
+      // Solid Ten: calculated fields are computed by the server; their values are not sent.
+      const submittedFields = recipient.fields.filter((field) => !isCalculatedField(field));
+
       const { token } = await createDocumentFromDirectTemplate({
         directTemplateToken: recipient.directToken, // The direct template token is inserted into the recipient token for ease of use.
         directTemplateExternalId,
         directRecipientName: recipientDetails?.name || fullName,
         directRecipientEmail: recipientDetails?.email || email,
         templateUpdatedAt: envelope.updatedAt,
-        signedFieldValues: recipient.fields.map((field) => {
+        signedFieldValues: submittedFields.map((field) => {
           let value = field.customText;
           let isBase64 = false;
 
@@ -310,10 +322,15 @@ export const EnvelopeSignerCompleteDialog = () => {
             isBase64,
           };
         }),
-        nextSigner,
+        // Solid Ten Sign: a public form never names the next signer (the server refuses it).
+        nextSigner: publicForm ? undefined : nextSigner,
+        publicForm: publicForm ? await publicForm.getSubmissionPayload() : undefined,
       });
 
-      const redirectUrl = envelope.documentMeta.redirectUrl;
+      // Solid Ten Sign (RT4-M3): the proof is used up now.
+      publicForm?.clearVerification({ keepOnScreen: true });
+
+      const redirectUrl = publicForm?.form.redirectUrl || envelope.documentMeta.redirectUrl;
 
       if (onDocumentCompleted) {
         await navigate({
@@ -332,6 +349,13 @@ export const EnvelopeSignerCompleteDialog = () => {
       }
     } catch (err) {
       console.log('err', err);
+
+      // Solid Ten Sign (RT4-M3): a used or refused proof cannot be sent again; ask for a code.
+      const code = AppError.parseError(err).code;
+
+      if (code === 'PUBLIC_FORM_PROOF_USED' || code === 'PUBLIC_FORM_EMAIL_NOT_VERIFIED') {
+        publicForm?.clearVerification();
+      }
 
       analytics.captureException(err, {
         source: 'signing',
@@ -382,7 +406,7 @@ export const EnvelopeSignerCompleteDialog = () => {
       fields={recipientFieldsRemaining}
       fieldsValidated={handleOnNextFieldClick}
       recipient={recipient}
-      allowDictateNextSigner={Boolean(nextRecipient && envelope.documentMeta.allowDictateNextSigner)}
+      allowDictateNextSigner={!publicForm && Boolean(nextRecipient && envelope.documentMeta.allowDictateNextSigner)}
       disableNameInput={!isDirectTemplate && recipient.name !== ''}
       defaultNextSigner={nextRecipient ? { name: nextRecipient.name, email: nextRecipient.email } : undefined}
       buttonSize="sm"

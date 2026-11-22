@@ -107,7 +107,7 @@ describe('isPrivateUrl', () => {
     it('should allow public IP addresses', () => {
       expect(isPrivateUrl('http://8.8.8.8')).toBe(false);
       expect(isPrivateUrl('http://1.1.1.1')).toBe(false);
-      expect(isPrivateUrl('http://203.0.113.1')).toBe(false);
+      expect(isPrivateUrl('http://93.184.216.34')).toBe(false);
     });
   });
 

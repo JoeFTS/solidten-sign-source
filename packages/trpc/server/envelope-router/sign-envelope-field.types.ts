@@ -61,6 +61,15 @@ export const ZSignEnvelopeFieldResponseSchema = z.object({
   }).extend({
     signature: SignatureSchema.nullish(),
   }),
+  // Other fields of the recipient whose stored values the field rules changed.
+  affectedFields: z
+    .array(
+      ZFieldSchema.omit({
+        templateId: true,
+        documentId: true,
+      }),
+    )
+    .optional(),
 });
 
 export type TSignEnvelopeFieldValue = z.infer<typeof ZSignEnvelopeFieldValue>;

@@ -67,6 +67,13 @@ export const SessionProvider = ({ children, initialSession }: SessionProviderPro
       return;
     }
 
+    // Solid Ten Sign (RT3-L1): a sign-in locked for in-person signing cannot reach the host's
+    // organisations (the API answers 403), so do not ask.
+    if (newSession.session.stInPersonSessionId) {
+      setSession({ session: newSession.session, user: newSession.user, organisations: [] });
+      return;
+    }
+
     const organisations = await trpc.organisation.internal.getOrganisationSession
       .query(undefined, SKIP_QUERY_BATCH_META.trpc)
       .catch((e) => {

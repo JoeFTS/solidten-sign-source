@@ -6,9 +6,11 @@ import { captureServerEvent } from '@documenso/lib/server-only/analytics/capture
 import { getEnvelopeForDirectTemplateSigning } from '@documenso/lib/server-only/envelope/get-envelope-for-direct-template-signing';
 import { getEnvelopeRequiredAccessData } from '@documenso/lib/server-only/envelope/get-envelope-required-access-data';
 import { getOrganisationClaimByTeamId } from '@documenso/lib/server-only/organisation/get-organisation-claims';
+import { getPublicFormForVisitor } from '@documenso/lib/server-only/public-form/get-public-form-for-visitor';
 import { getTemplateByDirectLinkToken } from '@documenso/lib/server-only/template/get-template-by-direct-link-token';
 import { assertSenderNotDisabled } from '@documenso/lib/server-only/user/assert-user-not-disabled';
 import { DocumentAccessAuth } from '@documenso/lib/types/document-auth';
+import { extractRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
 import { fireAndForget } from '@documenso/lib/universal/fire-and-forget';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
 import { prisma } from '@documenso/prisma';
@@ -21,6 +23,7 @@ import { DocumentSigningAuthProvider } from '~/components/general/document-signi
 import { DocumentSigningProvider } from '~/components/general/document-signing/document-signing-provider';
 import { DocumentSigningRecipientProvider } from '~/components/general/document-signing/document-signing-recipient-provider';
 import { EnvelopeSigningProvider } from '~/components/general/document-signing/envelope-signing-provider';
+import { PublicFormProvider } from '~/components/general/public-form/public-form-provider';
 import { superLoaderJson, useSuperLoaderData } from '~/utils/super-json-loader';
 
 import type { Route } from './+types/direct.$token';
@@ -242,12 +245,15 @@ async function handleV2Loader({ params, request }: Route.LoaderArgs) {
     });
   });
 
+  const publicForm = await getPublicFormForVisitor({ token, ipAddress: extractRequestMetadata(request).ipAddress });
+
   return {
     token,
     user,
     envelopeForSigning,
     hidePoweredBy,
     allowEmbedSigningWhitelabel,
+    publicForm,
   };
 }
 
@@ -353,36 +359,40 @@ const EmbedDirectTemplatePageV1 = ({ data }: { data: Awaited<ReturnType<typeof h
 };
 
 const EmbedDirectTemplatePageV2 = ({ data }: { data: Awaited<ReturnType<typeof handleV2Loader>> }) => {
-  const { token, user, envelopeForSigning, hidePoweredBy, allowEmbedSigningWhitelabel } = data;
+  const { user, envelopeForSigning, hidePoweredBy, allowEmbedSigningWhitelabel, publicForm } = data;
 
   const { envelope, recipient } = envelopeForSigning;
 
   return (
-    <EnvelopeSigningProvider
-      envelopeData={envelopeForSigning}
-      email={user?.email}
-      fullName={user?.name}
-      signature={user?.signature}
-    >
-      <DocumentSigningAuthProvider
-        documentAuthOptions={envelope.authOptions}
-        recipient={recipient}
-        user={user}
-        isDirectTemplate={true}
-      >
-        <EnvelopeRenderProvider
-          version="current"
-          envelope={envelope}
-          envelopeItems={envelope.envelopeItems}
-          contents={envelope.contents}
-          token={recipient.token}
+    <PublicFormProvider form={publicForm} title={envelope.title}>
+      {({ verifiedEmail }) => (
+        <EnvelopeSigningProvider
+          envelopeData={envelopeForSigning}
+          email={verifiedEmail ?? user?.email}
+          fullName={user?.name}
+          signature={user?.signature}
         >
-          <EmbedSignDocumentV2ClientPage
-            hidePoweredBy={hidePoweredBy}
-            allowWhitelabelling={allowEmbedSigningWhitelabel}
-          />
-        </EnvelopeRenderProvider>
-      </DocumentSigningAuthProvider>
-    </EnvelopeSigningProvider>
+          <DocumentSigningAuthProvider
+            documentAuthOptions={envelope.authOptions}
+            recipient={recipient}
+            user={user}
+            isDirectTemplate={true}
+          >
+            <EnvelopeRenderProvider
+              version="current"
+              envelope={envelope}
+              envelopeItems={envelope.envelopeItems}
+              contents={envelope.contents}
+              token={recipient.token}
+            >
+              <EmbedSignDocumentV2ClientPage
+                hidePoweredBy={hidePoweredBy}
+                allowWhitelabelling={allowEmbedSigningWhitelabel}
+              />
+            </EnvelopeRenderProvider>
+          </DocumentSigningAuthProvider>
+        </EnvelopeSigningProvider>
+      )}
+    </PublicFormProvider>
   );
 };

@@ -41,7 +41,9 @@ import { createDocumentAuthOptions, createRecipientAuthOptions } from '../../uti
 import { assertEnvelopeContentSaveWithinLimits } from '../../utils/envelope-content';
 import { buildTeamWhereQuery } from '../../utils/teams';
 import { incrementDocumentId, incrementTemplateId } from '../envelope/increment-id';
+import { assertFieldLogicAllowed, toFieldLogicDefinitions } from '../field-logic/assert-field-logic';
 import { assertOrganisationRatesAndLimits } from '../rate-limit/assert-organisation-rates-and-limits';
+import { assertAssistantSigningOrderValid } from '../recipient/assert-assistant-signing-order';
 import { assignOmittedRecipientSigningOrders } from '../recipient/assign-omitted-recipient-signing-orders';
 import { assertCompatibleRecipientGrouping } from '../signature-level/assert-compatible-recipient-grouping';
 import { assertCompatibleRecipientRole } from '../signature-level/assert-compatible-recipient-role';
@@ -129,6 +131,13 @@ export type CreateEnvelopeOptions = {
   meta?: Partial<Omit<DocumentMeta, 'id'>>;
   requestMetadata: ApiRequestMetadata;
 };
+
+/**
+ * Solid Ten: the create transaction only writes rows, but a busy Node thread (PDF work, garbage
+ * collection) can stall it past the 10 s client default (LD2-A). Give it room; heavy work is also
+ * serialised by the heavy-PDF queue.
+ */
+const CREATE_ENVELOPE_TRANSACTION_OPTIONS = { timeout: 30_000, maxWait: 15_000 };
 
 export const createEnvelope = async ({
   userId,
@@ -316,6 +325,13 @@ export const createEnvelope = async ({
   }));
 
   assertCompatibleRecipientGrouping({ signatureLevel, recipients: requestedRecipients });
+
+  // Solid Ten Sign (AUD-C12): an assistant needs sequential signing.
+  assertAssistantSigningOrderValid({
+    signingOrder: meta?.signingOrder,
+    signatureLevel,
+    roles: requestedRecipients.map((recipient) => recipient.role),
+  });
 
   const recipientsToCreate = assignOmittedRecipientSigningOrders({ recipients: requestedRecipients });
 
@@ -668,6 +684,11 @@ export const createEnvelope = async ({
       });
     }
 
+    await assertFieldLogicAllowed({
+      envelope: createdEnvelope,
+      fields: toFieldLogicDefinitions(createdEnvelope.fields),
+    });
+
     // Only create audit logs for documents.
     if (type === EnvelopeType.DOCUMENT) {
       await tx.documentAuditLog.create({
@@ -753,7 +774,7 @@ export const createEnvelope = async ({
     }
 
     return createdEnvelope;
-  });
+  }, CREATE_ENVELOPE_TRANSACTION_OPTIONS);
 
   // Trigger webhook outside the transaction to avoid holding the connection
   // open during network I/O.

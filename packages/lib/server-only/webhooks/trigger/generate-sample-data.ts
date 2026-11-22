@@ -58,7 +58,6 @@ export const generateSampleWebhookPayload = (event: WebhookTriggerEvents, webhoo
         templateId: null,
         email: 'signer@documenso.com',
         name: 'John Doe',
-        token: 'SIGNING_TOKEN',
         documentDeletedAt: null,
         expiresAt: null,
         expirationNotifiedAt: null,
@@ -80,7 +79,6 @@ export const generateSampleWebhookPayload = (event: WebhookTriggerEvents, webhoo
         templateId: null,
         email: 'signer@documenso.com',
         name: 'John Doe',
-        token: 'SIGNING_TOKEN',
         documentDeletedAt: null,
         expiresAt: null,
         expirationNotifiedAt: null,
@@ -137,7 +135,6 @@ export const generateSampleWebhookPayload = (event: WebhookTriggerEvents, webhoo
             ...basePayload.Recipient[0],
             email: 'signer1@documenso.com',
             name: 'Signer 1',
-            token: 'SIGNING_TOKEN',
             signingOrder: 2,
             role: RecipientRole.SIGNER,
             sendStatus: SendStatus.SENT,
@@ -218,7 +215,6 @@ export const generateSampleWebhookPayload = (event: WebhookTriggerEvents, webhoo
             id: 51,
             email: 'signer1@documenso.com',
             name: 'Signer 1',
-            token: 'SIGNING_TOKEN',
             signedAt: now,
             authOptions: {
               accessAuth: null,
@@ -240,7 +236,6 @@ export const generateSampleWebhookPayload = (event: WebhookTriggerEvents, webhoo
             id: 51,
             email: 'signer1@documenso.com',
             name: 'Signer 1',
-            token: 'SIGNING_TOKEN',
             signedAt: now,
             authOptions: {
               accessAuth: null,
@@ -277,7 +272,6 @@ export const generateSampleWebhookPayload = (event: WebhookTriggerEvents, webhoo
             templateId: null,
             email: 'signer2@documenso.com',
             name: 'Signer 2',
-            token: 'SIGNING_TOKEN',
             documentDeletedAt: null,
             expiresAt: null,
             expirationNotifiedAt: null,
@@ -300,7 +294,6 @@ export const generateSampleWebhookPayload = (event: WebhookTriggerEvents, webhoo
             templateId: null,
             email: 'signer1@documenso.com',
             name: 'Signer 1',
-            token: 'SIGNING_TOKEN',
             documentDeletedAt: null,
             expiresAt: null,
             expirationNotifiedAt: null,
@@ -325,7 +318,6 @@ export const generateSampleWebhookPayload = (event: WebhookTriggerEvents, webhoo
             templateId: null,
             email: 'signer2@documenso.com',
             name: 'Signer 2',
-            token: 'SIGNING_TOKEN',
             documentDeletedAt: null,
             expiresAt: null,
             expirationNotifiedAt: null,
@@ -348,7 +340,6 @@ export const generateSampleWebhookPayload = (event: WebhookTriggerEvents, webhoo
             templateId: null,
             email: 'signer1@documenso.com',
             name: 'Signer 1',
-            token: 'SIGNING_TOKEN',
             documentDeletedAt: null,
             expiresAt: null,
             expirationNotifiedAt: null,
@@ -456,7 +447,6 @@ export const generateSampleWebhookPayload = (event: WebhookTriggerEvents, webhoo
             templateId: null,
             email: 'signer1@documenso.com',
             name: 'Signer 1',
-            token: 'SIGNING_TOKEN',
             documentDeletedAt: null,
             expiresAt: null,
             expirationNotifiedAt: null,
@@ -481,7 +471,6 @@ export const generateSampleWebhookPayload = (event: WebhookTriggerEvents, webhoo
             templateId: null,
             email: 'signer@documenso.com',
             name: 'Signer',
-            token: 'SIGNING_TOKEN',
             documentDeletedAt: null,
             expiresAt: null,
             expirationNotifiedAt: null,
@@ -546,6 +535,70 @@ export const generateSampleWebhookPayload = (event: WebhookTriggerEvents, webhoo
             signingStatus: SigningStatus.NOT_SIGNED,
           },
         ],
+      },
+      createdAt: now.toISOString(),
+      webhookEndpoint: webhookUrl,
+    };
+  }
+
+  if (event === WebhookTriggerEvents.DOCUMENT_PURGED) {
+    return {
+      event,
+      payload: {
+        ...basePayload,
+        status: DocumentStatus.COMPLETED,
+        completedAt: new Date(now.getTime() - 400 * 24 * 60 * 60 * 1000),
+      },
+      createdAt: now.toISOString(),
+      webhookEndpoint: webhookUrl,
+    };
+  }
+
+  if (event === WebhookTriggerEvents.DOCUMENT_COMMENT_CREATED) {
+    // The document, plus the comment that was written.
+    const commentPayload = {
+      ...basePayload,
+      status: DocumentStatus.PENDING,
+      comment: {
+        id: 'cm3commentsample0000000000',
+        threadId: 'cm3threadsample00000000000',
+        isSharedThread: false,
+        authorType: 'RECIPIENT',
+        authorName: basePayload.recipients[0].name,
+        authorEmail: basePayload.recipients[0].email,
+        recipientId: basePayload.recipients[0].id,
+        body: 'Can we change the start date to the first of the month?',
+        createdAt: now.toISOString(),
+      },
+    };
+
+    return {
+      event,
+      payload: commentPayload,
+      createdAt: now.toISOString(),
+      webhookEndpoint: webhookUrl,
+    };
+  }
+
+  if (event === WebhookTriggerEvents.RECIPIENT_REASSIGNED) {
+    const reassignedRecipient = {
+      email: 'new.signer@documenso.com',
+      name: 'New Signer',
+      sendStatus: SendStatus.SENT,
+      readStatus: ReadStatus.NOT_OPENED,
+      signingStatus: SigningStatus.NOT_SIGNED,
+      signedAt: null,
+      reminderCount: 0,
+      lastReminderSentAt: null,
+    };
+
+    return {
+      event,
+      payload: {
+        ...basePayload,
+        status: DocumentStatus.PENDING,
+        recipients: [{ ...basePayload.recipients[0], ...reassignedRecipient }],
+        Recipient: [{ ...basePayload.Recipient[0], ...reassignedRecipient }],
       },
       createdAt: now.toISOString(),
       webhookEndpoint: webhookUrl,

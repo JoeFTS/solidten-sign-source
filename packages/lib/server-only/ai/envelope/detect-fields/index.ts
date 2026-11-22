@@ -8,9 +8,9 @@ import { AppError, AppErrorCode } from '../../../../errors/app-error';
 import { getFileServerSide } from '../../../../universal/upload/get-file.server';
 import { resizeImageToGeminiImage } from '../../../../utils/images/resize-image-to-gemini-image';
 import { getEnvelopeById } from '../../../envelope/get-envelope-by-id';
+import { pdfToImagesIsolated } from '../../../pdf-child/isolated-pdf';
 import { createEnvelopeRecipients } from '../../../recipient/create-envelope-recipients';
 import { vertex } from '../../google';
-import { pdfToImages } from '../../pdf-to-images';
 import { buildRecipientContextMessage, normalizeDetectedField, resolveRecipientFromKey } from './helpers';
 import { SYSTEM_PROMPT } from './prompt';
 import { ZSubmitDetectedFieldsInputSchema } from './schema';
@@ -135,7 +135,7 @@ export const detectFieldsFromPdf = async ({
   context,
   onProgress,
 }: DetectFieldsFromPdfOptions) => {
-  const pageImages = await pdfToImages(pdfBytes);
+  const pageImages = await pdfToImagesIsolated(pdfBytes);
 
   if (pageImages.length === 0) {
     return [];

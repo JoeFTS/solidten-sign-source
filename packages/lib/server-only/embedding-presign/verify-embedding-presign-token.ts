@@ -62,8 +62,10 @@ export const verifyEmbeddingPresignToken = async ({ token, scope }: VerifyEmbedd
           id: true,
           name: true,
           email: true,
+          disabled: true,
         },
       },
+      team: { select: { organisation: { select: { owner: { select: { disabled: true } } } } } },
     },
   });
 
@@ -121,8 +123,24 @@ export const verifyEmbeddingPresignToken = async ({ token, scope }: VerifyEmbedd
     });
   }
 
+  // Solid Ten (AUD-35): a presign token dies with its API token, as getApiTokenByToken rules. Checked after the
+  // signature so a forged token learns nothing about the API token.
+  if (apiToken.user.disabled || apiToken.team.organisation.owner.disabled) {
+    throw new AppError(AppErrorCode.UNAUTHORIZED, {
+      message: 'Invalid presign token: user is disabled',
+    });
+  }
+
+  if (apiToken.expires && apiToken.expires < new Date()) {
+    throw new AppError(AppErrorCode.UNAUTHORIZED, {
+      message: 'Invalid presign token: API token expired',
+    });
+  }
+
+  const { team: _team, ...apiTokenFields } = apiToken;
+
   return {
-    ...apiToken,
+    ...apiTokenFields,
     userId,
     user: {
       id: apiToken.user.id,

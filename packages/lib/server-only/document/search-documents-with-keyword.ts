@@ -31,8 +31,10 @@ export const searchDocumentsWithKeyword = async ({ query, userId, limit = 20 }: 
 
   const filters: Prisma.EnvelopeWhereInput[] = [
     // Documents owned by the user matching title, externalId, or recipient email.
+    // Solid Ten (AUD-9): only in teams the user still belongs to.
     {
       userId,
+      teamId: { in: teamIds },
       deletedAt: null,
       OR: [
         { title: { contains: query, mode: 'insensitive' } },

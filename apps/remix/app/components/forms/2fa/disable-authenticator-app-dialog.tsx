@@ -23,6 +23,8 @@ import { flushSync } from 'react-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import { getCredentialStepUpError } from '~/utils/credential-step-up-error';
+
 export const ZDisable2FAForm = z.object({
   totpCode: z.string().trim().optional(),
   backupCode: z.string().trim().optional(),
@@ -84,11 +86,12 @@ export const DisableAuthenticatorAppDialog = () => {
       });
 
       await refreshSession();
-    } catch (_err) {
+    } catch (err) {
       toast({
         title: _(msg`Unable to disable two-factor authentication`),
         description: _(
-          msg`We were unable to disable two-factor authentication for your account. Please ensure that you have entered your password and backup code correctly and try again.`,
+          getCredentialStepUpError(err) ??
+            msg`We were unable to disable two-factor authentication for your account. Please ensure that you have entered your password and backup code correctly and try again.`,
         ),
         variant: 'destructive',
       });

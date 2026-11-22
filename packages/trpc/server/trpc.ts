@@ -1,5 +1,17 @@
 import { assertNotEmbedSession } from '@documenso/auth/server/lib/session/embed-session-restrictions';
-import { AppError, genericErrorCodeToTrpcErrorCodeMap } from '@documenso/lib/errors/app-error';
+import { AppError, AppErrorCode, genericErrorCodeToTrpcErrorCodeMap } from '@documenso/lib/errors/app-error';
+import { toPublicDatabaseError } from '@documenso/lib/errors/database-errors';
+import { createServerBusyError, isTransactionTimeoutError } from '@documenso/lib/errors/server-busy';
+import {
+  assertRecipientTokenAccess,
+  readRecipientTokensFromInput,
+} from '@documenso/lib/server-only/document/assert-recipient-token-access';
+import { assertNotInPersonLocked } from '@documenso/lib/server-only/in-person/assert-not-in-person-locked';
+import { getInPersonLockId } from '@documenso/lib/server-only/in-person/in-person-lock';
+import {
+  hideRecipientTokensIn,
+  swapInPersonTurnTokensIn,
+} from '@documenso/lib/server-only/in-person/in-person-turn-token';
 import { getApiTokenByToken } from '@documenso/lib/server-only/public-api/get-api-token-by-token';
 import { assertUserNotDisabled } from '@documenso/lib/server-only/user/assert-user-not-disabled';
 import type { TrpcApiLog } from '@documenso/lib/types/api-logs';
@@ -161,6 +173,9 @@ export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, me
     assertNotEmbedSession(ctx.session);
   }
 
+  // Solid Ten Sign: a sign-in handed to signers for in-person signing cannot reach the host's account.
+  await assertNotInPersonLocked(ctx.session);
+
   // Recreate the logger with a sub request ID to differentiate between batched
   // requests, as well as identifying attributes so every subsequent log line
   // (including errors) inherits them.
@@ -272,7 +287,10 @@ export const maybeAuthenticatedMiddleware = t.middleware(async ({ ctx, next, pat
   // unless the route has opted in via `allowEmbedSession`.
   const isEmbedSessionAllowed = !ctx.session?.isEmbed || Boolean(meta?.allowEmbedSession);
 
-  const sessionUser = ctx.user && !ctx.user.disabled && isEmbedSessionAllowed ? ctx.user : null;
+  // Solid Ten Sign (S-L1): a sign-in locked for in-person signing is anonymous here too.
+  const inPersonLock = await findInPersonLock(ctx);
+
+  const sessionUser = ctx.user && !ctx.user.disabled && isEmbedSessionAllowed && !inPersonLock ? ctx.user : null;
   const sessionRecord = sessionUser ? ctx.session : null;
 
   // Resolve `auth` once so it stays in sync between the logger bindings and
@@ -300,6 +318,7 @@ export const maybeAuthenticatedMiddleware = t.middleware(async ({ ctx, next, pat
       logger: trpcSessionLogger,
       user: sessionUser,
       session: sessionRecord,
+      inPersonLock,
       metadata: {
         ...ctx.metadata,
         auditUser: sessionUser
@@ -327,6 +346,8 @@ export const adminMiddleware = t.middleware(async ({ ctx, next, path }) => {
   assertUserNotDisabled(ctx.user);
 
   assertNotEmbedSession(ctx.session);
+
+  await assertNotInPersonLocked(ctx.session);
 
   const isUserAdmin = isAdmin(ctx.user);
 
@@ -374,6 +395,18 @@ export const adminMiddleware = t.middleware(async ({ ctx, next, path }) => {
   });
 });
 
+/**
+ * Solid Ten Sign (S-L1): the locked sign-in and its user, when this request carries one.
+ * Costs nothing for ordinary sign-ins: the marker is on the session row already loaded.
+ */
+const findInPersonLock = async (ctx: TrpcContext) => {
+  if (!ctx.session?.stInPersonSessionId || !ctx.user) {
+    return null;
+  }
+
+  return (await getInPersonLockId(ctx.session)) ? { session: ctx.session, user: ctx.user } : null;
+};
+
 export const procedureMiddleware = t.middleware(async ({ ctx, next, path }) => {
   // Recreate the logger with a sub request ID to differentiate between batched
   // requests, as well as identifying attributes so every subsequent log line
@@ -393,20 +426,136 @@ export const procedureMiddleware = t.middleware(async ({ ctx, next, path }) => {
     position: 'trpcProcedure',
   });
 
-  return await next({
-    ctx: {
-      ...ctx,
-      logger: trpcSessionLogger,
-    },
-  });
+  // Solid Ten Sign (S-L1): public procedures never see the host behind a locked sign-in.
+  const inPersonLock = await findInPersonLock(ctx);
+
+  const nextCtx: TrpcContext = inPersonLock
+    ? {
+        ...ctx,
+        logger: trpcSessionLogger,
+        user: null,
+        session: null,
+        inPersonLock,
+        metadata: { ...ctx.metadata, auth: null },
+      }
+    : { ...ctx, logger: trpcSessionLogger, inPersonLock: null };
+
+  return await next({ ctx: nextCtx });
 });
+
+/**
+ * Solid Ten Sign: on an in-person device the signing page holds a turn credential,
+ * never the signer's link token. Swap it for the link token before the procedure
+ * runs, and swap it back in the response. Ordinary sign-ins skip this.
+ */
+const inPersonTurnTokenMiddleware = t.middleware(async ({ ctx, next, getRawInput }) => {
+  if (!ctx.session?.stInPersonSessionId) {
+    return next();
+  }
+
+  const { value, swapped } = await swapInPersonTurnTokensIn({
+    value: await getRawInput(),
+    authSessionId: ctx.session.id,
+  });
+
+  if (swapped.size === 0) {
+    return next();
+  }
+
+  const result = await next({ getRawInput: async () => value });
+
+  return result.ok ? { ...result, data: hideRecipientTokensIn(result.data, swapped) } : result;
+});
+
+/**
+ * Solid Ten Sign (SEC3-C1): every procedure that takes a signing link token applies the
+ * recipient's ACCESS requirement before it runs, with one rule for all of them
+ * (assertRecipientTokenAccess, the signing page's rule). Before, only the page loaders checked
+ * it: an ACCOUNT recipient could be signed and completed with the link alone.
+ *
+ * It runs after the in-person swap (so it sees the real token) and before the auth middlewares,
+ * on the raw sign-in: a browser session counts, an embed session counts, a disabled account, an
+ * API token or a sign-in locked for in-person signing does not.
+ *
+ * Exempt, on purpose:
+ * - envelope.recipient.report: reporting an abusive sender from the email link must work
+ *   without the account; it shows no document and changes no field.
+ * - lifecycle.getSigningLinkStatus: tells an old link that it was passed on; shows nothing else.
+ */
+const RECIPIENT_TOKEN_ACCESS_EXEMPT_PATHS = new Set(['envelope.recipient.report', 'lifecycle.getSigningLinkStatus']);
+
+const recipientTokenAccessMiddleware = t.middleware(async ({ ctx, next, path, getRawInput }) => {
+  if (RECIPIENT_TOKEN_ACCESS_EXEMPT_PATHS.has(path)) {
+    return next();
+  }
+
+  // Solid Ten Sign (AUD-6): every token the input carries, so a decoy cannot hide the real one.
+  const tokens = readRecipientTokensFromInput(await getRawInput().catch(() => undefined));
+
+  if (tokens.length === 0) {
+    return next();
+  }
+
+  const isSignedIn = Boolean(ctx.session && ctx.user && !ctx.user.disabled);
+  const inPersonLock = isSignedIn ? await findInPersonLock(ctx) : null;
+
+  for (const token of tokens) {
+    await assertRecipientTokenAccess({
+      token,
+      userId: isSignedIn && !inPersonLock ? ctx.user?.id : undefined,
+    });
+  }
+
+  return next();
+});
+
+/**
+ * Solid Ten: a database transaction that ran out of time (the Node thread was busy) is reported
+ * as SERVER_BUSY, HTTP 503 with Retry-After, never as a 500 carrying Prisma's text (LD2-A).
+ */
+const serverBusyMiddleware = t.middleware(async ({ next }) => {
+  const result = await next();
+
+  if (!result.ok && (isTransactionTimeoutError(result.error.cause) || isTransactionTimeoutError(result.error))) {
+    throw createServerBusyError();
+  }
+
+  // Solid Ten: a database that cannot take requests (full disk, unreachable) is a plain 503; any
+  // other database error a plain 500. Never Prisma's text (DISK-L1).
+  const databaseError = result.ok ? null : toPublicDatabaseError(result.error, 'a tRPC call');
+
+  if (databaseError) {
+    throw databaseError;
+  }
+
+  // Solid Ten: a limit checked inside a procedure (comments, public forms, ...) answers the same
+  // 429 as the limiter in front of tRPC: top-level code -32029, appError and Retry-After kept
+  // (LD3-L1).
+  if (!result.ok && result.error.code !== 'TOO_MANY_REQUESTS') {
+    const cause = result.error.cause;
+
+    if (cause instanceof AppError && (cause.statusCode === 429 || cause.code === AppErrorCode.TOO_MANY_REQUESTS)) {
+      throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: cause.message, cause });
+    }
+  }
+
+  return result;
+});
+
+const baseProcedure = t.procedure.use(serverBusyMiddleware);
 
 /**
  * Routers and Procedures
  */
 export const router = t.router;
-export const procedure = t.procedure.use(procedureMiddleware);
-export const authenticatedProcedure = t.procedure.use(authenticatedMiddleware);
+export const procedure = baseProcedure
+  .use(inPersonTurnTokenMiddleware)
+  .use(recipientTokenAccessMiddleware)
+  .use(procedureMiddleware);
+export const authenticatedProcedure = baseProcedure.use(recipientTokenAccessMiddleware).use(authenticatedMiddleware);
 // While this is functionally the same as `procedure`, it's useful for indicating purpose
-export const maybeAuthenticatedProcedure = t.procedure.use(maybeAuthenticatedMiddleware);
-export const adminProcedure = t.procedure.use(adminMiddleware);
+export const maybeAuthenticatedProcedure = baseProcedure
+  .use(inPersonTurnTokenMiddleware)
+  .use(recipientTokenAccessMiddleware)
+  .use(maybeAuthenticatedMiddleware);
+export const adminProcedure = baseProcedure.use(adminMiddleware);

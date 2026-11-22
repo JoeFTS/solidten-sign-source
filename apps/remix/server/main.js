@@ -11,7 +11,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import handle from 'hono-react-router-adapter/node';
 
 import { getLoadContext } from './hono/server/load-context.js';
-import server from './hono/server/router.js';
+import server, { installGracefulShutdown } from './hono/server/router.js';
 import * as build from './index.js';
 
 // Sub-path the app is served under (e.g. "/ESign"). Empty = root.
@@ -46,4 +46,7 @@ const handler = handle(build, server, { getLoadContext });
 
 const port = parseInt(process.env.PORT || '3000', 10);
 
-serve({ fetch: handler.fetch, port });
+// Solid Ten: on SIGTERM, drain background jobs before the process ends (FS3-M1).
+const httpServer = serve({ fetch: handler.fetch, port });
+
+installGracefulShutdown(httpServer);

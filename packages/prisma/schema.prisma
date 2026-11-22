@@ -173,6 +173,9 @@ enum WebhookTriggerEvents {
   DOCUMENT_REJECTED
   DOCUMENT_CANCELLED
   RECIPIENT_EXPIRED
+  RECIPIENT_REASSIGNED
+  DOCUMENT_COMMENT_CREATED
+  DOCUMENT_PURGED
   DOCUMENT_RECIPIENT_COMPLETED
   DOCUMENT_REMINDER_SENT
   TEMPLATE_CREATED
@@ -213,6 +216,13 @@ model WebhookCall {
   createdAt       DateTime             @default(now())
   webhookId       String
   webhook         Webhook              @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  // Solid Ten: spaced retries. attempt counts from 1; nextAttemptAt is set on a failed call that
+  // will be retried and cleared when the retry sweep picks it up.
+  attempt       Int       @default(1)
+  nextAttemptAt DateTime?
+
+  @@index([nextAttemptAt])
 }
 
 enum ApiTokenAlgorithm {
@@ -378,6 +388,9 @@ model Session {
 
   isEmbed Boolean @default(false)
 
+  /// Solid Ten Sign: set while this sign-in is locked to an in-person signing session.
+  stInPersonSessionId String?
+
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -505,6 +518,11 @@ model Envelope {
   documentMeta   DocumentMeta @relation(fields: [documentMetaId], references: [id])
 
   envelopeAttachments EnvelopeAttachment[]
+  scheduledSend       EnvelopeScheduledSend?
+  fieldFileUploads    FieldFileUpload[]
+  inPersonSessions    InPersonSigningSession[]
+  commentSettings     EnvelopeCommentSettings?
+  commentThreads      EnvelopeCommentThread[]
 
   @@index([type])
   @@index([status])
@@ -551,6 +569,7 @@ model DocumentAuditLog {
   envelope Envelope? @relation(fields: [envelopeId], references: [id], onDelete: SetNull)
 
   @@index([envelopeId])
+  @@index([type, createdAt]) // Solid Ten: usage reports read DOCUMENT_SENT rows by date.
 }
 
 enum DocumentDataType {
@@ -602,6 +621,8 @@ model DocumentMeta {
   envelopeExpirationPeriod Json? /// [EnvelopeExpirationPeriod] @zod.custom.use(ZEnvelopeExpirationPeriodSchema)
 
   reminderSettings Json? /// [EnvelopeReminderSettings] @zod.custom.use(ZEnvelopeReminderSettingsSchema)
+
+  signingChannel String? /// Solid Ten: EMAIL, SMS or EMAIL_AND_SMS. Null means EMAIL.
 
   envelope Envelope?
 }
@@ -664,6 +685,14 @@ model Recipient {
   lastReminderSentAt   DateTime?
   nextReminderAt       DateTime?
   reminderCount        Int           @default(0)
+  // Solid Ten: the signing-request email could not be delivered after every retry.
+  // Cleared when a later send to this recipient succeeds.
+  deliveryFailedAt     DateTime?
+  // Solid Ten: set when an unverified visitor typed this address on a direct link. No mail goes
+  // to it. Cleared when the sender changes the recipient's email.
+  unverifiedEmailAt    DateTime?
+  // Solid Ten: wrong emailed access codes since the last code request (locks at 5).
+  accessCodeFailedAttempts Int @default(0)
   authOptions          Json? /// [RecipientAuthOptions] @zod.custom.use(ZRecipientAuthOptionsSchema)
   signingOrder         Int? /// @zod.number.describe("The order in which the recipient should sign the document. Only works if the document is set to sequential signing.")
   rejectionReason      String?
@@ -677,6 +706,10 @@ model Recipient {
 
   cscCredential CscCredential?
   cscSession    CscSession?
+
+  smsChannel  RecipientSmsChannel?
+  smsMessages SmsMessage[]
+  fileUploads FieldFileUpload[]
 
   @@index([token])
   @@index([email])
@@ -703,6 +736,7 @@ enum FieldType {
   RADIO
   CHECKBOX
   DROPDOWN
+  FILE
 }
 
 /// @zod.import(["import { ZFieldMetaNotOptionalSchema } from '@documenso/lib/types/field-meta';"])
@@ -725,6 +759,7 @@ model Field {
   recipient      Recipient    @relation(fields: [recipientId], references: [id], onDelete: Cascade)
   signature      Signature?
   fieldMeta      Json? /// [FieldMeta] @zod.custom.use(ZFieldMetaNotOptionalSchema)
+  fileUploads    FieldFileUpload[]
 
   @@index([envelopeId])
   @@index([envelopeItemId])
@@ -764,6 +799,33 @@ model DataContent {
   metadata Json /// [DataContentMeta] @zod.custom.use(ZDataContentMetaSchema)
 
   envelopeContents EnvelopeContent[]
+  fieldFileUpload  FieldFileUpload?
+}
+
+/// Solid Ten: a file a signer attached to a FILE field. The bytes live in the
+/// linked DataContent (database or S3 storage, never in the PDF).
+model FieldFileUpload {
+  id            String   @id
+  envelopeId    String
+  fieldId       Int
+  recipientId   Int
+  dataContentId String   @unique
+  fileName      String
+  mimeType      String
+  size          Int
+  sha256        String
+  uploaderName  String
+  uploaderEmail String
+  createdAt     DateTime @default(now())
+
+  envelope    Envelope    @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  field       Field       @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  recipient   Recipient   @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  dataContent DataContent @relation(fields: [dataContentId], references: [id], onDelete: Cascade)
+
+  @@index([envelopeId])
+  @@index([fieldId])
+  @@index([recipientId])
 }
 
 model Signature {
@@ -901,6 +963,8 @@ model Organisation {
   organisationGlobalSettingsId String                     @unique
   organisationGlobalSettings   OrganisationGlobalSettings @relation(fields: [organisationGlobalSettingsId], references: [id])
 
+  smsSettings OrganisationSmsSettings?
+
   organisationAuthenticationPortalId String                           @unique
   organisationAuthenticationPortal   OrganisationAuthenticationPortal @relation(fields: [organisationAuthenticationPortalId], references: [id])
 
@@ -1010,7 +1074,7 @@ enum OrganisationMemberInviteStatus {
   DECLINED
 }
 
-/// @zod.import(["import { ZDocumentEmailSettingsSchema } from '@documenso/lib/types/document-email';", "import { ZDefaultRecipientsSchema } from '@documenso/lib/types/default-recipients';", "import { ZEnvelopeExpirationPeriod as ZEnvelopeExpirationPeriodSchema } from '@documenso/lib/constants/envelope-expiration';", "import { ZEnvelopeReminderSettings as ZEnvelopeReminderSettingsSchema } from '@documenso/lib/constants/envelope-reminder';", "import { ZCssVarsSchema } from '@documenso/lib/types/css-vars';"])
+/// @zod.import(["import { ZDocumentEmailSettingsSchema } from '@documenso/lib/types/document-email';", "import { ZDefaultRecipientsSchema } from '@documenso/lib/types/default-recipients';", "import { ZEnvelopeExpirationPeriod as ZEnvelopeExpirationPeriodSchema } from '@documenso/lib/constants/envelope-expiration';", "import { ZEnvelopeReminderSettings as ZEnvelopeReminderSettingsSchema } from '@documenso/lib/constants/envelope-reminder';", "import { ZCssVarsSchema } from '@documenso/lib/types/css-vars';", "import { ZRetentionSettingsSchema } from '@documenso/lib/types/retention-settings';"])
 model OrganisationGlobalSettings {
   id           String        @id
   organisation Organisation?
@@ -1050,9 +1114,23 @@ model OrganisationGlobalSettings {
 
   // AI features settings.
   aiFeaturesEnabled Boolean @default(false)
+
+  // Solid Ten Sign: who may hand a signing request to another person.
+  allowSenderReassign Boolean @default(true)
+  allowSignerReassign Boolean @default(false)
+
+  // Solid Ten Sign: whether staff may host signing in person on their own device.
+  allowInPersonSigning Boolean @default(true)
+
+  // Solid Ten Sign: default for new documents; each document can change it.
+  commentsEnabled      Boolean @default(false)
+  commentsSharedThread Boolean @default(false)
+
+  // Solid Ten Sign: delete finished documents after a number of days. Null is off.
+  retentionSettings Json? /// [RetentionSettings] @zod.custom.use(ZRetentionSettingsSchema)
 }
 
-/// @zod.import(["import { ZDocumentEmailSettingsSchema } from '@documenso/lib/types/document-email';", "import { ZDefaultRecipientsSchema } from '@documenso/lib/types/default-recipients';", "import { ZEnvelopeExpirationPeriod as ZEnvelopeExpirationPeriodSchema } from '@documenso/lib/constants/envelope-expiration';", "import { ZEnvelopeReminderSettings as ZEnvelopeReminderSettingsSchema } from '@documenso/lib/constants/envelope-reminder';", "import { ZCssVarsSchema } from '@documenso/lib/types/css-vars';"])
+/// @zod.import(["import { ZDocumentEmailSettingsSchema } from '@documenso/lib/types/document-email';", "import { ZDefaultRecipientsSchema } from '@documenso/lib/types/default-recipients';", "import { ZEnvelopeExpirationPeriod as ZEnvelopeExpirationPeriodSchema } from '@documenso/lib/constants/envelope-expiration';", "import { ZEnvelopeReminderSettings as ZEnvelopeReminderSettingsSchema } from '@documenso/lib/constants/envelope-reminder';", "import { ZCssVarsSchema } from '@documenso/lib/types/css-vars';", "import { ZRetentionSettingsSchema } from '@documenso/lib/types/retention-settings';"])
 model TeamGlobalSettings {
   id   String @id
   team Team?
@@ -1093,6 +1171,14 @@ model TeamGlobalSettings {
 
   // AI features settings.
   aiFeaturesEnabled Boolean?
+
+  // Solid Ten Sign: null inherits the organisation value.
+  allowSenderReassign Boolean?
+  allowSignerReassign Boolean?
+  allowInPersonSigning Boolean?
+  commentsEnabled      Boolean?
+  commentsSharedThread Boolean?
+  retentionSettings   Json? /// [RetentionSettings] @zod.custom.use(ZRetentionSettingsSchema)
 }
 
 model Team {
@@ -1119,6 +1205,8 @@ model Team {
 
   teamGlobalSettingsId String             @unique
   teamGlobalSettings   TeamGlobalSettings @relation(fields: [teamGlobalSettingsId], references: [id], onDelete: Cascade)
+
+  smsSettings TeamSmsSettings?
 
   @@index([name])
   @@index([organisationId])
@@ -1160,6 +1248,49 @@ model TemplateDirectLink {
   directTemplateRecipientId Int
 
   envelope Envelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  stPublicForm StPublicForm?
+}
+
+/// Solid Ten Sign: public web form settings for a direct link. Version 2 templates only.
+model StPublicForm {
+  id                   String    @id @default(cuid())
+  directLinkId         String    @unique
+  opensAt              DateTime?
+  closesAt             DateTime?
+  /// Set by the "close form" button; cleared when the sender reopens the form.
+  closedAt             DateTime?
+  maxSubmissions       Int?
+  /// Slots taken by accepted submissions. Only changed by a conditional update, so it never passes maxSubmissions.
+  submissionCount      Int       @default(0)
+  introText            String?
+  thankYouMessage      String?
+  redirectUrl          String?
+  requireVerifiedEmail Boolean   @default(true)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  directLink  TemplateDirectLink       @relation(fields: [directLinkId], references: [id], onDelete: Cascade)
+  submissions StPublicFormSubmission[]
+}
+
+/// Solid Ten Sign: one accepted public form submission. The document may be deleted later, so there is no foreign key.
+model StPublicFormSubmission {
+  id             String   @id @default(cuid())
+  formId         String
+  envelopeId     String   @unique
+  submitterEmail String
+  submitterName  String?
+  emailVerified  Boolean
+  /// Solid Ten Sign: SHA-256 of the email verification proof. Unique, so a proof creates one document.
+  verifiedProofHash String? @unique
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  form StPublicForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId, createdAt])
 }
 
 model SiteSettings {
@@ -1195,7 +1326,18 @@ model BackgroundJob {
   completedAt   DateTime?
   lastRetriedAt DateTime?
 
+  // Solid Ten: a PENDING job waiting for its next attempt (retry backoff); the local
+  // provider's recovery sweep starts it when this time has passed.
+  nextRunAt DateTime?
+  // Solid Ten: set when the recovery sweep found this job cut off mid-run (the process died, for
+  // example out of memory). Such a job waits longer before each re-run, and only one runs at a time.
+  lastCrashedAt DateTime?
+  /// Solid Ten (FS3-M1): attempts in a row that were cut off (crash, kill). A normal failure resets it.
+  cutOffCount   Int?
+
   tasks BackgroundJobTask[]
+
+  @@index([status, nextRunAt])
 }
 
 enum BackgroundJobTaskStatus {
@@ -1350,4 +1492,287 @@ model RateLimit {
 
   @@id([key, action, bucket])
   @@index([createdAt])
+}
+
+// Solid Ten: text message (SMS) delivery of signing requests.
+
+model OrganisationSmsSettings {
+  id             String       @id @default(cuid())
+  organisationId String       @unique
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  enabled        Boolean      @default(false)
+  senderLabel    String?      @db.VarChar(40)
+  updatedAt      DateTime     @updatedAt
+}
+
+model TeamSmsSettings {
+  id          String   @id @default(cuid())
+  teamId      Int      @unique
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  enabled     Boolean?
+  senderLabel String?  @db.VarChar(40)
+  updatedAt   DateTime @updatedAt
+}
+
+model RecipientSmsChannel {
+  id          Int       @id @default(autoincrement())
+  recipientId Int       @unique
+  recipient   Recipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  phoneE164   String    @db.VarChar(16)
+  status      String    @default("NOT_SENT") /// NOT_SENT, SENT, FAILED, OPTED_OUT
+  lastError   String?
+  sentAt      DateTime?
+  optedOutAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model SmsMessage {
+  id                String    @id @default(cuid())
+  idempotencyKey    String    @unique
+  recipientId       Int
+  recipient         Recipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  envelopeId        String
+  teamId            Int
+  purpose           String /// SIGNING_REQUEST, REMINDER, RESEND
+  toE164            String    @db.VarChar(16)
+  body              String
+  segments          Int       @default(1)
+  provider          String
+  status            String /// PENDING, SENT, FAILED
+  providerMessageId String?
+  errorCode         String?
+  errorMessage      String?
+  isRetryable       Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([teamId, createdAt])
+  @@index([recipientId, createdAt])
+  @@index([envelopeId])
+}
+
+model SmsOptOut {
+  phoneE164 String   @id @db.VarChar(16)
+  source    String
+  createdAt DateTime @default(now())
+}
+
+/// Messages "delivered" by the fake SMS provider, for tests and local runs.
+model SmsFakeOutbox {
+  id        String   @id @default(cuid())
+  toE164    String   @db.VarChar(16)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([toE164])
+}
+
+// Solid Ten Sign: scheduled sending.
+enum EnvelopeScheduledSendStatus {
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+}
+
+/// A draft envelope that is sent by the scheduled-send sweep at `scheduledAt`.
+/// Un-scheduling deletes the row. SENDING rows carry `claimedAt` so a crash
+/// between claim and send is found again by the sweep.
+model EnvelopeScheduledSend {
+  id String @id @default(cuid())
+
+  envelopeId String   @unique
+  envelope   Envelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  scheduledAt DateTime
+  /// The IANA timezone the sender picked the time in, for display only.
+  timezone    String
+
+  status    EnvelopeScheduledSendStatus @default(SCHEDULED)
+  claimedAt DateTime?
+  attempts  Int                         @default(0)
+  lastError String?
+  sentAt    DateTime?
+
+  /// The user who scheduled the send. The send runs as this user. Not a
+  /// relation: the envelope cascade already removes the row with its owner.
+  userId Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, scheduledAt])
+}
+
+enum InPersonSigningPhase {
+  /// The host has the device and picks the next signer.
+  HOST
+  /// The device was handed to the signer, who has not confirmed who they are yet.
+  HANDOVER
+  /// The signer confirmed who they are and is on the signing page.
+  SIGNER
+  /// The signer is done (or stopped). Only the host's PIN unlocks the device.
+  HANDBACK
+}
+
+/// Solid Ten Sign: a staff user hosting signers on one device.
+model InPersonSigningSession {
+  id String @id @default(cuid())
+
+  envelopeId String
+  envelope   Envelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  /// The staff user hosting. Not a relation: the envelope cascade removes the row.
+  hostUserId    Int
+  /// The host's sign-in (Session.id) that is locked while this session runs.
+  authSessionId String
+
+  exitPinHash       String
+  failedPinAttempts Int    @default(0)
+
+  /// Recipients who must enter a code sent to their email before they sign.
+  emailCodeRecipientIds Int[]
+
+  phase               InPersonSigningPhase @default(HOST)
+  /// The recipient whose turn it is (HANDOVER and SIGNER phases).
+  recipientId         Int?
+  /// The recipient's link token when the turn began. A reassignment changes it and ends the turn.
+  recipientToken      String?
+  confirmedName       String?
+  emailCodeSentAt     DateTime?
+  emailCodeVerifiedAt DateTime?
+  turnStartedAt       DateTime?
+  /// Solid Ten Sign: the single-turn credential the device uses in place of the
+  /// recipient's link token. Cleared when the turn ends; only the locked sign-in can use it.
+  turnToken           String?   @unique
+  turnTokenExpiresAt  DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  expiresAt DateTime
+  endedAt   DateTime?
+  endReason String?
+
+  @@index([envelopeId])
+  @@index([authSessionId])
+}
+
+/// Solid Ten Sign: the sender's comment choice for one document. Without a row
+/// the team setting applies.
+model EnvelopeCommentSettings {
+  envelopeId String   @id
+  envelope   Envelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  enabled      Boolean
+  /// All recipients read and write one thread instead of one thread each.
+  sharedThread Boolean
+
+  updatedAt DateTime @updatedAt
+}
+
+enum EnvelopeCommentAuthorType {
+  RECIPIENT
+  TEAM
+}
+
+/// Solid Ten Sign: one conversation on a document, either one recipient's or
+/// the shared one.
+model EnvelopeCommentThread {
+  id String @id @default(cuid())
+
+  envelopeId String
+  envelope   Envelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  /// "shared", or "recipient:<id>:<email>". A recipient reassigned to someone
+  /// else gets a new thread, so the new person never reads the old one.
+  key            String
+  /// Who the thread belongs to (null for the shared thread). Not a relation.
+  recipientId    Int?
+  recipientEmail String?
+  recipientName  String?
+
+  resolvedAt       DateTime?
+  resolvedByUserId Int?
+  /// When someone on the team last read the thread. Newer recipient comments are unread.
+  teamReadAt       DateTime?
+  lastCommentAt    DateTime  @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comments EnvelopeComment[]
+
+  @@unique([envelopeId, key])
+}
+
+/// Solid Ten Sign: a plain-text comment. The audit log references it by id.
+model EnvelopeComment {
+  id String @id @default(cuid())
+
+  threadId String
+  thread   EnvelopeCommentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  envelopeId String
+
+  authorType        EnvelopeCommentAuthorType
+  authorRecipientId Int?
+  authorUserId      Int?
+  authorName        String
+  authorEmail       String
+
+  body String
+
+  createdAt DateTime @default(now())
+
+  @@index([envelopeId])
+  @@index([threadId, createdAt])
+}
+
+/// Solid Ten Sign: changes to organisation and team settings that need evidence
+/// (retention rules). Not related to Organisation or Team on purpose: the rows stay
+/// when those are deleted.
+model StSettingsAuditLog {
+  id             String   @id @default(cuid())
+  organisationId String
+  /// Null for an organisation-level change.
+  teamId         Int?
+  setting        String
+  oldValue       Json?
+  newValue       Json?
+  userId         Int?
+  userEmail      String
+  userName       String?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  @@index([organisationId, createdAt])
+  @@index([teamId, createdAt])
+}
+
+/// Solid Ten Sign: a stored-data row that an envelope item stopped pointing at
+/// (sealing, rendering contents or form values each write a new copy). Filled by
+/// a database trigger on EnvelopeItem, so every path is covered. A purge uses it
+/// to find and delete the envelope's earlier copies by id. No relations: the rows
+/// it names may already be gone.
+model DetachedDocumentData {
+  documentDataId String   @id
+  envelopeId     String
+  createdAt      DateTime @default(now())
+
+  @@index([envelopeId])
+}
+
+/// Solid Ten Sign: a signing link that stopped working because the request was
+/// handed to someone else. Only a hash of the token is kept, so the old link
+/// can show "passed to someone else" instead of a bare 404.
+model RetiredSigningToken {
+  tokenHash   String   @id
+  envelopeId  String
+  recipientId Int
+  reason      String /// HANDOVER
+  createdAt   DateTime @default(now())
+
+  @@index([envelopeId])
 }

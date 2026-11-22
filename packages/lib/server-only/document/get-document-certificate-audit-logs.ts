@@ -18,6 +18,7 @@ export const getDocumentCertificateAuditLogs = async ({ envelopeId }: GetDocumen
           DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_FIELD_INSERTED,
           DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_OPENED,
           DOCUMENT_AUDIT_LOG_TYPE.EMAIL_SENT,
+          DOCUMENT_AUDIT_LOG_TYPE.SMS_SENT,
           DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_SENT,
         ],
       },
@@ -42,6 +43,7 @@ export const getDocumentCertificateAuditLogs = async ({ envelopeId }: GetDocumen
     [DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_FIELD_INSERTED]: auditLogs.filter(
       (log) => log.type === DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_FIELD_INSERTED,
     ),
+    [DOCUMENT_AUDIT_LOG_TYPE.SMS_SENT]: auditLogs.filter((log) => log.type === DOCUMENT_AUDIT_LOG_TYPE.SMS_SENT),
     [DOCUMENT_AUDIT_LOG_TYPE.EMAIL_SENT]: auditLogs.filter(
       (log) =>
         log.type === DOCUMENT_AUDIT_LOG_TYPE.EMAIL_SENT &&

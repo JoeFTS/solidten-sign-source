@@ -12,6 +12,7 @@ import {
   type TDropdownFieldMeta,
   type TEmailFieldMeta,
   type TFieldMetaSchema,
+  type TFileFieldMeta,
   type TInitialsFieldMeta,
   type TNameFieldMeta,
   type TNumberFieldMeta,
@@ -20,6 +21,7 @@ import {
   type TTextFieldMeta,
 } from '@documenso/lib/types/field-meta';
 import { getEnvelopeItemPermissions } from '@documenso/lib/utils/envelope';
+import { keepFieldLogicMeta } from '@documenso/lib/utils/field-conditions';
 import { getOverlappingFieldPairs } from '@documenso/lib/utils/fields-overlap';
 import { canRecipientFieldsBeModified } from '@documenso/lib/utils/recipients';
 import { AnimateGenericFadeInOut } from '@documenso/ui/components/animate/animate-generic-fade-in-out';
@@ -58,7 +60,12 @@ import { EditorFieldCheckboxForm } from '~/components/forms/editor/editor-field-
 import { EditorFieldDateForm } from '~/components/forms/editor/editor-field-date-form';
 import { EditorFieldDropdownForm } from '~/components/forms/editor/editor-field-dropdown-form';
 import { EditorFieldEmailForm } from '~/components/forms/editor/editor-field-email-form';
+import { EditorFieldFileForm } from '~/components/forms/editor/editor-field-file-form';
 import { EditorFieldInitialsForm } from '~/components/forms/editor/editor-field-initials-form';
+import {
+  EditorFieldLogicForm,
+  getFieldLogicUnavailableReason,
+} from '~/components/forms/editor/editor-field-logic-form';
 import { EditorFieldNameForm } from '~/components/forms/editor/editor-field-name-form';
 import { EditorFieldNumberForm } from '~/components/forms/editor/editor-field-number-form';
 import { EditorFieldRadioForm } from '~/components/forms/editor/editor-field-radio-form';
@@ -87,6 +94,7 @@ const FieldSettingsTypeTranslations: Record<FieldType, MessageDescriptor> = {
   [FieldType.RADIO]: msg`Radio Settings`,
   [FieldType.CHECKBOX]: msg`Checkbox Settings`,
   [FieldType.DROPDOWN]: msg`Dropdown Settings`,
+  [FieldType.FILE]: msg`Attach a File Settings`,
 };
 
 const ContentSettingsTypeTranslations: Record<EnvelopeContentType, MessageDescriptor> = {
@@ -193,11 +201,12 @@ export const EnvelopeEditorFieldsPage = () => {
       return;
     }
 
-    const isMetaSame = isDeepEqual(selectedField.fieldMeta, fieldMeta);
+    const nextFieldMeta = keepFieldLogicMeta(selectedField.fieldMeta, fieldMeta);
+    const isMetaSame = isDeepEqual(selectedField.fieldMeta, nextFieldMeta);
 
     if (!isMetaSame) {
       editorFields.updateFieldByFormId(selectedField.formId, {
-        fieldMeta,
+        fieldMeta: nextFieldMeta,
       });
     }
   };
@@ -602,7 +611,20 @@ export const EnvelopeEditorFieldsPage = () => {
                                 onValueChange={(value) => updateSelectedFieldMeta(value)}
                               />
                             ))
+                            .with(FieldType.FILE, () => (
+                              <EditorFieldFileForm
+                                value={selectedField?.fieldMeta as TFileFieldMeta | undefined}
+                                onValueChange={(value) => updateSelectedFieldMeta(value)}
+                              />
+                            ))
                             .otherwise(() => null)}
+
+                          <EditorFieldLogicForm
+                            field={selectedField}
+                            fields={editorFields.localFields}
+                            unavailableReason={getFieldLogicUnavailableReason(envelope, _)}
+                            onValueChange={(value) => updateSelectedFieldMeta(value)}
+                          />
                         </div>
                       </section>
                     )}

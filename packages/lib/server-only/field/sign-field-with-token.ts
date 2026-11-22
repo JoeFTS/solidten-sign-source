@@ -29,6 +29,7 @@ import { getRecipientFieldsWhereInput } from '../../utils/recipient-queries';
 import { assertRecipientNotExpired } from '../../utils/recipients';
 import { validateFieldAuth } from '../document/validate-field-auth';
 import { assertSenderNotDisabled } from '../user/assert-user-not-disabled';
+import { lockEnvelopeForFieldWrite } from './lock-field-write';
 
 export type SignFieldWithTokenOptions = {
   token: string;
@@ -116,6 +117,13 @@ export const signFieldWithToken = async ({
   // Unreachable code based on the above query but we need to satisfy TypeScript
   if (field.recipientId === null) {
     throw new Error(`Field ${fieldId} has no recipientId`);
+  }
+
+  // Solid Ten: files are attached through their own upload route, on version 2 envelopes.
+  if (field.type === FieldType.FILE) {
+    throw new AppError(AppErrorCode.INVALID_REQUEST, {
+      message: '"Attach a file" fields cannot be signed here.',
+    });
   }
 
   if (
@@ -238,6 +246,9 @@ export const signFieldWithToken = async ({
   const assistant = recipient.role === RecipientRole.ASSISTANT ? recipient : undefined;
 
   return await prisma.$transaction(async (tx) => {
+    // Solid Ten Sign (AUD-C2): under the envelope lock, both recipients must still be NOT_SIGNED.
+    await lockEnvelopeForFieldWrite(tx, { envelopeId: envelope.id, recipientIds: [recipient.id, field.recipientId] });
+
     const updatedField = await tx.field.update({
       where: {
         id: field.id,
@@ -302,6 +313,7 @@ export const signFieldWithToken = async ({
               type,
               data: updatedField.customText,
             }))
+            .with(FieldType.FILE, (type) => ({ type, data: updatedField.customText }))
             .exhaustive(),
           fieldSecurity: derivedRecipientActionAuth
             ? {

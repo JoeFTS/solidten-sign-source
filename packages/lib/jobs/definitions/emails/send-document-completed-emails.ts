@@ -8,6 +8,9 @@ const SEND_DOCUMENT_COMPLETED_EMAILS_JOB_DEFINITION_ID = 'send.document.complete
 const SEND_DOCUMENT_COMPLETED_EMAILS_JOB_DEFINITION_SCHEMA = z.object({
   envelopeId: z.string(),
   requestMetadata: ZRequestMetadataSchema.optional(),
+  // Solid Ten Sign: "Resend signed copy" (resend-completed-copy.ts): only this recipient's copy,
+  // asked for by this user.
+  resend: z.object({ recipientId: z.number(), userId: z.number() }).optional(),
 });
 
 export type TSendDocumentCompletedEmailsJobDefinition = z.infer<

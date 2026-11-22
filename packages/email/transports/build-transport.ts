@@ -4,6 +4,7 @@ import type { Transporter } from 'nodemailer';
 import { createTransport } from 'nodemailer';
 
 import { MailChannelsTransport } from './mailchannels';
+import { SMTP_TIMEOUTS } from './smtp-timeouts';
 
 export const buildTransport = (config: TEmailTransportConfig): Transporter => {
   switch (config.type) {
@@ -27,6 +28,7 @@ export const buildTransport = (config: TEmailTransportConfig): Transporter => {
         host: config.host,
         port: config.port,
         secure: config.secure,
+        ...SMTP_TIMEOUTS,
         auth: {
           user: config.apiKeyUser ?? 'apikey',
           pass: config.apiKey,
@@ -38,6 +40,7 @@ export const buildTransport = (config: TEmailTransportConfig): Transporter => {
         host: config.host,
         port: config.port,
         secure: config.secure,
+        ...SMTP_TIMEOUTS,
         ignoreTLS: config.ignoreTLS,
         auth: config.username
           ? {

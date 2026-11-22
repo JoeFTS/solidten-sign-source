@@ -1,4 +1,5 @@
 import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session';
+import { getInPersonLockId } from '@documenso/lib/server-only/in-person/in-person-lock';
 import { type MiddlewareFunction, redirect } from 'react-router';
 
 /**
@@ -14,6 +15,13 @@ export const authenticatedMiddleware: MiddlewareFunction = async ({ request }, n
 
   if (!session || session.isEmbed) {
     throw redirect('/signin');
+  }
+
+  // Solid Ten Sign: a sign-in handed to signers stays on the in-person screens.
+  const inPersonLockId = await getInPersonLockId(session);
+
+  if (inPersonLockId) {
+    throw redirect(`/in-person/${inPersonLockId}`);
   }
 
   return next();

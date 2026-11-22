@@ -1,6 +1,8 @@
 import { match } from 'ts-pattern';
 import { z } from 'zod';
 
+import { isDatabaseUnavailableError } from './database-error-kind';
+
 /**
  * Generic application error codes.
  */
@@ -119,6 +121,12 @@ export const genericErrorCodeToTrpcErrorCodeMap: Record<string, { code: string; 
   [AppErrorCode.RETRY_EXCEPTION]: { code: 'INTERNAL_SERVER_ERROR', status: 500 },
   [AppErrorCode.SCHEMA_FAILED]: { code: 'INTERNAL_SERVER_ERROR', status: 500 },
   [AppErrorCode.TOO_MANY_REQUESTS]: { code: 'TOO_MANY_REQUESTS', status: 429 },
+  // Solid Ten: errors/server-busy.ts.
+  SERVER_BUSY: { code: 'SERVICE_UNAVAILABLE', status: 503 },
+  DATABASE_UNAVAILABLE: { code: 'SERVICE_UNAVAILABLE', status: 503 },
+  PDF_PROCESSING_UNAVAILABLE: { code: 'SERVICE_UNAVAILABLE', status: 503 },
+  // Solid Ten: pdf-child/run-pdf-operation.ts.
+  DOCUMENT_TOO_COMPLEX: { code: 'UNPROCESSABLE_CONTENT', status: 422 },
   [AppErrorCode.TWO_FACTOR_AUTH_FAILED]: { code: 'UNAUTHORIZED', status: 401 },
   [AppErrorCode.ENVELOPE_DRAFT]: { code: 'BAD_REQUEST', status: 400 },
   [AppErrorCode.ENVELOPE_COMPLETED]: { code: 'BAD_REQUEST', status: 400 },
@@ -322,9 +330,18 @@ export class AppError extends Error {
   }
 
   static toRestAPIError(err: unknown): {
-    status: 400 | 401 | 403 | 404 | 500 | 501;
+    status: 400 | 401 | 403 | 404 | 500 | 501 | 503;
     body: { message: string };
   } {
+    // Solid Ten (DISK-L1): the database cannot take requests now: a plain 503, no internals.
+    if (isDatabaseUnavailableError(err)) {
+      console.error('[DATABASE]: unavailable during an API v1 request; answered 503', err);
+      globalThis.__solidten_database_write_health__ ??= { lastFailureAt: null, probe: null };
+      globalThis.__solidten_database_write_health__.lastFailureAt = Date.now();
+
+      return { status: 503, body: { message: 'Temporarily unable to save. Try again in a few minutes.' } };
+    }
+
     const error = AppError.parseError(err);
 
     const status = match(error.code)

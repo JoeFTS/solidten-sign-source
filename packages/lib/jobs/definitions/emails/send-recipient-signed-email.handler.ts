@@ -7,11 +7,13 @@ import { createElement } from 'react';
 import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
+import { canOwnerReachTeam } from '../../../server-only/team/reassign-envelopes-after-access-loss';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { unsafeBuildEnvelopeIdQuery } from '../../../utils/envelope';
 import { isRecipientEmailValidForSending } from '../../../utils/recipients';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import type { JobRunIO } from '../../client/_internal/job';
+import { runTaskAtMostOnce } from '../../client/at-most-once-task';
 import type { TSendRecipientSignedEmailJobDefinition } from './send-recipient-signed-email';
 
 export const run = async ({ payload, io }: { payload: TSendRecipientSignedEmailJobDefinition; io: JobRunIO }) => {
@@ -67,6 +69,11 @@ export const run = async ({ payload, io }: { payload: TSendRecipientSignedEmailJ
   const { email: recipientEmail, name: recipientName } = recipient;
   const { user: owner } = envelope;
 
+  // Solid Ten: an owner who lost access to the team gets no more notices of its documents.
+  if (!(await canOwnerReachTeam({ userId: owner.id, teamId: envelope.teamId }))) {
+    return;
+  }
+
   const recipientReference = recipientName || recipientEmail;
 
   // Don't send notification if the owner is the one who signed.
@@ -94,7 +101,8 @@ export const run = async ({ payload, io }: { payload: TSendRecipientSignedEmailJ
     assetBaseUrl,
   });
 
-  await io.runTask('send-recipient-signed-email', async () => {
+  // Solid Ten: at most once; a re-run after a crash during the send does not send it twice.
+  await runTaskAtMostOnce(io, 'send-recipient-signed-email', async (markSending) => {
     const [html, text] = await Promise.all([
       renderEmailWithI18N(template, { lang: emailLanguage, branding }),
       renderEmailWithI18N(template, {
@@ -103,6 +111,8 @@ export const run = async ({ payload, io }: { payload: TSendRecipientSignedEmailJ
         plainText: true,
       }),
     ]);
+
+    await markSending();
 
     await emailTransport.sendMail({
       to: {

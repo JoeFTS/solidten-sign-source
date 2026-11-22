@@ -14,8 +14,10 @@ export type FieldTestData = TFieldAndMeta & {
   signature?: string;
 };
 
+// Solid Ten: a copy of upstream's logo icon kept for tests, so the visual baselines do not
+// change when the product logo in packages/assets changes.
 export const signatureBase64Demo = `data:image/png;base64,${fs.readFileSync(
-  path.join(__dirname, '../../../packages/assets/', 'logo_icon.png'),
+  path.join(__dirname, '../assets/', 'visual-fixture-logo-icon.png'),
   'base64',
 )}`;
 

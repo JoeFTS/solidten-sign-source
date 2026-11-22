@@ -1,6 +1,6 @@
 import { DocumentDataType } from '@prisma/client';
-import { base64 } from '@scure/base';
 import { match } from 'ts-pattern';
+import { encodeBase64 } from '../base64';
 
 import { getAbsolutePresignPostUrl } from './server-actions';
 
@@ -30,7 +30,7 @@ const updateFileWithBytes64 = (data: string) => {
 
   const binaryData = encoder.encode(data);
 
-  const asciiData = base64.encode(binaryData);
+  const asciiData = encodeBase64(binaryData);
 
   return {
     type: DocumentDataType.BYTES_64,

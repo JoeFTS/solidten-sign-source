@@ -17,6 +17,12 @@ import { createDocumentAuditLogData } from '../../utils/document-audit-logs';
 import { mapSecondaryIdToDocumentId } from '../../utils/envelope';
 import { assertRecipientNotExpired } from '../../utils/recipients';
 import { buildTeamWhereQuery } from '../../utils/teams';
+import {
+  assertEnvelopeOpenForRecipientAction,
+  RECIPIENT_ALREADY_ACTED_MESSAGE,
+  rejectRecipientUnderLock,
+  withLockedPendingEnvelope,
+} from '../envelope/envelope-transition-lock';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { findUserByProvidedEmail } from '../user/find-user-by-provided-email';
 
@@ -99,7 +105,9 @@ export async function rejectDocumentOnBehalfOf({
 
   if (recipient.signingStatus !== SigningStatus.NOT_SIGNED) {
     throw new AppError(AppErrorCode.INVALID_REQUEST, {
-      message: `Recipient ${recipient.id} has already actioned this document`,
+      // Solid Ten Sign (SEC3-L1): plain wording, the same as the decline inside the lock.
+      message: RECIPIENT_ALREADY_ACTED_MESSAGE,
+      userMessage: RECIPIENT_ALREADY_ACTED_MESSAGE,
     });
   }
 
@@ -113,18 +121,15 @@ export async function rejectDocumentOnBehalfOf({
 
   // Update the recipient status to rejected and record an external rejection
   // audit log within the same transaction.
-  const [updatedRecipient] = await prisma.$transaction([
-    prisma.recipient.update({
-      where: {
-        id: recipient.id,
-      },
-      data: {
-        signedAt: new Date(),
-        signingStatus: SigningStatus.REJECTED,
-        rejectionReason: reason,
-      },
-    }),
-    prisma.documentAuditLog.create({
+  const updatedRecipient = await withLockedPendingEnvelope(envelope.id, async (tx) => {
+    // Solid Ten: under the envelope lock, and only while the recipient has not acted.
+    // Solid Ten Sign (FS2-C1): one winner against a racing completion or decline; the
+    // loser gets a clean 400 and writes nothing (no audit entry, no jobs).
+    await assertEnvelopeOpenForRecipientAction(tx, envelope.id, recipient.id);
+
+    const rejected = await rejectRecipientUnderLock(tx, { recipientId: recipient.id, token: recipient.token, reason });
+
+    await tx.documentAuditLog.create({
       data: createDocumentAuditLogData({
         envelopeId: envelope.id,
         type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RECIPIENT_REJECTED,
@@ -139,13 +144,17 @@ export async function rejectDocumentOnBehalfOf({
           recipientRole: recipient.role,
           reason,
           isExternal: true,
+          // Solid Ten (AUD-8): recorded for the recipient by the API; they passed no access check.
+          accessAuth: [],
           // Only set when a member was explicitly elected via `actAsEmail`.
           onBehalfOfUserEmail: electedUser?.email,
           onBehalfOfUserName: electedUser?.name,
         },
       }),
-    }),
-  ]);
+    });
+
+    return rejected;
+  });
 
   const legacyDocumentId = mapSecondaryIdToDocumentId(envelope.secondaryId);
 

@@ -1,4 +1,6 @@
 import { AppError } from '@documenso/lib/errors/app-error';
+import { assertNotInPersonLocked } from '@documenso/lib/server-only/in-person/assert-not-in-person-locked';
+import { getInPersonLockId } from '@documenso/lib/server-only/in-person/in-person-lock';
 import type { Session } from '@prisma/client';
 import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
@@ -33,7 +35,9 @@ export const assertNotEmbedSession = (session: Pick<Session, 'isEmbed'> | null |
 export const getOptionalNonEmbedSession = async (c: Context | Request): Promise<SessionValidationResult> => {
   const result = await getOptionalSession(c);
 
-  if (result.session?.isEmbed) {
+  // Solid Ten Sign: a sign-in handed to signers for in-person signing is also
+  // treated as signed out, so the host's files cannot be fetched from it.
+  if (result.session?.isEmbed || (result.session && (await getInPersonLockId(result.session)))) {
     return {
       isAuthenticated: false,
       session: null,
@@ -49,6 +53,10 @@ export const rejectEmbedSessionMiddleware = createMiddleware(async (c: Context, 
   const { session } = await getOptionalSession(c);
 
   assertNotEmbedSession(session);
+
+  if (session) {
+    await assertNotInPersonLocked(session);
+  }
 
   await next();
 });

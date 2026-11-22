@@ -30,11 +30,19 @@ import { EXECUTE_WEBHOOK_JOB_DEFINITION } from './definitions/internal/execute-w
 import { EXPIRE_RECIPIENTS_SWEEP_JOB_DEFINITION } from './definitions/internal/expire-recipients-sweep';
 import { PROCESS_RECIPIENT_EXPIRED_JOB_DEFINITION } from './definitions/internal/process-recipient-expired';
 import { PROCESS_SIGNING_REMINDER_JOB_DEFINITION } from './definitions/internal/process-signing-reminder';
+import { RETRY_WEBHOOK_CALLS_SWEEP_JOB_DEFINITION } from './definitions/internal/retry-webhook-calls-sweep';
 import { SEAL_DOCUMENT_JOB_DEFINITION } from './definitions/internal/seal-document';
 import { SEAL_DOCUMENT_SWEEP_JOB_DEFINITION } from './definitions/internal/seal-document-sweep';
 import { SEND_SIGNING_REMINDERS_SWEEP_JOB_DEFINITION } from './definitions/internal/send-signing-reminders-sweep';
 import { SYNC_EMAIL_DOMAINS_JOB_DEFINITION } from './definitions/internal/sync-email-domains';
 import { SYNC_ORGANISATION_SEATS_JOB_DEFINITION } from './definitions/internal/sync-organisation-seats';
+import { FIELD_FILE_ORPHAN_SWEEP_JOB_DEFINITION } from './definitions/solidten/field-file-orphan-sweep';
+import { PROCESS_RETENTION_JOB_DEFINITION } from './definitions/solidten/process-retention';
+import { PROCESS_SCHEDULED_SEND_JOB_DEFINITION } from './definitions/solidten/process-scheduled-send';
+import { RETENTION_SWEEP_JOB_DEFINITION } from './definitions/solidten/retention-sweep';
+import { SCHEDULED_SEND_SWEEP_JOB_DEFINITION } from './definitions/solidten/scheduled-send-sweep';
+import { SEND_SIGNIN_LINK_RETRY_JOB_DEFINITION } from './definitions/solidten/send-signin-link-retry';
+import { SEND_SOLIDTEN_NOTICE_EMAIL_JOB_DEFINITION } from './definitions/solidten/send-solidten-notice-email';
 
 /**
  * The `as const` assertion is load bearing as it provides the correct level of type inference for
@@ -66,6 +74,7 @@ export const jobsClient = new JobClient([
   BACKPORT_SUBSCRIPTION_CLAIM_JOB_DEFINITION,
   BULK_SEND_TEMPLATE_JOB_DEFINITION,
   EXECUTE_WEBHOOK_JOB_DEFINITION,
+  RETRY_WEBHOOK_CALLS_SWEEP_JOB_DEFINITION,
   EXPIRE_RECIPIENTS_SWEEP_JOB_DEFINITION,
   PROCESS_RECIPIENT_EXPIRED_JOB_DEFINITION,
   SEND_SIGNING_REMINDERS_SWEEP_JOB_DEFINITION,
@@ -77,6 +86,13 @@ export const jobsClient = new JobClient([
   ALERT_ORGANISATION_SEAT_DRIFT_JOB_DEFINITION,
   CANCEL_ORGANISATION_SUBSCRIPTION_JOB_DEFINITION,
   SYNC_ORGANISATION_SEATS_JOB_DEFINITION,
+  SCHEDULED_SEND_SWEEP_JOB_DEFINITION,
+  PROCESS_SCHEDULED_SEND_JOB_DEFINITION,
+  SEND_SOLIDTEN_NOTICE_EMAIL_JOB_DEFINITION,
+  SEND_SIGNIN_LINK_RETRY_JOB_DEFINITION,
+  RETENTION_SWEEP_JOB_DEFINITION,
+  FIELD_FILE_ORPHAN_SWEEP_JOB_DEFINITION,
+  PROCESS_RETENTION_JOB_DEFINITION,
 ] as const);
 
 export const jobs = jobsClient;

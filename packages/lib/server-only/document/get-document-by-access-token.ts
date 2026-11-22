@@ -17,6 +17,8 @@ export const getDocumentByAccessToken = async ({ token }: GetDocumentByAccessTok
       type: EnvelopeType.DOCUMENT,
       status: DocumentStatus.COMPLETED,
       qrToken: token,
+      // Solid Ten (AUD-13 follow-up): a deleted document has no share page, as its qr_ file routes.
+      deletedAt: null,
     },
     // Do not provide extra information that is not needed.
     select: {
@@ -37,12 +39,11 @@ export const getDocumentByAccessToken = async ({ token }: GetDocumentByAccessTok
           order: true,
           documentDataId: true,
           envelopeId: true,
+          // Solid Ten (LD3-M2): never the bytes; the share page's viewer fetches the PDF by URL.
           documentData: {
             select: {
               id: true,
               type: true,
-              data: true,
-              initialData: true,
             },
           },
         },

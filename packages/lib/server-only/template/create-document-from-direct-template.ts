@@ -46,12 +46,14 @@ import {
   buildEnvelopeContentCopyData,
   getContentsMissingImages,
 } from '../../utils/envelope-content';
+import { isCalculatedField } from '../../utils/field-conditions';
 import { getRecipientsInActiveSigningStep } from '../../utils/recipient-groups';
 import {
   getRecipientsWithMissingFields,
   isRecipientBefore,
   sortRecipientsBySigningPosition,
 } from '../../utils/recipients';
+import { sanitizeSingleLineText } from '../../utils/safe-text';
 import { loadContentImages } from '../data-content/load-content-images';
 import { sendDocument } from '../document/send-document';
 import { validateFieldAuth } from '../document/validate-field-auth';
@@ -60,6 +62,10 @@ import {
   RENDER_CONTENTS_CONCURRENCY,
   renderContentsOntoPdf,
 } from '../envelope-content/insert-contents-into-envelope-item';
+import { assertNoFileFieldsForDirectTemplate } from '../field-file/assert-file-fields';
+import { applyFieldLogic } from '../field-logic/apply-field-logic';
+import { assertFieldLogicReadyToSend } from '../field-logic/assert-field-logic';
+import { applyDirectTemplateSubmissionRules, type DirectTemplateHooks } from '../public-form/direct-template-hooks';
 import { assertOrganisationRatesAndLimits } from '../rate-limit/assert-organisation-rates-and-limits';
 import { assignOmittedRecipientSigningOrders } from '../recipient/assign-omitted-recipient-signing-orders';
 import { resolveSignatureLevel } from '../signature-level/resolve-signature-level';
@@ -84,6 +90,10 @@ export type CreateDocumentFromDirectTemplateOptions = {
     email: string;
     name: string;
   };
+  /**
+   * Solid Ten public form hooks; see `direct-template-hooks.ts`.
+   */
+  hooks?: DirectTemplateHooks;
 };
 
 type CreatedDirectRecipientField = {
@@ -105,13 +115,23 @@ export const createDocumentFromDirectTemplate = async ({
   directRecipientEmail: providedDirectRecipientEmail,
   directTemplateToken,
   directTemplateExternalId,
-  signedFieldValues,
+  signedFieldValues: submittedFieldValues,
   templateUpdatedAt,
-  nextSigner,
+  nextSigner: providedNextSigner,
   requestMetadata,
   user,
+  hooks,
 }: CreateDocumentFromDirectTemplateOptions): Promise<TCreateDocumentFromDirectTemplateResponse> => {
   const directRecipientEmail = providedDirectRecipientEmail.toLowerCase();
+
+  // Solid Ten Sign (AUD-C5): every stranger-supplied name is one clean line (S-L5), here too.
+  const nextSigner = providedNextSigner
+    ? { ...providedNextSigner, name: sanitizeSingleLineText(providedNextSigner.name).slice(0, 255) }
+    : undefined;
+
+  if (nextSigner && !nextSigner.name) {
+    throw new AppError(AppErrorCode.INVALID_BODY, { message: 'The next signer needs a name.' });
+  }
 
   const directTemplateEnvelope = await prisma.envelope.findFirst({
     where: {
@@ -198,6 +218,21 @@ export const createDocumentFromDirectTemplate = async ({
     });
   }
 
+  // Solid Ten: a submission arrives in one request with no signing token, so it cannot
+  // carry attached files.
+  assertNoFileFieldsForDirectTemplate(recipients.flatMap((recipient) => recipient.fields));
+
+  assertFieldLogicReadyToSend({
+    envelope: directTemplateEnvelope,
+    fields: recipients.flatMap((recipient) => recipient.fields),
+    recipients,
+  });
+
+  const { signedFieldValues, notRequiredFieldIds } = applyDirectTemplateSubmissionRules({
+    directTemplateRecipient,
+    signedFieldValues: submittedFieldValues,
+  });
+
   const recipientsWithMissingFields = getRecipientsWithMissingFields(
     recipients,
     recipients.flatMap((recipient) => recipient.fields),
@@ -242,6 +277,22 @@ export const createDocumentFromDirectTemplate = async ({
 
   if (!isAccessAuthValid) {
     throw new AppError(AppErrorCode.UNAUTHORIZED, { message: 'You must be logged in' });
+  }
+
+  // Solid Ten Sign (AUD-C4): a stranger never chooses who gets an email (S-H3), on every direct
+  // link, not only on public forms. The email counts as verified when a public form verified it,
+  // or when the signed-in account has that email. Otherwise no mail goes to that address (its
+  // recipient row gets `unverifiedEmailAt`, see `recipient-mail.ts`) and the next signer cannot be
+  // dictated. The recipients the owner set in the template and the owner notices are unchanged.
+  const isDirectRecipientEmailVerified = hooks
+    ? !hooks.disableRecipientEmails
+    : Boolean(user && user.email.toLowerCase() === directRecipientEmail.toLowerCase());
+
+  if (nextSigner && !isDirectRecipientEmailVerified) {
+    throw new AppError(AppErrorCode.INVALID_REQUEST, {
+      message: 'Sign in with this email address before you choose the next signer.',
+      userMessage: 'Sign in with this email address before you choose the next signer.',
+    });
   }
 
   const directTemplateRecipientAuthOptions = ZRecipientAuthOptionsSchema.parse(directTemplateRecipient.authOptions);
@@ -304,14 +355,18 @@ export const createDocumentFromDirectTemplate = async ({
     fieldsToProcess.map(async (templateField) => {
       const signedFieldValue = signedFieldValues.find((value) => value.fieldId === templateField.id);
 
-      if (isRequiredField(templateField) && !signedFieldValue) {
+      if (isRequiredField(templateField) && !signedFieldValue && !notRequiredFieldIds.has(templateField.id)) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
           message: 'Invalid, missing or changed fields',
         });
       }
 
       if (templateField.type === FieldType.NAME && directRecipientName === undefined) {
-        directRecipientName = signedFieldValue?.value;
+        // Solid Ten Sign (AUD-C5): the same single-line cleaning as the typed name.
+        directRecipientName =
+          signedFieldValue?.value === undefined
+            ? undefined
+            : sanitizeSingleLineText(signedFieldValue.value).slice(0, 255);
       }
 
       const derivedRecipientActionAuth = await validateFieldAuth({
@@ -558,6 +613,7 @@ export const createDocumentFromDirectTemplate = async ({
         sendStatus: SendStatus.SENT,
         signedAt: initialRequestTime,
         signingOrder: resolveSigningOrder(directTemplateRecipient.id),
+        unverifiedEmailAt: isDirectRecipientEmailVerified ? null : initialRequestTime,
         fields: {
           createMany: {
             data: directTemplateNonSignatureFields.map(({ templateField, customText }) => {
@@ -682,51 +738,55 @@ export const createDocumentFromDirectTemplate = async ({
           accessAuth: derivedRecipientAccessAuth || undefined,
         },
       }),
-      ...createdDirectRecipientFields.map(({ field, derivedRecipientActionAuth }) =>
-        createDocumentAuditLogData({
-          type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_FIELD_INSERTED,
-          envelopeId: createdEnvelope.id,
-          user: {
-            id: user?.id,
-            name: user?.name,
-            email: directRecipientEmail,
-          },
-          metadata: requestMetadata,
-          data: {
-            recipientEmail: createdDirectRecipient.email,
-            recipientId: createdDirectRecipient.id,
-            recipientName: createdDirectRecipient.name,
-            recipientRole: createdDirectRecipient.role,
-            fieldId: field.secondaryId,
-            field: match(field.type)
-              .with(FieldType.SIGNATURE, FieldType.FREE_SIGNATURE, (type) => ({
-                type,
-                data: field.signature?.signatureImageAsBase64 || field.signature?.typedSignature || '',
-              }))
-              .with(
-                FieldType.DATE,
-                FieldType.EMAIL,
-                FieldType.INITIALS,
-                FieldType.NAME,
-                FieldType.TEXT,
-                FieldType.NUMBER,
-                FieldType.CHECKBOX,
-                FieldType.DROPDOWN,
-                FieldType.RADIO,
-                (type) => ({
+      // Solid Ten: a calculated field is written by the server (DOCUMENT_FIELD_CALCULATED), not by the visitor.
+      ...createdDirectRecipientFields
+        .filter(({ field }) => !isCalculatedField(field))
+        .map(({ field, derivedRecipientActionAuth }) =>
+          createDocumentAuditLogData({
+            type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_FIELD_INSERTED,
+            envelopeId: createdEnvelope.id,
+            user: {
+              id: user?.id,
+              name: user?.name,
+              email: directRecipientEmail,
+            },
+            metadata: requestMetadata,
+            data: {
+              recipientEmail: createdDirectRecipient.email,
+              recipientId: createdDirectRecipient.id,
+              recipientName: createdDirectRecipient.name,
+              recipientRole: createdDirectRecipient.role,
+              fieldId: field.secondaryId,
+              field: match(field.type)
+                .with(FieldType.SIGNATURE, FieldType.FREE_SIGNATURE, (type) => ({
                   type,
-                  data: field.customText,
-                }),
-              )
-              .exhaustive(),
-            fieldSecurity: derivedRecipientActionAuth
-              ? {
-                  type: derivedRecipientActionAuth,
-                }
-              : undefined,
-          },
-        }),
-      ),
+                  data: field.signature?.signatureImageAsBase64 || field.signature?.typedSignature || '',
+                }))
+                .with(
+                  FieldType.DATE,
+                  FieldType.EMAIL,
+                  FieldType.INITIALS,
+                  FieldType.NAME,
+                  FieldType.TEXT,
+                  FieldType.NUMBER,
+                  FieldType.CHECKBOX,
+                  FieldType.DROPDOWN,
+                  FieldType.RADIO,
+                  FieldType.FILE,
+                  (type) => ({
+                    type,
+                    data: field.customText,
+                  }),
+                )
+                .exhaustive(),
+              fieldSecurity: derivedRecipientActionAuth
+                ? {
+                    type: derivedRecipientActionAuth,
+                  }
+                : undefined,
+            },
+          }),
+        ),
       createDocumentAuditLogData({
         type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RECIPIENT_COMPLETED,
         envelopeId: createdEnvelope.id,
@@ -824,8 +884,37 @@ export const createDocumentFromDirectTemplate = async ({
       }
     }
 
+    // Solid Ten: the calculated values are written between the field entries and the
+    // completion, so the audit trail shows them before the recipient completed.
+    const completedIndex = auditLogsToCreate.findIndex(
+      (auditLog) => auditLog.type === DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RECIPIENT_COMPLETED,
+    );
+
     await tx.documentAuditLog.createMany({
-      data: auditLogsToCreate,
+      data: auditLogsToCreate.slice(0, completedIndex),
+    });
+
+    await applyFieldLogic({
+      tx,
+      envelopeId: createdEnvelope.id,
+      recipientId: createdDirectRecipient.id,
+      user: { name: createdDirectRecipient.name, email: createdDirectRecipient.email },
+      requestMetadata: requestMetadata.requestMetadata,
+    });
+
+    // One millisecond later than anything written so far, so no timestamp tie can reorder them.
+    const completedAt = new Date(Date.now() + 1);
+
+    await tx.documentAuditLog.createMany({
+      data: auditLogsToCreate.slice(completedIndex).map((auditLog) => ({ ...auditLog, createdAt: completedAt })),
+    });
+
+    await hooks?.onCreated?.({
+      tx,
+      envelopeId: createdEnvelope.id,
+      recipientId: createdDirectRecipient.id,
+      recipientName: createdDirectRecipient.name,
+      recipientEmail: createdDirectRecipient.email,
     });
 
     const templateAttachments = await tx.envelopeAttachment.findMany({

@@ -10,6 +10,10 @@ const EXECUTE_WEBHOOK_JOB_DEFINITION_SCHEMA = z.object({
   event: z.nativeEnum(WebhookTriggerEvents),
   webhookId: z.string(),
   data: z.unknown(),
+  /** Solid Ten: 1-based attempt number; set by the retry sweep. */
+  attempt: z.number().int().min(1).optional(),
+  // Solid Ten: the failed call this attempt retries; its retry lease ends when this attempt is stored.
+  retryOfCallId: z.string().optional(),
   requestMetadata: ZRequestMetadataSchema.optional(),
 });
 

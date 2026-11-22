@@ -1,12 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { PDFDocument } from '@cantoo/pdf-lib';
 import { finalizeTspEnvelopeCompletion } from '@documenso/ee/server-only/signing/csc/finalize-tsp-completion';
-import { addRejectionStampToPdf } from '@documenso/lib/server-only/pdf/add-rejection-stamp-to-pdf';
 import { generateAuditLogPdf } from '@documenso/lib/server-only/pdf/generate-audit-log-pdf';
 import { generateCertificatePdf } from '@documenso/lib/server-only/pdf/generate-certificate-pdf';
-import { getLastPageDimensions } from '@documenso/lib/server-only/pdf/get-page-size';
 import { prisma } from '@documenso/prisma';
-import { signPdf } from '@documenso/signing';
 import { PDF } from '@libpdf/core';
 import type { DocumentData, Envelope, EnvelopeContent, EnvelopeItem, Field } from '@prisma/client';
 import { DocumentStatus, EnvelopeType, RecipientRole, SigningStatus, WebhookTriggerEvents } from '@prisma/client';
@@ -14,12 +11,10 @@ import { nanoid } from 'nanoid';
 
 import { NEXT_PRIVATE_USE_PLAYWRIGHT_PDF } from '../../../constants/app';
 import { AppError, AppErrorCode } from '../../../errors/app-error';
-import { loadContentImages } from '../../../server-only/data-content/load-content-images';
+import { loadContentImageBytes } from '../../../server-only/data-content/load-content-images';
 import { getAuditLogsPdf } from '../../../server-only/htmltopdf/get-audit-logs-pdf';
 import { getCertificatePdf } from '../../../server-only/htmltopdf/get-certificate-pdf';
-import { insertFieldInPDFV1 } from '../../../server-only/pdf/insert-field-in-pdf-v1';
-import { insertPageOverlays } from '../../../server-only/pdf/insert-page-overlay';
-import { legacy_insertFieldInPDF } from '../../../server-only/pdf/legacy-insert-field-in-pdf';
+import { getLastPageSizeIsolated, sealPdfIsolated } from '../../../server-only/pdf-child/isolated-pdf';
 import { getTeamSettings } from '../../../server-only/team/get-team-settings';
 import { triggerWebhook } from '../../../server-only/webhooks/trigger/trigger-webhook';
 import { DOCUMENT_AUDIT_LOG_TYPE, type TDocumentAuditLog } from '../../../types/document-audit-logs';
@@ -28,10 +23,10 @@ import { mapEnvelopeToWebhookDocumentPayload, ZWebhookDocumentSchema } from '../
 import { prefixedId } from '../../../universal/id';
 import { getFileServerSide } from '../../../universal/upload/get-file.server';
 import { putPdfFileServerSide } from '../../../universal/upload/put-file.server';
-import { fieldsContainUnsignedRequiredField } from '../../../utils/advanced-fields-helpers';
 import { isDocumentCompleted } from '../../../utils/document';
 import { createDocumentAuditLogData } from '../../../utils/document-audit-logs';
 import { mapDocumentIdToSecondaryId } from '../../../utils/envelope';
+import { fieldsContainUnsignedRequiredVisibleField } from '../../../utils/field-conditions';
 import { jobs } from '../../client';
 import type { JobRunIO } from '../../client/_internal/job';
 import type { TSealDocumentJobDefinition } from './seal-document';
@@ -39,8 +34,8 @@ import type { TSealDocumentJobDefinition } from './seal-document';
 export const run = async ({ payload, io }: { payload: TSealDocumentJobDefinition; io: JobRunIO }) => {
   const { documentId, sendEmail = true, isResealing = false, requestMetadata } = payload;
 
-  const { envelopeId, envelopeStatus, isRejected } = await io.runTask('seal-document', async () => {
-    const envelope = await prisma.envelope.findFirstOrThrow({
+  const { envelopeId, envelopeStatus, isRejected, isSuperseded } = await io.runTask('seal-document', async () => {
+    const envelope = await prisma.envelope.findFirst({
       where: {
         type: EnvelopeType.DOCUMENT,
         secondaryId: mapDocumentIdToSecondaryId(documentId),
@@ -73,8 +68,21 @@ export const run = async ({ payload, io }: { payload: TSealDocumentJobDefinition
       },
     });
 
+    // Solid Ten: the document is gone (the retention purge or a hard delete won the race). Nothing
+    // to seal; failing would only retry until the budget is spent.
+    if (!envelope) {
+      io.logger.info(`Document ${documentId} no longer exists; nothing to seal`);
+
+      return supersededSealResult('', DocumentStatus.PENDING);
+    }
+
     if (envelope.envelopeItems.length === 0) {
       throw new Error('At least one envelope item required');
+    }
+
+    // Solid Ten: another writer (cancel, delete, an earlier seal) already moved the envelope.
+    if (!getSealableStatuses(isResealing).includes(envelope.status)) {
+      return supersededSealResult(envelope.id, envelope.status);
     }
 
     const settings = await getTeamSettings({
@@ -126,7 +134,7 @@ export const run = async ({ payload, io }: { payload: TSealDocumentJobDefinition
     const rejectionReason = rejectedRecipient?.rejectionReason ?? '';
 
     // Skip the field check if the document is rejected
-    if (!isRejected && fieldsContainUnsignedRequiredField(fields)) {
+    if (!isRejected && fieldsContainUnsignedRequiredVisibleField(fields)) {
       throw new Error(`Document ${envelope.id} has unsigned required fields`);
     }
 
@@ -191,6 +199,7 @@ export const run = async ({ payload, io }: { payload: TSealDocumentJobDefinition
         envelopeId: envelope.id,
         envelopeStatus: envelope.status,
         isRejected,
+        isSuperseded: false,
       };
     }
 
@@ -229,9 +238,8 @@ export const run = async ({ payload, io }: { payload: TSealDocumentJobDefinition
       let auditLogDoc: PDF | null = null;
 
       if (needsCertificate || needsAuditLog) {
-        const pdfDoc = await PDF.load(pdfData);
-
-        const { width: pageWidth, height: pageHeight } = getLastPageDimensions(pdfDoc);
+        // Solid Ten: read in a PDF child for a large document (SEC3-M1, LD3-H1).
+        const { width: pageWidth, height: pageHeight } = await getLastPageSizeIsolated(pdfData);
 
         const additionalAuditLogs = [
           // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
@@ -297,7 +305,24 @@ export const run = async ({ payload, io }: { payload: TSealDocumentJobDefinition
       newDocumentData.push(result);
     }
 
-    await prisma.$transaction(async (tx) => {
+    const hasMovedEnvelope = await prisma.$transaction(async (tx) => {
+      // Solid Ten: move the envelope only from a status the seal may finish. A cancel that won the
+      // race leaves 0 rows here; the transaction rolls back and the seal stops without side effects.
+      const { count } = await tx.envelope.updateMany({
+        where: {
+          id: envelope.id,
+          status: { in: getSealableStatuses(isResealing) },
+        },
+        data: {
+          status: finalEnvelopeStatus,
+          completedAt: new Date(),
+        },
+      });
+
+      if (count === 0) {
+        return false;
+      }
+
       for (const { oldDocumentDataId, newDocumentDataId } of newDocumentData) {
         await tx.envelopeItem.update({
           where: {
@@ -310,29 +335,42 @@ export const run = async ({ payload, io }: { payload: TSealDocumentJobDefinition
         });
       }
 
-      await tx.envelope.update({
-        where: {
-          id: envelope.id,
-        },
-        data: {
-          status: finalEnvelopeStatus,
-          completedAt: new Date(),
-        },
-      });
-
       await tx.documentAuditLog.create({
         data: envelopeCompletedAuditLog,
       });
+
+      return true;
     });
+
+    if (!hasMovedEnvelope) {
+      // Solid Ten: the signed copies written above are referenced by nothing.
+      await prisma.documentData
+        .deleteMany({ where: { id: { in: newDocumentData.map(({ newDocumentDataId }) => newDocumentDataId) } } })
+        .catch((error: unknown) => io.logger.warn('Could not remove the unused signed copies', error));
+
+      return supersededSealResult(envelope.id, envelope.status);
+    }
 
     return {
       envelopeId: envelope.id,
       envelopeStatus: envelope.status,
       isRejected,
+      isSuperseded: false,
     };
   });
 
-  const updatedEnvelope = await prisma.envelope.findFirstOrThrow({
+  if (isSuperseded) {
+    io.logger.info(`Envelope ${envelopeId} left the sealable state before the seal finished; nothing sent`);
+
+    return;
+  }
+
+  // Solid Ten: a re-run of this job (a crash after the follow-ups below were queued) must not
+  // queue them again (FS2-L1). The id is cached per job, so a re-run reuses it; a new seal job
+  // (an admin reseal) gets a new one and notifies webhooks again, as before.
+  const { sealRunId } = await io.runTask('seal-run-id', async () => ({ sealRunId: randomUUID() }));
+
+  const updatedEnvelope = await prisma.envelope.findFirst({
     where: {
       id: envelopeId,
     },
@@ -342,11 +380,19 @@ export const run = async ({ payload, io }: { payload: TSealDocumentJobDefinition
     },
   });
 
+  // Solid Ten: purged right after it was sealed: nobody is left to tell.
+  if (!updatedEnvelope) {
+    io.logger.info(`Envelope ${envelopeId} no longer exists; no follow-ups sent`);
+
+    return;
+  }
+
   await triggerWebhook({
     event: isRejected ? WebhookTriggerEvents.DOCUMENT_REJECTED : WebhookTriggerEvents.DOCUMENT_COMPLETED,
     data: ZWebhookDocumentSchema.parse(mapEnvelopeToWebhookDocumentPayload(updatedEnvelope)),
     userId: updatedEnvelope.userId,
     teamId: updatedEnvelope.teamId ?? undefined,
+    idempotencyKey: `seal:${sealRunId}`,
   });
 
   let shouldSendCompletedEmail = sendEmail && !isResealing && !isRejected;
@@ -357,6 +403,8 @@ export const run = async ({ payload, io }: { payload: TSealDocumentJobDefinition
 
   if (shouldSendCompletedEmail) {
     await jobs.triggerJob({
+      // Solid Ten: once per envelope (FS2-L1). Resending a completed document has its own action.
+      id: `completed-emails:${envelopeId}`,
       name: 'send.document.completed.emails',
       payload: {
         envelopeId,
@@ -365,6 +413,20 @@ export const run = async ({ payload, io }: { payload: TSealDocumentJobDefinition
     });
   }
 };
+
+/**
+ * Solid Ten: the statuses a seal may move the envelope from. A first seal only finishes a
+ * PENDING envelope; a reseal (admin action or the seal sweep) may also redo a finished one.
+ */
+const getSealableStatuses = (isResealing: boolean): DocumentStatus[] =>
+  isResealing ? [DocumentStatus.PENDING, DocumentStatus.COMPLETED, DocumentStatus.REJECTED] : [DocumentStatus.PENDING];
+
+const supersededSealResult = (envelopeId: string, envelopeStatus: DocumentStatus) => ({
+  envelopeId,
+  envelopeStatus,
+  isRejected: false,
+  isSuperseded: true,
+});
 
 type DecorateAndSignPdfOptions = {
   envelope: Pick<Envelope, 'id' | 'title' | 'useLegacyFieldInsertion' | 'internalVersion'>;
@@ -392,75 +454,29 @@ const decorateAndSignPdf = async ({
   certificateDoc,
   auditLogDoc,
 }: DecorateAndSignPdfOptions) => {
-  let pdfDoc = await PDF.load(pdfData);
+  // Solid Ten: the PDF part runs in a PDF child for a large document, with no database
+  // (seal-pdf-bytes.ts, SEC3-M1); the content images are loaded here and decoded there.
+  const contentImageBytes =
+    envelope.internalVersion === 2 ? await loadContentImageBytes(envelopeItemContents) : new Map<string, Uint8Array>();
 
-  // Normalize and flatten layers that could cause issues with the signature
-  pdfDoc.flattenAll();
-  // Upgrade to PDF 1.7 for better compatibility with signing
-  pdfDoc.upgradeVersion('1.7');
-
-  // Taken before the certificate and audit log pages are appended.
-  const documentPageCount = pdfDoc.getPageCount();
-
-  if (certificateDoc) {
-    await pdfDoc.copyPagesFrom(
-      certificateDoc,
-      Array.from({ length: certificateDoc.getPageCount() }, (_, index) => index),
-    );
-  }
-
-  if (auditLogDoc) {
-    await pdfDoc.copyPagesFrom(
-      auditLogDoc,
-      Array.from({ length: auditLogDoc.getPageCount() }, (_, index) => index),
-    );
-  }
-
-  // Handle V1 and legacy insertions.
-  if (envelope.internalVersion === 1) {
-    const legacy_pdfLibDoc = await PDFDocument.load(await pdfDoc.save({ useXRefStream: true }));
-
-    for (const field of envelopeItemFields) {
-      if (field.inserted) {
-        if (envelope.useLegacyFieldInsertion) {
-          await legacy_insertFieldInPDF(legacy_pdfLibDoc, field);
-        } else {
-          await insertFieldInPDFV1(legacy_pdfLibDoc, field);
-        }
-      }
-    }
-
-    // Should never run into issues with this flatten since all
-    // arcoFields are created by pdf-lib itself.
-    legacy_pdfLibDoc.getForm().flatten();
-
-    await pdfDoc.reload(await legacy_pdfLibDoc.save());
-  }
-
-  // Handle V2 envelope insertions.
-  if (envelope.internalVersion === 2) {
-    const images = await loadContentImages(envelopeItemContents);
-
-    await insertPageOverlays({
-      pdfDoc,
+  const pdfBytes = await sealPdfIsolated({
+    options: {
+      envelope: {
+        id: envelope.id,
+        title: envelope.title,
+        useLegacyFieldInsertion: envelope.useLegacyFieldInsertion,
+        internalVersion: envelope.internalVersion,
+      },
       fields: envelopeItemFields,
       contents: envelopeItemContents,
-      images,
-    });
-  }
-
-  // Stamped after the fields and contents so opaque contents cannot hide it.
-  if (isRejected) {
-    await addRejectionStampToPdf(pdfDoc, rejectionReason, { pageCount: documentPageCount });
-  }
-
-  // Re-flatten the form to handle our checkbox and radio fields that
-  // create native arcoFields
-  pdfDoc.flattenAll();
-
-  pdfDoc = await PDF.load(await pdfDoc.save({ useXRefStream: true }));
-
-  const pdfBytes = await signPdf({ pdf: pdfDoc });
+      isRejected,
+      rejectionReason,
+    },
+    pdfData,
+    certificatePdf: certificateDoc ? await certificateDoc.save() : null,
+    auditLogPdf: auditLogDoc ? await auditLogDoc.save() : null,
+    contentImageBytes,
+  });
 
   const { name } = path.parse(envelopeItem.title);
 
