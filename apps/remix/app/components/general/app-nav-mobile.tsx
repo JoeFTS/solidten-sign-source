@@ -2,6 +2,7 @@ import LogoImage from '@documenso/assets/logo.png';
 import { authClient } from '@documenso/auth/client';
 import { useOptionalCurrentOrganisation } from '@documenso/lib/client-only/providers/organisation';
 import { useSession } from '@documenso/lib/client-only/providers/session';
+import { NEXT_PUBLIC_ST_SOURCE_URL } from '@documenso/lib/constants/source-code';
 import { canAccessOrganisationAnalytics, formatOrganisationAnalyticsPath } from '@documenso/lib/utils/organisations';
 import { canExecuteTeamAction, formatAnalyticsPath } from '@documenso/lib/utils/teams';
 import { trpc } from '@documenso/trpc/react';
@@ -110,6 +111,27 @@ export const AppNavMobile = ({ isMenuOpen, onMenuOpenChange }: AppNavMobileProps
             </Link>
           ))}
 
+          {/* Solid Ten Sign: the Help section. */}
+          <Link
+            className="font-semibold text-2xl text-foreground hover:text-foreground/80"
+            to="/help"
+            onClick={() => handleMenuItemClick()}
+            data-testid="mobile-menu-help-link"
+          >
+            <Trans>Help</Trans>
+          </Link>
+
+          {/* Solid Ten Sign: the AGPL source link (the account menu column holding it is hidden on a phone). */}
+          <a
+            className="font-semibold text-2xl text-foreground hover:text-foreground/80"
+            href={NEXT_PUBLIC_ST_SOURCE_URL()}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="mobile-menu-source-code-link"
+          >
+            <Trans>Source code</Trans>
+          </a>
+
           <button
             className="font-semibold text-2xl text-foreground hover:text-foreground/80"
             onClick={async () => authClient.signOut()}
@@ -124,7 +146,7 @@ export const AppNavMobile = ({ isMenuOpen, onMenuOpenChange }: AppNavMobileProps
           </div>
 
           <p className="text-muted-foreground text-sm">
-            © {new Date().getFullYear()} Solid Ten.{" "}
+            © {new Date().getFullYear()} Solid Ten.{' '}
             <a href="/open-source-notices.txt" className="underline">
               Open-source notices
             </a>

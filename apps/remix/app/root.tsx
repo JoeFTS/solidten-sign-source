@@ -27,6 +27,7 @@ import { nonceMiddleware } from '~/middleware/nonce';
 import type { Route } from './+types/root';
 import stylesheet from './app.css?url';
 import { GenericErrorLayout } from './components/general/generic-error-layout';
+import { InputOtpStyle } from './components/general/input-otp-style';
 import { UserPreferencesProvider } from './providers/user-preferences';
 import { langCookie } from './storage/lang-cookie.server';
 import { themeSessionResolver } from './storage/theme-session.server';
@@ -151,6 +152,8 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
         <Links nonce={nonce(cspNonce)} />
         <meta name="google" content="notranslate" />
         <PreventFlashOnWrongTheme ssrTheme={Boolean(data.theme)} nonce={nonce(cspNonce)} />
+        {/* Solid Ten Sign: the code input's style, with the CSP nonce (see input-otp-style.tsx). */}
+        <InputOtpStyle nonce={nonce(cspNonce)} />
 
         {disableAnimations && (
           <style

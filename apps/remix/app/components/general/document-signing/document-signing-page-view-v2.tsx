@@ -36,6 +36,7 @@ import { useEmbedSigningContext } from '~/components/embed/embed-signing-context
 import { EnvelopeSignerPageRenderer } from '~/components/general/envelope-signing/envelope-signer-page-renderer';
 import { EnvelopePdfViewer } from '~/components/general/pdf-viewer/envelope-pdf-viewer';
 import { PublicLegalLinks } from '~/components/general/public-legal-links';
+import { SigningHelpLink } from '~/components/general/help/help-links';
 import { SourceCodeNotice } from '~/components/general/source-code-notice';
 
 import { BrandingLogo } from '../branding-logo';
@@ -271,8 +272,9 @@ export const DocumentSigningPageViewV2 = () => {
                 </div>
               )}
 
+              {!isEmbed && <SigningHelpLink className="mt-4 px-4" />}
               {!isEmbed && <PublicLegalLinks className="mt-4 justify-start px-4 pt-4" />}
-              {!isEmbed && <SourceCodeNotice className="mt-2 px-4 pb-4 text-left" />}
+              {!isEmbed && <SourceCodeNotice className="mt-2 px-4 pb-4 text-left" showHelp={false} />}
             </div>
           </div>
         </div>

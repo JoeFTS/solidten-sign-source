@@ -42,6 +42,7 @@ import { DocumentSigningRadioField } from '~/components/general/document-signing
 import { DocumentSigningRejectDialog } from '~/components/general/document-signing/document-signing-reject-dialog';
 import { DocumentSigningSignatureField } from '~/components/general/document-signing/document-signing-signature-field';
 import { DocumentSigningTextField } from '~/components/general/document-signing/document-signing-text-field';
+import { SigningHelpLink } from '~/components/general/help/help-links';
 import PDFViewerLazy from '~/components/general/pdf-viewer/pdf-viewer-lazy';
 
 import { useRequiredDocumentSigningAuthContext } from './document-signing-auth-provider';
@@ -238,6 +239,9 @@ export const DocumentSigningPageViewV1 = ({
                 )
                 .otherwise(() => null)}
             </span>
+
+            {/* Solid Ten Sign: the signing help article, in the page flow (H-D1: nothing fixed). */}
+            <SigningHelpLink className="mt-1 flex" />
           </div>
 
           <div className="flex items-center gap-x-4">

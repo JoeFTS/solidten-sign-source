@@ -339,6 +339,13 @@ export const OrgMenuSwitcher = () => {
                 </DropdownMenuItem>
               )}
 
+              {/* Solid Ten Sign: the Help section. */}
+              <DropdownMenuItem className="px-4 py-2 text-muted-foreground" asChild>
+                <Link to="/help" data-testid="menu-help-link">
+                  <Trans>Help</Trans>
+                </Link>
+              </DropdownMenuItem>
+
               {/* Solid Ten Sign: the AGPL source link. */}
               <DropdownMenuItem className="px-4 py-2 text-muted-foreground" asChild>
                 <a

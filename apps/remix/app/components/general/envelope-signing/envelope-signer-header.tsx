@@ -11,13 +11,14 @@ import {
 import { Separator } from '@documenso/ui/primitives/separator';
 import { Plural, Trans } from '@lingui/react/macro';
 import { EnvelopeType, RecipientRole } from '@prisma/client';
-import { BanIcon, DownloadCloudIcon, MessageSquareIcon, UserRoundPenIcon } from 'lucide-react';
+import { BanIcon, CircleHelpIcon, DownloadCloudIcon, MessageSquareIcon, UserRoundPenIcon } from 'lucide-react';
 import { Link } from 'react-router';
 import { match } from 'ts-pattern';
 
 import { EnvelopeDownloadDialog } from '~/components/dialogs/envelope-download-dialog';
 import { useEmbedSigningContext } from '~/components/embed/embed-signing-context';
 import { BrandingLogo } from '~/components/general/branding-logo';
+import { HOW_TO_SIGN_HELP_PATH } from '~/components/general/help/help-links';
 import { PublicLegalLinksDropdownMenuItems } from '~/components/general/public-legal-links';
 
 import { BrandingLogoIcon } from '../branding-logo-icon';
@@ -177,6 +178,16 @@ const MobileDropdownMenu = () => {
               </DropdownMenuItem>
             )}
           />
+        )}
+
+        {/* Solid Ten Sign: the signing help article (not in embeds). */}
+        {!isEmbedSigning && (
+          <DropdownMenuItem asChild>
+            <a href={HOW_TO_SIGN_HELP_PATH} target="_blank" rel="noopener noreferrer" data-testid="signing-help-menu-link">
+              <CircleHelpIcon className="mr-2 h-4 w-4" />
+              <Trans>Need help signing?</Trans>
+            </a>
+          </DropdownMenuItem>
         )}
 
         {!isEmbedSigning && <PublicLegalLinksDropdownMenuItems />}

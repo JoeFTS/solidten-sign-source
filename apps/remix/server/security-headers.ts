@@ -1,3 +1,4 @@
+import { getHelpMediaCspSources } from '@documenso/lib/constants/help/media-url';
 import { createMiddleware } from 'hono/factory';
 
 import type { HonoEnv } from './router';
@@ -89,6 +90,8 @@ const buildCspHeader = ({ nonce, kind }: { nonce: string; kind: CspPathKind }) =
     // konva, etc. all rely on them. `'unsafe-inline'` for attributes is
     // industry standard and does not weaken `style-src-elem`.
     `style-src-attr 'unsafe-inline'`,
+    // Solid Ten Sign: media only from this site and the help video base (help videos are the only media).
+    `media-src ${getHelpMediaCspSources(process.env.NEXT_PUBLIC_ST_HELP_MEDIA_URL)}`,
   ];
 
   // Embeds inject customer-supplied CSS via runtime-created `<style>`

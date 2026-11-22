@@ -74,3 +74,6 @@ tmp/
 
 # opencode
 .opencode/package-lock.json
+
+# Solid Ten Sign: help videos are not in git (served from NEXT_PUBLIC_ST_HELP_MEDIA_URL)
+apps/remix/public/help-media/
