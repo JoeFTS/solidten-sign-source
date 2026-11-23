@@ -10,7 +10,7 @@ import { EnvelopeType, RecipientRole, SendStatus, SigningStatus } from '@prisma/
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapRecipientToLegacyRecipient } from '../../utils/recipients';
-import { assertPasswordActionAuthAllowed } from '../auth/assert-password-action-auth';
+import { assertActionAuthAllowed } from '../auth/assert-action-auth-allowed';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { assertCompatibleRecipientGrouping } from '../signature-level/assert-compatible-recipient-grouping';
@@ -83,17 +83,6 @@ export const createEnvelopeRecipients = async ({
     roles: recipientsToCreate.map((recipient) => recipient.role),
   });
 
-  const recipientsHaveActionAuth = recipientsToCreate.some(
-    (recipient) => recipient.actionAuth && recipient.actionAuth.length > 0,
-  );
-
-  // Check if user has permission to set the global action auth.
-  if (recipientsHaveActionAuth && !envelope.team.organisation.organisationClaim.flags.cfr21) {
-    throw new AppError(AppErrorCode.UNAUTHORIZED, {
-      message: 'You do not have permission to set the action auth',
-    });
-  }
-
   for (const recipient of recipientsToCreate) {
     assertCompatibleRecipientRole({
       signatureLevel: envelope.signatureLevel,
@@ -136,8 +125,11 @@ export const createEnvelopeRecipients = async ({
 
     return await Promise.all(
       normalizedRecipients.map(async (recipient) => {
-        // Solid Ten Sign (N-5): no new "Require password" when password sign-in is off.
-        assertPasswordActionAuthAllowed(recipient.actionAuth);
+        // Solid Ten Sign (O-F2): the one check for action auth (plan, and PASSWORD with password sign-in off).
+        assertActionAuthAllowed({
+          next: recipient.actionAuth,
+          organisationClaim: envelope.team.organisation.organisationClaim,
+        });
 
         const authOptions = createRecipientAuthOptions({
           accessAuth: recipient.accessAuth ?? [],

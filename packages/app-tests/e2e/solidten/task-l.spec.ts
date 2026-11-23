@@ -71,7 +71,7 @@ test('L-1: radio takes only its options; "Maybe" for Yes/No is a 400 and nothing
 
   const refused = await sign(request, recipient.token, field.id, 'Maybe');
   expect(refused.status()).toBe(400);
-  expect(await message(refused)).toContain('not one of the options');
+  expect(await message(refused)).toMatch(/^The .+ field on page 1 has a value that is not one of its options\./);
   expect((await prisma.field.findUniqueOrThrow({ where: { id: field.id } })).inserted).toBe(false);
 
   const accepted = await sign(request, recipient.token, field.id, 'Yes');
@@ -99,14 +99,14 @@ test('L-1: checkbox, dropdown, number, text, email and name refuse what V2 refus
       },
       bad: '["A","Z"]',
       good: '["A"]',
-      reason: /not one of the options/,
+      reason: /^The .+ field on page 1 has (a|a chosen) value that is not one of its options/,
     },
     {
       type: FieldType.DROPDOWN,
       meta: { type: 'dropdown', values: [{ value: 'Red' }, { value: 'Blue' }] },
       bad: 'Green',
       good: 'Blue',
-      reason: /not one of the options/,
+      reason: /^The .+ field on page 1 has (a|a chosen) value that is not one of its options/,
     },
     {
       type: FieldType.NUMBER,

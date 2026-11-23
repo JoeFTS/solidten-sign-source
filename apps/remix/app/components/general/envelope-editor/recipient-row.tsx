@@ -1,6 +1,7 @@
 import type { TEditorRecipientsFormSchema } from '@documenso/lib/client-only/hooks/use-editor-recipients';
 import { useCurrentEnvelopeEditor } from '@documenso/lib/client-only/providers/envelope-editor-provider';
 import { useCurrentOrganisation } from '@documenso/lib/client-only/providers/organisation';
+import { isStalePasswordActionAuth } from '@documenso/lib/utils/password-signin-availability';
 import { isCcRecipient } from '@documenso/lib/utils/recipients';
 import { RecipientActionAuthSelect } from '@documenso/ui/components/recipient/recipient-action-auth-select';
 import {
@@ -17,7 +18,6 @@ import { EnvelopeType, type RecipientRole } from '@prisma/client';
 import { GripVerticalIcon, TrashIcon } from 'lucide-react';
 import { memo } from 'react';
 import { useFormContext } from 'react-hook-form';
-
 import { RecipientPhoneField } from '../sms/recipient-phone-field';
 
 type TEditorSigner = TEditorRecipientsFormSchema['signers'][number];
@@ -211,7 +211,8 @@ const RecipientRowInner = ({
         className={cn({ 'pl-6': isSequential })}
       />
 
-      {showAdvancedSettings && organisation.organisationClaim.flags.cfr21 && (
+      {((showAdvancedSettings && organisation.organisationClaim.flags.cfr21) ||
+        isStalePasswordActionAuth(form.watch(`signers.${signerIndex}.actionAuth`))) && (
         <FormField
           control={form.control}
           name={`signers.${signerIndex}.actionAuth`}

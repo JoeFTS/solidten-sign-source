@@ -39,3 +39,11 @@ const readEnvSource = (): TEnvSource => {
 export const isPasswordSigninAvailable = (): boolean => computePasswordSigninAvailable(readEnvSource());
 
 export const isPasswordSignupAvailable = (): boolean => computePasswordSignupAvailable(readEnvSource());
+
+/**
+ * Solid Ten Sign (O-F7): a "Require password" stored earlier that this server can no longer
+ * honour. The editor shows it, also without the plan flag that normally shows the action-auth
+ * selects, so a sender can take it off.
+ */
+export const isStalePasswordActionAuth = (value: readonly (string | null | undefined)[] | null | undefined): boolean =>
+  !isPasswordSigninAvailable() && Boolean(value?.includes('PASSWORD'));

@@ -56,6 +56,7 @@ import { mapSecondaryIdToTemplateId } from '../../utils/envelope';
 import { buildEnvelopeContentCopyData } from '../../utils/envelope-content';
 import { findNumberFieldMetaProblem } from '../../utils/number-field-meta-check';
 import { buildTeamWhereQuery } from '../../utils/teams';
+import { assertTemplateActionAuthCopyAllowed } from '../auth/assert-action-auth-allowed';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { incrementDocumentId } from '../envelope/increment-id';
 import { assertOrganisationRatesAndLimits } from '../rate-limit/assert-organisation-rates-and-limits';
@@ -432,6 +433,10 @@ export const createDocumentFromTemplate = async ({
   const { documentAuthOption: templateAuthOptions } = extractDocumentAuthMethods({
     documentAuth: template.authOptions,
   });
+
+  // Solid Ten Sign (O-F2): the one action-auth check, for what the new document copies from the
+  // template (Use Template, bulk send, API v1 generate-document, API v2 use).
+  assertTemplateActionAuthCopyAllowed(template);
 
   const finalRecipients: FinalRecipient[] = template.recipients.map((templateRecipient) => {
     const foundRecipient = recipients.find((recipient) => recipient.id === templateRecipient.id);

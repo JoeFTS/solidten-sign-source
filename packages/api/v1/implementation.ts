@@ -7,6 +7,7 @@ import { match } from 'ts-pattern';
 import '@documenso/lib/constants/time-zones';
 import { DEFAULT_DOCUMENT_TIME_ZONE, TIME_ZONES } from '@documenso/lib/constants/time-zones';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { assertActionAuthAllowed } from '@documenso/lib/server-only/auth/assert-action-auth-allowed';
 import { deleteDocument } from '@documenso/lib/server-only/document/delete-document';
 import { findDocuments } from '@documenso/lib/server-only/document/find-documents';
 import { resendDocument } from '@documenso/lib/server-only/document/resend-document';
@@ -49,6 +50,27 @@ import { mapSecondaryIdToDocumentId, mapSecondaryIdToTemplateId } from '@documen
 import { prisma } from '@documenso/prisma';
 import { ApiContractV1 } from './contract';
 import { authenticatedMiddleware } from './middleware/authenticated';
+
+/**
+ * Solid Ten Sign (O-F2): API v1 writes a request's authOptions straight onto the new document.
+ * They pass the same action-auth check as every other path (plan flag, PASSWORD with password
+ * sign-in off).
+ */
+const assertV1AuthOptionsAllowed = async (
+  teamId: number,
+  authOptions: { globalActionAuth?: readonly (string | null)[] | null } | null | undefined,
+) => {
+  if (!authOptions?.globalActionAuth?.length) {
+    return;
+  }
+
+  const { organisation } = await prisma.team.findUniqueOrThrow({
+    where: { id: teamId },
+    select: { organisation: { select: { organisationClaim: true } } },
+  });
+
+  assertActionAuthAllowed({ next: authOptions.globalActionAuth, organisationClaim: organisation.organisationClaim });
+};
 
 export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
   getDocuments: authenticatedMiddleware(async (args, user, team) => {
@@ -780,6 +802,9 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
       };
     });
 
+    // Solid Ten Sign (O-F2): the one action-auth check, for the authOptions this route writes.
+    await assertV1AuthOptionsAllowed(team.id, body.authOptions);
+
     const createdEnvelope = await createDocumentFromTemplate({
       id: {
         type: 'templateId',
@@ -888,6 +913,10 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
     let envelope: Awaited<ReturnType<typeof createDocumentFromTemplate>> | null = null;
 
     try {
+      // Solid Ten Sign (O-F2): the one action-auth check, for the authOptions this route writes
+      // (before: accepted PASSWORD with password sign-in off, and skipped the plan check).
+      await assertV1AuthOptionsAllowed(team.id, body.authOptions);
+
       envelope = await createDocumentFromTemplate({
         id: {
           type: 'templateId',
@@ -1179,6 +1208,16 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
         },
       };
     } catch (err) {
+      // Solid Ten Sign (O-F5): a refusal with a reason (400, or the plan's 401) keeps it; only an
+      // unexpected error is the generic 500.
+      if (err instanceof AppError) {
+        const restError = AppError.toRestAPIError(err);
+
+        if (restError.status === 400 || restError.status === 401 || restError.status === 403) {
+          return restError as typeof restError & { status: 400 | 401 | 403 };
+        }
+      }
+
       return {
         status: 500,
         body: {
@@ -1225,6 +1264,17 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
         status: 400,
         body: {
           message: 'Document is already completed',
+        },
+      };
+    }
+
+    // Solid Ten Sign (O-F8): a recipient that is not on this document is a 404 with that reason
+    // (before: the editor's "document changed" text, answered as a 401 by the middleware).
+    if (!envelope.recipients.some((recipient) => recipient.id === Number(recipientId))) {
+      return {
+        status: 404,
+        body: {
+          message: 'Recipient not found',
         },
       };
     }

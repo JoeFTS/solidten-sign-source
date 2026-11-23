@@ -98,12 +98,6 @@ export const signEnvelopeFieldRoute = procedure
       });
     }
 
-    if (fieldValue.type !== field.type) {
-      throw new AppError(AppErrorCode.NOT_FOUND, {
-        message: 'Selected values do not match the field values',
-      });
-    }
-
     if (envelope.deletedAt) {
       throw plainRefusal(AppErrorCode.INVALID_REQUEST, 'This document was deleted.', { envelopeId: envelope.id });
     }
@@ -113,6 +107,16 @@ export const signEnvelopeFieldRoute = procedure
         envelopeId: envelope.id,
         status: envelope.status,
       });
+    }
+
+    // Solid Ten Sign (O-F4): after the document checks, so a field of a completed or deleted
+    // document gets that reason; and it names the field.
+    if (fieldValue.type !== field.type) {
+      throw plainRefusal(
+        AppErrorCode.INVALID_BODY,
+        `${describeFieldForUserAtStart(field)} is a ${field.type.toLowerCase().replace(/_/g, ' ')} field and cannot take this value.`,
+        { fieldId, fieldType: field.type, valueType: fieldValue.type },
+      );
     }
 
     // Both are checked because an assistant may insert values into a field belonging to

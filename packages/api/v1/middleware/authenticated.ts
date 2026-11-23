@@ -1,4 +1,5 @@
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { readDirectLinkSignatureRefusal } from '@documenso/lib/errors/direct-link-signature-error';
 import { getApiTokenByToken } from '@documenso/lib/server-only/public-api/get-api-token-by-token';
 import type { BaseApiLog, RootApiLog } from '@documenso/lib/types/api-logs';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
@@ -116,6 +117,12 @@ export const authenticatedMiddleware = <
 
       if (unavailable.status === 503) {
         return unavailable as typeof unavailable & { status: 503 };
+      }
+
+      // Solid Ten Sign (P-3): the database refused a change with a plain reason (it would break a
+      // template's direct link): a 400 with that reason.
+      if (readDirectLinkSignatureRefusal(err)) {
+        return unavailable as typeof unavailable & { status: 400 };
       }
 
       if (err instanceof AppError) {

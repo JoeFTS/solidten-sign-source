@@ -14,7 +14,7 @@ import { mapEnvelopeToWebhookDocumentPayload, ZWebhookDocumentSchema } from '../
 import { createDocumentAuthOptions, extractDocumentAuthMethods } from '../../utils/document-auth';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { buildTeamWhereQuery, canAccessTeamDocument } from '../../utils/teams';
-import { assertPasswordActionAuthAllowed } from '../auth/assert-password-action-auth';
+import { assertActionAuthAllowed } from '../auth/assert-action-auth-allowed';
 import { recomputeNextReminderForEnvelope } from '../recipient/update-recipient-next-reminder';
 import { assertCompatibleDictateNextSigner } from '../signature-level/assert-compatible-dictate-next-signer';
 import { assertCompatibleSigningOrder } from '../signature-level/assert-compatible-signing-order';
@@ -127,15 +127,13 @@ export const updateEnvelope = async ({
   const newGlobalAccessAuth = data?.globalAccessAuth === undefined ? documentGlobalAccessAuth : data.globalAccessAuth;
   const newGlobalActionAuth = data?.globalActionAuth === undefined ? documentGlobalActionAuth : data.globalActionAuth;
 
-  // Check if user has permission to set the global action auth.
-  if (newGlobalActionAuth.length > 0 && !envelope.team.organisation.organisationClaim.flags.cfr21) {
-    throw new AppError(AppErrorCode.UNAUTHORIZED, {
-      message: 'You do not have permission to set the action auth',
-    });
-  }
-
-  // Solid Ten Sign (N-5): a stored "Require password" may stay; a new one is refused.
-  assertPasswordActionAuthAllowed(newGlobalActionAuth, documentGlobalActionAuth);
+  // Solid Ten Sign (O-F2): the one check for action auth (plan, and PASSWORD with password sign-in
+  // off). What is stored may stay, and taking it off is always allowed.
+  assertActionAuthAllowed({
+    next: newGlobalActionAuth,
+    previous: documentGlobalActionAuth,
+    organisationClaim: envelope.team.organisation.organisationClaim,
+  });
 
   const authOptions = createDocumentAuthOptions({
     globalAccessAuth: newGlobalAccessAuth,

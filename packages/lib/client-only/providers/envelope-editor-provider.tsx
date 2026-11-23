@@ -20,7 +20,7 @@ import { EnvelopeType, Prisma, ReadStatus, SendStatus, SigningStatus } from '@pr
 import type React from 'react';
 import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useSearchParams } from 'react-router';
-
+import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { TDocumentEmailSettings } from '../../types/document-email';
 import { PRESIGNED_ENVELOPE_CONTENT_ID_PREFIX } from '../../utils/embed-config';
 import { formatDocumentsPath, formatTemplatesPath } from '../../utils/teams';
@@ -392,6 +392,25 @@ export const EnvelopeEditorProvider = ({
         location: 'autosave_fields',
         envelopeId: envelope.id,
       });
+
+      // Solid Ten Sign (P-4): a refusal with a plain reason (for example the change would break the
+      // direct link) shows that reason, and the editor goes back to the fields the server holds,
+      // so the next save does not fail again.
+      const appError = AppError.parseError(err);
+
+      if (appError.code === AppErrorCode.MISSING_SIGNATURE_FIELD && appError.message) {
+        editorFields.resetForm(getEnvelope().fields);
+        setAutosaveError(false);
+
+        toast({
+          title: t`Not saved`,
+          description: appError.message,
+          variant: 'destructive',
+          duration: 10000,
+        });
+
+        return;
+      }
 
       setAutosaveError(true);
 

@@ -1,4 +1,5 @@
-import { AppError, AppErrorCode } from '../errors/app-error';
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
+import { AppErrorCode } from '../errors/app-error';
 import type { EnvelopeEditorConfig } from '../types/envelope-editor';
 import { DEFAULT_EMBEDDED_EDITOR_CONFIG } from '../types/envelope-editor';
 
@@ -35,9 +36,7 @@ export const getPendingEmbedImagesToUpload = (
     }
 
     if (!data) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Content image ${dataContentId} has no data`,
-      });
+      throw plainRefusal(AppErrorCode.INVALID_REQUEST, 'An image block has no image data.', { dataContentId });
     }
 
     imagesToUpload.push({ id: dataContentId, file: data, index: imagesToUpload.length });

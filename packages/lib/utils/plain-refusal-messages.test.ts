@@ -3,7 +3,9 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { readDirectLinkSignatureRefusal } from '../errors/direct-link-signature-error';
 import { describeFieldForUser, describeFieldForUserAtStart } from './describe-field';
+import { describeSignerForSender } from './describe-signer';
 
 /**
  * Solid Ten Sign (N-3): refusals a signer or sender reads are plain and hold no internal ids
@@ -32,10 +34,21 @@ const SCANNED = [
 const ALLOWED = [
   'Recipient with ID ${recipient.id} not found in the template.',
   'Field with ID ${prefillField.id} not found in the template',
+  'Invalid envelope ID: ${id}',
+  'Envelope item with ID "${mapping.envelopeItemId}" not found in template',
+  // Admin-only (server administrators, who work with ids).
+  'Subscription claim ${claimId} not found',
+  'User with ID ${id} not found',
 ];
 
 const ID_IN_MESSAGE =
   /\b(Field|field|Recipient|recipient|Document|document|Envelope|envelope item|Envelope item)( with id| with ID)?:? \$\{/;
+
+/**
+ * Solid Ten Sign (O-F3): any interpolated id, wherever it stands ("(x@example.com, id: ${r.id})",
+ * "${contents.map((content) => content.id).join(', ')}").
+ */
+const ANY_ID_IN_MESSAGE = /\$\{[^}]*(\.id\b|[a-z]Id\b|\bid\b)[^}]*\}/;
 
 const listSourceFiles = (dir: string): string[] =>
   readdirSync(dir).flatMap((name) => {
@@ -62,7 +75,7 @@ const findIdMessages = () => {
       for (const match of source.matchAll(/message:\s*`([^`]*)`/g)) {
         const text = match[1];
 
-        if (ID_IN_MESSAGE.test(text) && !ALLOWED.includes(text)) {
+        if ((ID_IN_MESSAGE.test(text) || ANY_ID_IN_MESSAGE.test(text)) && !ALLOWED.includes(text)) {
           offenders.push(`${path.relative(REPO, file)}: ${text}`);
         }
       }
@@ -82,6 +95,14 @@ describe('N-3: user-facing refusals hold no internal ids', () => {
     for (const old of ['Field ${fieldId} is read only', 'Recipient ${recipient.id} has unsigned fields']) {
       expect(ID_IN_MESSAGE.test(old)).toBe(true);
     }
+
+    // O-F3: the distribute text and a list of content ids.
+    for (const old of [
+      'The following recipients are missing required fields: ${r.name} (${r.email}, id: ${r.id})',
+      "no image attached: ${contentsMissingImages.map((content) => content.id).join(', ')}.",
+    ]) {
+      expect(ANY_ID_IN_MESSAGE.test(old)).toBe(true);
+    }
   });
 });
 
@@ -100,5 +121,34 @@ describe('describeFieldForUser', () => {
   it('never a number', () => {
     expect(describeFieldForUser(null)).toBe('this field');
     expect(describeFieldForUser({ type: 'TEXT' })).not.toMatch(/\d/);
+  });
+});
+
+describe('O-F3: signers in sender messages', () => {
+  it('a template placeholder is not shown as "Recipient 1"', () => {
+    const text = describeSignerForSender({ name: 'Recipient 1', email: 'recipient.1@documenso.com' });
+
+    expect(text).toBe('A signer with no name or email yet');
+    expect(`${text} needs at least one signature field without a condition.`).not.toMatch(/Recipient \d+/);
+  });
+
+  it('a named signer keeps the name; the direct link signer is named by role', () => {
+    expect(describeSignerForSender({ name: 'Sam Rivera', email: 'sam@example.com' })).toBe('Sam Rivera');
+    expect(describeSignerForSender({ name: 'Recipient 2', email: 'sam@example.com' })).toBe('sam@example.com');
+    expect(describeSignerForSender({ name: 'Direct link recipient', email: 'direct.link@solidten.io' })).toBe(
+      'The direct link signer',
+    );
+  });
+
+  it('the database refusal (O-F1) becomes a plain message', () => {
+    const raw = new Error('Invalid `prisma.field.delete()` invocation: ERROR: ST_DIRECT_LINK_FIXED_SIGNATURE:direct');
+
+    expect(readDirectLinkSignatureRefusal({ cause: raw })).toBe(
+      'The direct link signer needs at least one signature field without a condition. This template has a direct link that is on, so visitors could not submit it. Keep one signature field without a condition, or turn the direct link off first.',
+    );
+    expect(readDirectLinkSignatureRefusal(new Error('ST_DIRECT_LINK_FIXED_SIGNATURE:Recipient 1'))).not.toMatch(
+      /Recipient \d+/,
+    );
+    expect(readDirectLinkSignatureRefusal(new Error('something else'))).toBeNull();
   });
 });

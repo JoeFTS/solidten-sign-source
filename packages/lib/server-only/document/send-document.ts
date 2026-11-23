@@ -283,7 +283,7 @@ const sendDocumentUnqueued = async ({
 
   if (contentsMissingImages.length > 0) {
     throw new AppError('MISSING_CONTENT_IMAGE', {
-      message: `The following contents have no image attached: ${contentsMissingImages.map((content) => content.id).join(', ')}.`,
+      message: 'One or more image blocks have no image attached. Add the images, then send again.',
       statusCode: 400,
     });
   }
@@ -298,7 +298,8 @@ const sendDocumentUnqueued = async ({
 
   if (recipientsWithMissingFields.length > 0) {
     const missingRecipientDescriptions = recipientsWithMissingFields
-      .map((r) => (r.name ? `${r.name} (${r.email}, id: ${r.id})` : `${r.email} (id: ${r.id})`))
+      // Solid Ten Sign (O-F3): no database ids in what the sender reads.
+      .map((r) => (r.name ? `${r.name} (${r.email})` : r.email))
       .join(', ');
 
     throw new AppError(AppErrorCode.MISSING_SIGNATURE_FIELD, {

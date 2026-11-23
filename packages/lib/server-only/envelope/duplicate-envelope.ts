@@ -13,6 +13,7 @@ import type { CreateDocumentAuditLogDataResponse } from '../../utils/document-au
 import { createDocumentAuditLogData } from '../../utils/document-audit-logs';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { buildEnvelopeContentCopyData } from '../../utils/envelope-content';
+import { assertTemplateActionAuthCopyAllowed } from '../auth/assert-action-auth-allowed';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { incrementDocumentId, incrementTemplateId } from '../envelope/increment-id';
 import { assertOrganisationRatesAndLimits } from '../rate-limit/assert-organisation-rates-and-limits';
@@ -146,6 +147,13 @@ export const duplicateEnvelope = async ({
     requested: ZSignatureLevelSchema.parse(envelope.signatureLevel),
     strict: false,
   });
+
+  // Solid Ten Sign (O-F2): the one action-auth check; a copy is new, so a "Require password" the
+  // server cannot honour is not copied silently.
+  assertTemplateActionAuthCopyAllowed(
+    { authOptions: envelope.authOptions, recipients: [] },
+    targetType === EnvelopeType.TEMPLATE ? 'template' : 'document',
+  );
 
   const duplicatedEnvelope = await prisma.envelope.create({
     data: {

@@ -11,6 +11,7 @@ import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { AppError } from '../../../errors/app-error';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
+import { describeBulkRowFailure } from '../../../utils/bulk-row-failure';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import type { JobRunIO } from '../../client/_internal/job';
 import type { TBulkSendTemplateJobDefinition } from './bulk-send-template';
@@ -116,9 +117,8 @@ export const run = async ({ payload, io }: { payload: TBulkSendTemplateJobDefini
     } catch (error) {
       results.failed += 1;
 
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-      results.errors.push(`Row ${rowIndex + 1}: Was unable to be processed - ${errorMessage}`);
+      // Solid Ten Sign (P-5): the plain reason ("Task failed" wraps the real error).
+      results.errors.push(`Row ${rowIndex + 1}: Was unable to be processed - ${describeBulkRowFailure(error)}`);
     }
   }
 

@@ -1,9 +1,9 @@
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { toPublicDatabaseError } from '@documenso/lib/errors/database-errors';
 import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embedding-presign/verify-embedding-presign-token';
 import { updateEnvelope } from '@documenso/lib/server-only/envelope/update-envelope';
 import { setFieldsForTemplate } from '@documenso/lib/server-only/field/set-fields-for-template';
 import { setTemplateRecipients } from '@documenso/lib/server-only/recipient/set-template-recipients';
-
 import { procedure } from '../trpc';
 import {
   ZUpdateEmbeddingTemplateRequestSchema,
@@ -104,6 +104,14 @@ export const updateEmbeddingTemplateRoute = procedure
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
+      }
+
+      // Solid Ten Sign (P-3): a database refusal with a plain reason (a field change that would
+      // break the direct link) answers that reason (400), not the catch-all 500.
+      const databaseError = toPublicDatabaseError(error, 'an embedding template update');
+
+      if (databaseError && databaseError.statusCode === 400) {
+        throw databaseError;
       }
 
       throw new AppError(AppErrorCode.UNKNOWN_ERROR, {

@@ -9,6 +9,7 @@ import {
   ZRadioFieldMeta,
   ZTextFieldMeta,
 } from '../types/field-meta';
+import { describeFieldForUserAtStart } from '../utils/describe-field';
 import { zEmail } from '../utils/zod';
 import { validateCheckboxLength } from './validate-checkbox';
 import { validateNumberField } from './validate-number';
@@ -44,7 +45,7 @@ export const representationForVersion = (internalVersion: number): TValueReprese
   internalVersion === 2 ? 'option-index' : 'option-value';
 
 export type TCheckFieldValueOptions = {
-  field: { type: FieldType; fieldMeta: unknown };
+  field: { type: FieldType; fieldMeta: unknown; page?: number | null };
   /** The submitted value as one string (null/undefined: nothing submitted). */
   value: string | null | undefined;
   representation: TValueRepresentation;
@@ -56,8 +57,10 @@ export type TCheckFieldValueOptions = {
   typedSignatureEnabled?: boolean | null;
 };
 
-const REQUIRED_REASON = 'This field is required.';
-const NOT_AN_OPTION = 'The chosen value is not one of the options of this field.';
+// Solid Ten Sign (O-F4): reasons are said of the field, which checkFieldValue names first
+// (`The "Guests" field on page 1 is required.`).
+const REQUIRED_REASON = 'is required.';
+const NOT_AN_OPTION = 'has a value that is not one of its options.';
 
 const refused = (reason: string): TFieldValueCheck => ({ result: 'refused', reason });
 const OK: TFieldValueCheck = { result: 'ok' };
@@ -186,10 +189,10 @@ const checkReadOnly = (
     }
   })();
 
-  return matches ? OK : refused('This field is read-only and only takes its preset value.');
+  return matches ? OK : refused('is read-only and only takes its preset value.');
 };
 
-export const checkFieldValue = ({
+const checkFieldValueRule = ({
   field,
   value,
   representation,
@@ -213,7 +216,7 @@ export const checkFieldValue = ({
     case FieldType.SIGNATURE:
     case FieldType.FREE_SIGNATURE:
       if (typedSignatureEnabled === false && !isBase64) {
-        return refused('Typed signatures are not allowed. Please draw your signature.');
+        return refused('needs a drawn or uploaded signature. Typed signatures are not allowed.');
       }
 
       return OK;
@@ -231,15 +234,15 @@ export const checkFieldValue = ({
       const chosen = parseCheckboxChoice(given, options, representation);
 
       if (chosen === 'malformed') {
-        return refused('The checkbox value is not in the expected form.');
+        return refused('has a value that is not in the expected form.');
       }
 
       if (chosen === 'not-an-option') {
-        return refused('A chosen value is not one of the options of this field.');
+        return refused('has a chosen value that is not one of its options.');
       }
 
       if (new Set(chosen).size !== chosen.length) {
-        return refused('An option is chosen more than once.');
+        return refused('has an option chosen more than once.');
       }
 
       const rule = meta.success ? meta.data.validationRule : undefined;
@@ -251,7 +254,7 @@ export const checkFieldValue = ({
         | undefined;
 
       if (sign && length && !validateCheckboxLength(chosen.length, sign, length)) {
-        return refused(`You need to ${(rule ?? '').toLowerCase()} ${length} options.`);
+        return refused(`needs you to ${(rule ?? '').toLowerCase()} ${length} options.`);
       }
 
       return OK;
@@ -268,24 +271,41 @@ export const checkFieldValue = ({
       const meta = ZNumberFieldMeta.safeParse(field.fieldMeta ?? { type: 'number' });
       const errors = validateNumberField(given, meta.success ? meta.data : undefined, true);
 
-      return errors.length > 0 ? refused(errors.join(', ')) : OK;
+      return errors.length > 0 ? refused(`: ${errors.join(', ')}`) : OK;
     }
 
     case FieldType.TEXT: {
       const meta = ZTextFieldMeta.safeParse(field.fieldMeta ?? { type: 'text' });
       const errors = meta.success ? validateTextField(given, meta.data, true) : [];
 
-      return errors.length > 0 ? refused(errors.join(', ')) : OK;
+      return errors.length > 0 ? refused(`: ${errors.join(', ')}`) : OK;
     }
 
     case FieldType.EMAIL:
       // The app's email rule and length limit (recipients use the same).
-      return zEmail().max(254).safeParse(given.trim()).success
-        ? OK
-        : refused('The value is not a valid email address.');
+      return zEmail().max(254).safeParse(given.trim()).success ? OK : refused('needs a valid email address.');
 
     default:
       // Name, initials (not empty, checked above), date (the server writes it), file (own route).
       return OK;
   }
+};
+
+/**
+ * The one set of value rules every signing route uses. A refusal names the field (label, or type
+ * and page) so the signer knows which one to fix (O-F4).
+ */
+export const checkFieldValue = (options: TCheckFieldValueOptions): TFieldValueCheck => {
+  const check = checkFieldValueRule(options);
+
+  if (check.result !== 'refused') {
+    return check;
+  }
+
+  const name = describeFieldForUserAtStart(options.field);
+
+  return {
+    result: 'refused',
+    reason: check.reason.startsWith(':') ? `${name}${check.reason}` : `${name} ${check.reason}`,
+  };
 };

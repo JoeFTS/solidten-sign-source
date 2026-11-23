@@ -60,13 +60,9 @@ export const applyDirectTemplateSubmissionRules = ({
     const errors = validateNumberField(signedFieldValue.value, parsedMeta.success ? parsedMeta.data : undefined, true);
 
     if (errors.length > 0) {
-      const label =
-        typeof field.fieldMeta === 'object' && field.fieldMeta && 'label' in field.fieldMeta
-          ? field.fieldMeta.label
-          : null;
-
+      // O-F4: the same form as every value refusal (`The "Hours" field on page 1: ...`).
       throw new AppError(AppErrorCode.INVALID_BODY, {
-        message: `${label ? `"${label}"` : describeFieldForUserAtStart(field)}: ${errors[0]}`,
+        message: `${describeFieldForUserAtStart(field)}: ${errors[0]}`,
       });
     }
   }

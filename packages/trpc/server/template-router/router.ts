@@ -2,6 +2,7 @@ import { getServerLimits } from '@documenso/ee/server-only/limits/server';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { jobs } from '@documenso/lib/jobs/client';
 import { captureServerEvent } from '@documenso/lib/server-only/analytics/capture-server-event';
+import { assertTemplateActionAuthCopyAllowed } from '@documenso/lib/server-only/auth/assert-action-auth-allowed';
 import { getDocumentWithDetailsById } from '@documenso/lib/server-only/document/get-document-with-details-by-id';
 import { sendDocument } from '@documenso/lib/server-only/document/send-document';
 import { convertToPdf } from '@documenso/lib/server-only/document-conversion';
@@ -33,7 +34,6 @@ import { mapEnvelopeToTemplateLite, mapEnvelopeToTemplateMany } from '@documenso
 import { prisma } from '@documenso/prisma';
 import type { Envelope } from '@prisma/client';
 import { DocumentDataType, EnvelopeType } from '@prisma/client';
-
 import { ZGenericSuccessResponse, ZSuccessResponseSchema } from '../schema';
 import { authenticatedProcedure, maybeAuthenticatedProcedure, router } from '../trpc';
 import { findTemplatesInternalRoute } from './find-templates-internal';
@@ -862,6 +862,10 @@ export const templateRouter = router({
         message: 'Template not found',
       });
     }
+
+    // Solid Ten Sign (P-5): a template every row would fail on (a "Require password" this server
+    // cannot honour) is refused here, with the plain reason, before anything is queued.
+    assertTemplateActionAuthCopyAllowed(template);
 
     const csvValidationResult = validateBulkSendCsv({
       csvContent: csv,

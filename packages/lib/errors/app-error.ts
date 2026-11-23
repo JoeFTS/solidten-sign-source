@@ -2,6 +2,7 @@ import { match } from 'ts-pattern';
 import { z } from 'zod';
 
 import { isDatabaseUnavailableError } from './database-error-kind';
+import { readDirectLinkSignatureRefusal } from './direct-link-signature-error';
 
 /**
  * Generic application error codes.
@@ -232,6 +233,13 @@ export class AppError extends Error {
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static parseError(error: any): AppError {
+    // Solid Ten Sign (O-F1): the database refusal of a field change that breaks a direct link.
+    const directLinkRefusal = readDirectLinkSignatureRefusal(error);
+
+    if (directLinkRefusal) {
+      return new AppError(AppErrorCode.MISSING_SIGNATURE_FIELD, { message: directLinkRefusal, statusCode: 400 });
+    }
+
     if (error instanceof AppError) {
       return error;
     }

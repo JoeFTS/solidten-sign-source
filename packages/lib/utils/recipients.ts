@@ -183,6 +183,23 @@ export const getRecipientsWithMissingFields = <T extends Pick<TRecipientLite, 'i
   });
 };
 
+/**
+ * Solid Ten Sign (P-2): the direct link's signer is gone, or is not a signer any more (made before
+ * the database refused it). Visitors cannot use such a link.
+ */
+export const isDirectLinkSignerMissing = (
+  directLink: { directTemplateRecipientId: number } | null | undefined,
+  recipients: Pick<TRecipientLite, 'id' | 'role'>[],
+) => {
+  if (!directLink) {
+    return false;
+  }
+
+  const signer = recipients.find((recipient) => recipient.id === directLink.directTemplateRecipientId);
+
+  return !signer || signer.role !== RecipientRole.SIGNER;
+};
+
 export const formatSigningLink = (token: string) => `${NEXT_PUBLIC_WEBAPP_URL()}/sign/${token}`;
 
 /**

@@ -1,12 +1,22 @@
+import { isPasswordSigninAvailable } from '@documenso/lib/utils/password-signin-availability';
 import { Button } from '@documenso/ui/primitives/button';
 import { msg } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
-import { Link } from 'react-router';
-
+import { Link, redirect } from 'react-router';
 import { appMetaTags } from '~/utils/meta';
 
 export function meta() {
   return appMetaTags(msg`Forgot password`);
+}
+
+// Solid Ten Sign (O-F6): this page only follows a password reset request. With password sign-in
+// off there is none, so the page is a dead end that talks about a password.
+export function loader() {
+  if (!isPasswordSigninAvailable()) {
+    throw redirect('/signin');
+  }
+
+  return null;
 }
 
 export default function ForgotPasswordPage() {

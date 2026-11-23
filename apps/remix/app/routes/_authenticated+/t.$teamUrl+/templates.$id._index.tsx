@@ -3,7 +3,7 @@ import { useSession } from '@documenso/lib/client-only/providers/session';
 import { PDF_VIEWER_ERROR_MESSAGES } from '@documenso/lib/constants/pdf-viewer-i18n';
 import { mapSecondaryIdToTemplateId } from '@documenso/lib/utils/envelope';
 import { getDocumentDataUrlForPdfViewer } from '@documenso/lib/utils/envelope-download';
-import { getRecipientsWithMissingFields } from '@documenso/lib/utils/recipients';
+import { getRecipientsWithMissingFields, isDirectLinkSignerMissing } from '@documenso/lib/utils/recipients';
 import { formatDocumentsPath, formatTemplatesPath } from '@documenso/lib/utils/teams';
 import { trpc } from '@documenso/trpc/react';
 import { DocumentReadOnlyFields } from '@documenso/ui/components/document/document-read-only-fields';
@@ -119,7 +119,8 @@ export default function TemplatePage({ params }: Route.ComponentProps) {
   // Solid Ten Sign (N-1): the owner sees here when visitors cannot submit the direct link.
   const isDirectLinkBroken =
     Boolean(envelope.directLink?.enabled) &&
-    getRecipientsWithMissingFields(envelope.recipients, envelope.fields).length > 0;
+    (getRecipientsWithMissingFields(envelope.recipients, envelope.fields).length > 0 ||
+      isDirectLinkSignerMissing(envelope.directLink, envelope.recipients));
 
   return (
     <div className="mx-auto -mt-4 w-full max-w-screen-xl px-4 md:px-8">
@@ -130,9 +131,10 @@ export default function TemplatePage({ params }: Route.ComponentProps) {
           </AlertTitle>
           <AlertDescription>
             <Trans>
-              A signer has no signature field, or only signature fields with a condition. Visitors see "This form is not
-              set up correctly". Edit the template and give each signer a signature field without a condition, or turn
-              the direct link off.
+              A signer has no signature field, or only signature fields with a condition, or the direct link signer was
+              removed or is no longer a signer. Visitors see "This form is not set up correctly". Edit the template
+              (give each signer a signature field without a condition, and keep the direct link signer a signer), or
+              turn the direct link off.
             </Trans>
           </AlertDescription>
         </Alert>

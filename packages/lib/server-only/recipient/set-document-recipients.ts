@@ -16,7 +16,7 @@ import { extractDerivedDocumentEmailSettings } from '../../types/document-email'
 import { type EnvelopeIdOptions, mapSecondaryIdToDocumentId } from '../../utils/envelope';
 import { canSendMailToRecipient } from '../../utils/recipient-mail';
 import { canRecipientBeModified } from '../../utils/recipients';
-import { assertPasswordActionAuthAllowed } from '../auth/assert-password-action-auth';
+import { assertActionAuthAllowed } from '../auth/assert-action-auth-allowed';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
 import { lockEnvelopeForRecipientChange } from '../envelope/envelope-transition-lock';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
@@ -93,17 +93,6 @@ export const setDocumentRecipients = async ({
     envelopeId: envelope.id,
     roles: recipients.map((recipient) => recipient.role),
   });
-
-  const recipientsHaveActionAuth = recipients.some(
-    (recipient) => recipient.actionAuth && recipient.actionAuth.length > 0,
-  );
-
-  // Check if user has permission to set the global action auth.
-  if (recipientsHaveActionAuth && !envelope.team.organisation.organisationClaim.flags.cfr21) {
-    throw new AppError(AppErrorCode.UNAUTHORIZED, {
-      message: 'You do not have permission to set the action auth',
-    });
-  }
 
   for (const recipient of recipients) {
     assertCompatibleRecipientRole({
@@ -191,8 +180,12 @@ export const setDocumentRecipients = async ({
         let authOptions = ZRecipientAuthOptionsSchema.parse(recipient._persisted?.authOptions);
 
         if (recipient.actionAuth !== undefined || recipient.accessAuth !== undefined) {
-          // Solid Ten Sign (N-5): a stored "Require password" may stay; a new one is refused.
-          assertPasswordActionAuthAllowed(recipient.actionAuth, authOptions.actionAuth);
+          // Solid Ten Sign (O-F2): the one check for action auth; what is stored may stay.
+          assertActionAuthAllowed({
+            next: recipient.actionAuth,
+            previous: authOptions.actionAuth,
+            organisationClaim: envelope.team.organisation.organisationClaim,
+          });
 
           authOptions = createRecipientAuthOptions({
             accessAuth: recipient.accessAuth || authOptions.accessAuth,

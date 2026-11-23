@@ -6,7 +6,8 @@ import { AppError, AppErrorCode } from '../../errors/app-error';
 import { DocumentAccessAuth, type TDocumentAuthMethods } from '../../types/document-auth';
 import { extractDocumentAuthMethods } from '../../utils/document-auth';
 import { getContentsMissingImages } from '../../utils/envelope-content';
-import { getRecipientsWithMissingFields } from '../../utils/recipients';
+import { getRecipientsWithMissingFields, isDirectLinkSignerMissing } from '../../utils/recipients';
+import { assertTemplateActionAuthCopyAllowed } from '../auth/assert-action-auth-allowed';
 import { extractFieldAutoInsertValues } from '../document/send-document';
 import { getTeamSettings } from '../team/get-team-settings';
 import { assertSenderNotDisabled } from '../user/assert-user-not-disabled';
@@ -89,9 +90,17 @@ export const getEnvelopeForDirectTemplateSigning = async ({
 
   const recipient = (envelope?.recipients || []).find((r) => r.id === envelope?.directLink?.directTemplateRecipientId);
 
-  if (!envelope || !recipient) {
+  if (!envelope) {
     throw new AppError(AppErrorCode.NOT_FOUND, {
       message: 'Envelope not found',
+    });
+  }
+
+  // Solid Ten Sign (P-2): a link whose signer was removed or made a viewer, approver or CC shows
+  // the plain "not set up correctly" page, not a 404 or a "Mark as viewed" form.
+  if (!recipient || isDirectLinkSignerMissing(envelope.directLink, envelope.recipients)) {
+    throw new AppError(AppErrorCode.MISSING_SIGNATURE_FIELD, {
+      message: 'The direct link signer is missing or is not a signer',
     });
   }
 
@@ -139,6 +148,16 @@ export const getEnvelopeForDirectTemplateSigning = async ({
   if (recipientsWithMissingFields.length > 0) {
     throw new AppError(AppErrorCode.MISSING_SIGNATURE_FIELD, {
       message: 'One or more signers on this direct template are missing a signature field',
+    });
+  }
+
+  // Solid Ten Sign (O-F2): a template whose "Require password" this server cannot honour is shown
+  // as not set up correctly before the visitor fills anything in.
+  try {
+    assertTemplateActionAuthCopyAllowed(envelope);
+  } catch {
+    throw new AppError(AppErrorCode.MISSING_SIGNATURE_FIELD, {
+      message: 'This direct template uses an action authentication this server cannot honour',
     });
   }
 

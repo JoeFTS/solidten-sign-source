@@ -1,6 +1,7 @@
 import { recordDatabaseWriteFailure } from '../server-only/health/database-write-health';
 import { AppError, AppErrorCode } from './app-error';
 import { isDatabaseUnavailableError, isMissingRecordError, isRawDatabaseError } from './database-error-kind';
+import { readDirectLinkSignatureRefusal } from './direct-link-signature-error';
 
 export { isDatabaseUnavailableError, isMissingRecordError, isRawDatabaseError };
 
@@ -50,6 +51,14 @@ export const createDatabaseError = () =>
  * original. Transaction timeouts are answered as SERVER_BUSY before this (server-busy.ts).
  */
 export const toPublicDatabaseError = (error: unknown, where = 'request'): AppError | null => {
+  // Solid Ten Sign (O-F1): the database refused a field change that would break a direct link
+  // that is on. A 400 with the plain reason, not a 500.
+  const directLinkRefusal = readDirectLinkSignatureRefusal(error);
+
+  if (directLinkRefusal) {
+    return new AppError(AppErrorCode.MISSING_SIGNATURE_FIELD, { message: directLinkRefusal, statusCode: 400 });
+  }
+
   if (isDatabaseUnavailableError(error)) {
     console.error(`[DATABASE]: unavailable during ${where}; answered 503`, error);
     recordDatabaseWriteFailure();

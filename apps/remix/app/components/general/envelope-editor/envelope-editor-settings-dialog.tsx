@@ -17,6 +17,7 @@ import {
 } from '@documenso/lib/types/document-meta';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
 import { isHttpUrl } from '@documenso/lib/utils/is-http-url';
+import { isStalePasswordActionAuth } from '@documenso/lib/utils/password-signin-availability';
 import { parseSigningChannel, ZSigningChannelSchema } from '@documenso/lib/utils/sms/channels';
 import { canAccessTeamDocument, DocumentSignatureType, extractTeamSignatureSettings } from '@documenso/lib/utils/teams';
 import { zEmail } from '@documenso/lib/utils/zod';
@@ -84,7 +85,6 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { match } from 'ts-pattern';
 import { z } from 'zod';
-
 import { SigningChannelFormField } from '~/components/general/sms/signing-channel-form-field';
 import { useTeamSmsEnabled } from '~/components/general/sms/use-team-sms';
 import { useCurrentTeam } from '~/providers/team';
@@ -905,7 +905,8 @@ export const EnvelopeEditorSettingsDialog = ({ trigger, ...props }: EnvelopeEdit
                   ))
                   .with({ activeTab: 'security' }, () => (
                     <>
-                      {organisation.organisationClaim.flags.cfr21 && (
+                      {(organisation.organisationClaim.flags.cfr21 ||
+                        isStalePasswordActionAuth(form.watch('globalActionAuth'))) && (
                         <FormField
                           control={form.control}
                           name="globalActionAuth"

@@ -13,7 +13,7 @@ import { assertSenderNotDisabled } from '@documenso/lib/server-only/user/assert-
 import { DocumentAccessAuth } from '@documenso/lib/types/document-auth';
 import { extractRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
-import { getRecipientsWithMissingFields } from '@documenso/lib/utils/recipients';
+import { getRecipientsWithMissingFields, isDirectLinkSignerMissing } from '@documenso/lib/utils/recipients';
 import { prisma } from '@documenso/prisma';
 import { Plural } from '@lingui/react/macro';
 import { UsersIcon } from 'lucide-react';
@@ -61,8 +61,13 @@ const handleV1Loader = async ({ params, request }: Route.LoaderArgs) => {
     (recipient) => recipient.id === template.directLink?.directTemplateRecipientId,
   );
 
-  if (!directTemplateRecipient) {
-    throw new Response('Not Found', { status: 404 });
+  // Solid Ten Sign (P-2): a removed signer, or one that is no longer a signer, shows the plain
+  // "not set up correctly" page.
+  if (!directTemplateRecipient || isDirectLinkSignerMissing(template.directLink, template.recipients)) {
+    return {
+      isAccessAuthValid: true,
+      invalidReason: 'MISSING_SIGNATURE_FIELD',
+    } as const;
   }
 
   const { derivedRecipientAccessAuth } = extractDocumentAuthMethods({

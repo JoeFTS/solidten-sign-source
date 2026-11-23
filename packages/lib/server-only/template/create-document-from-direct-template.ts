@@ -56,6 +56,7 @@ import {
   sortRecipientsBySigningPosition,
 } from '../../utils/recipients';
 import { sanitizeSingleLineText } from '../../utils/safe-text';
+import { assertTemplateActionAuthCopyAllowed } from '../auth/assert-action-auth-allowed';
 import { loadContentImages } from '../data-content/load-content-images';
 import { sendDocument } from '../document/send-document';
 import { validateFieldAuth } from '../document/validate-field-auth';
@@ -263,6 +264,18 @@ export const createDocumentFromDirectTemplate = async ({
     throw err;
   }
 
+  // Solid Ten Sign (O-F2): the one action-auth check for what the new document copies. A
+  // "Require password" the server cannot honour is the template's fault, not the visitor's.
+  try {
+    assertTemplateActionAuthCopyAllowed(directTemplateEnvelope);
+  } catch (err) {
+    if (err instanceof AppError && err.code === AppErrorCode.INVALID_BODY) {
+      throw await refuseBrokenDirectLink(directTemplateEnvelope.id, err.message, AppErrorCode.INVALID_BODY);
+    }
+
+    throw err;
+  }
+
   const { signedFieldValues, notRequiredFieldIds } = applyDirectTemplateSubmissionRules({
     directTemplateRecipient,
     signedFieldValues: submittedFieldValues,
@@ -458,10 +471,8 @@ export const createDocumentFromDirectTemplate = async ({
       });
 
       if (valueCheck.result === 'refused') {
-        const label = getFieldLabel(templateField);
-        const message = label ? `"${label}": ${valueCheck.reason}` : valueCheck.reason;
-
-        throw new AppError(AppErrorCode.INVALID_BODY, { message, userMessage: message });
+        // The reason names the field (O-F4).
+        throw new AppError(AppErrorCode.INVALID_BODY, { message: valueCheck.reason, userMessage: valueCheck.reason });
       }
 
       const isSignatureField =
@@ -1070,11 +1081,4 @@ export const createDocumentFromDirectTemplate = async ({
     documentId: incrementedDocumentId.documentId,
     recipientId,
   };
-};
-
-/** A field's label for a refusal message ("Guests": ...), when it has one. */
-const getFieldLabel = (field: { fieldMeta: unknown }) => {
-  const meta = field.fieldMeta as { label?: unknown } | null;
-
-  return typeof meta?.label === 'string' && meta.label.trim() ? meta.label.trim() : null;
 };

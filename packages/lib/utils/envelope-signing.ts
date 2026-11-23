@@ -154,7 +154,7 @@ export const extractFieldInsertionValues = ({
 
       if (!radioFieldValues[fieldValue.value]) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: 'Invalid radio value',
+          message: `${describeFieldForUserAtStart(field)} has a value that is not one of its options.`,
         });
       }
 
@@ -180,7 +180,7 @@ export const extractFieldInsertionValues = ({
 
       if (selectedValues.some((value) => !value)) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: 'Invalid checkbox values',
+          message: `${describeFieldForUserAtStart(field)} has a chosen value that is not one of its options.`,
         });
       }
 
@@ -194,7 +194,7 @@ export const extractFieldInsertionValues = ({
 
           if (!isValid) {
             throw new AppError(AppErrorCode.INVALID_BODY, {
-              message: 'Checkbox values failed length validation',
+              message: `${describeFieldForUserAtStart(field)} does not have the number of options it needs.`,
             });
           }
         } else {
@@ -221,7 +221,7 @@ export const extractFieldInsertionValues = ({
 
       if (errors.length > 0) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: 'Invalid dropdown value',
+          message: `${describeFieldForUserAtStart(field)} has a value that is not one of its options.`,
         });
       }
 
@@ -244,7 +244,7 @@ export const extractFieldInsertionValues = ({
 
       if (documentMeta.typedSignatureEnabled === false && !isBase64) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: 'Typed signatures are not allowed. Please draw your signature',
+          message: `${describeFieldForUserAtStart(field)} needs a drawn or uploaded signature. Typed signatures are not allowed.`,
         });
       }
 

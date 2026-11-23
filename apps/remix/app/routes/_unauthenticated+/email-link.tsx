@@ -2,6 +2,7 @@ import { authClient } from '@documenso/auth/client';
 import { AppError } from '@documenso/lib/errors/app-error';
 import { Button } from '@documenso/ui/primitives/button';
 import { Input } from '@documenso/ui/primitives/input';
+import { Label } from '@documenso/ui/primitives/label';
 import { msg } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { useEffect, useState } from 'react';
@@ -108,7 +109,12 @@ export default function EmailLinkPage() {
               )}
             </p>
 
+            {/* Solid Ten Sign (O-F7): the code input has a label (screen readers and tests). */}
+            <Label htmlFor="email-link-two-factor-code" className="mb-2 block">
+              {useBackupCode ? <Trans>Backup code</Trans> : <Trans>Authenticator code</Trans>}
+            </Label>
             <Input
+              id="email-link-two-factor-code"
               inputMode={useBackupCode ? 'text' : 'numeric'}
               autoComplete="one-time-code"
               value={code}

@@ -40,7 +40,7 @@ import { extractDerivedDocumentMeta } from '../../utils/document';
 import { createDocumentAuthOptions, createRecipientAuthOptions } from '../../utils/document-auth';
 import { assertEnvelopeContentSaveWithinLimits } from '../../utils/envelope-content';
 import { buildTeamWhereQuery } from '../../utils/teams';
-import { assertPasswordActionAuthAllowed } from '../auth/assert-password-action-auth';
+import { assertActionAuthAllowed } from '../auth/assert-action-auth-allowed';
 import { incrementDocumentId, incrementTemplateId } from '../envelope/increment-id';
 import { assertFieldLogicAllowed, toFieldLogicDefinitions } from '../field-logic/assert-field-logic';
 import { assertOrganisationRatesAndLimits } from '../rate-limit/assert-organisation-rates-and-limits';
@@ -286,30 +286,19 @@ export const createEnvelope = async ({
     );
   }
 
-  // Solid Ten Sign (N-5): no new "Require password" when password sign-in is off.
-  assertPasswordActionAuthAllowed(globalActionAuth);
-
-  for (const recipient of data.recipients ?? []) {
-    assertPasswordActionAuthAllowed(recipient.actionAuth);
-  }
-
   const authOptions = createDocumentAuthOptions({
     globalAccessAuth: globalAccessAuth || [],
     globalActionAuth: globalActionAuth || [],
   });
 
-  const recipientsHaveActionAuth = data.recipients?.some(
-    (recipient) => recipient.actionAuth && recipient.actionAuth.length > 0,
-  );
+  // Solid Ten Sign (O-F2): the one check for action auth (plan, and PASSWORD with password sign-in off).
+  assertActionAuthAllowed({
+    next: authOptions.globalActionAuth,
+    organisationClaim: team.organisation.organisationClaim,
+  });
 
-  // Check if user has permission to set the global action auth.
-  if (
-    (authOptions.globalActionAuth.length > 0 || recipientsHaveActionAuth) &&
-    !team.organisation.organisationClaim.flags.cfr21
-  ) {
-    throw new AppError(AppErrorCode.UNAUTHORIZED, {
-      message: 'You do not have permission to set the action auth',
-    });
+  for (const recipient of data.recipients ?? []) {
+    assertActionAuthAllowed({ next: recipient.actionAuth, organisationClaim: team.organisation.organisationClaim });
   }
 
   for (const recipient of data.recipients ?? []) {

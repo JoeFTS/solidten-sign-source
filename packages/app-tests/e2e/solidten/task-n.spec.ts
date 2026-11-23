@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { NEXT_PUBLIC_WEBAPP_URL } from '@documenso/lib/constants/app';
+import { AppError } from '@documenso/lib/errors/app-error';
 import { updateEnvelopeFields } from '@documenso/lib/server-only/field/update-envelope-fields';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import { mapSecondaryIdToDocumentId, mapSecondaryIdToTemplateId } from '@documenso/lib/utils/envelope';
@@ -10,7 +11,6 @@ import { seedUser } from '@documenso/prisma/seed/users';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import { FieldType, Prisma } from '@prisma/client';
-
 import { apiCreateTestContext, apiSeedDraftDocument, apiSeedPendingDocument } from '../fixtures/api-seeds';
 import { WEBAPP_ORIGIN_HEADERS } from '../fixtures/authentication';
 
@@ -132,7 +132,8 @@ test.describe('N-1: a direct link whose signer has only conditional signature fi
       requestMetadata: { requestMetadata: {}, source: 'app', auth: null },
     }).then(
       () => null,
-      (err: Error) => err,
+      // O-F1: the database refuses it; the app answers with the plain message.
+      (err: Error) => AppError.parseError(err),
     );
 
     expect(error?.message).toContain('The direct link signer needs at least one signature field without a condition.');
@@ -146,11 +147,12 @@ test.describe('N-1: a direct link whose signer has only conditional signature fi
   test('turning on a link with this fault is refused, with no placeholder address', async ({ page }) => {
     const { user, team, template, directLink, signature } = await seedLinkTemplate();
 
+    // O-F1: the database refuses the condition while the link is on, so the link goes off first.
+    await prisma.templateDirectLink.update({ where: { id: directLink.id }, data: { enabled: false } });
     await prisma.field.update({
       where: { id: signature.id },
       data: { fieldMeta: { type: 'signature', ...CONDITION } },
     });
-    await prisma.templateDirectLink.update({ where: { id: directLink.id }, data: { enabled: false } });
 
     await signInByEmailLink(page, user.id);
     const response = await trpc(
@@ -174,11 +176,14 @@ test.describe('N-1: a direct link whose signer has only conditional signature fi
   }) => {
     const { user, team, template, directLink, signature, company } = await seedLinkTemplate();
 
-    // The fault made before this fix (straight in the database, as an old save could).
+    // The fault made before this fix (an old save could; O-F1 now refuses it while the link is
+    // on, so: link off, condition on, link on again).
+    await prisma.templateDirectLink.update({ where: { id: directLink.id }, data: { enabled: false } });
     await prisma.field.update({
       where: { id: signature.id },
       data: { fieldMeta: { type: 'signature', ...CONDITION } },
     });
+    await prisma.templateDirectLink.update({ where: { id: directLink.id }, data: { enabled: true } });
 
     // The visitor opens the link: a plain page up front, not "0 Fields Remaining".
     const visitor = await browser.newContext();
