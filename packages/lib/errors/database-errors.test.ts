@@ -62,3 +62,25 @@ describe('database errors (DISK-L1)', () => {
     expect(toPublicDatabaseError(new AppError('NOT_FOUND'))).toBeNull();
   });
 });
+
+describe('a missing row (L-3)', () => {
+  it('P2025, P2015 and P2018 answer 404, also behind wrappers', () => {
+    for (const code of ['P2025', 'P2015', 'P2018']) {
+      const answer = toPublicDatabaseError({
+        name: 'TRPCError',
+        message: 'x',
+        cause: known(code, 'No record was found'),
+      });
+
+      expect(answer).toMatchObject({
+        code: 'NOT_FOUND',
+        statusCode: 404,
+        userMessage: 'Not found. It may have been deleted.',
+      });
+    }
+  });
+
+  it('other known errors stay a plain 500', () => {
+    expect(toPublicDatabaseError(known('P2002', 'Unique constraint failed'))).toMatchObject({ statusCode: 500 });
+  });
+});

@@ -1,3 +1,4 @@
+import { checkFieldValue } from '@documenso/lib/advanced-fields-validation/field-value-rules';
 import { isBase64Image } from '@documenso/lib/constants/signatures';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { assertActionAuthActorIsRecipient } from '@documenso/lib/server-only/document/assert-completion-actor';
@@ -8,6 +9,7 @@ import { applyFieldLogic, assertFieldSignableByLogic } from '@documenso/lib/serv
 import { findInPersonHostForRequest } from '@documenso/lib/server-only/in-person/in-person-session';
 import { assertSenderNotDisabled } from '@documenso/lib/server-only/user/assert-user-not-disabled';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
+import { isRequiredField } from '@documenso/lib/utils/advanced-fields-helpers';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
 import { extractFieldInsertionValues } from '@documenso/lib/utils/envelope-signing';
 import { getRecipientFieldsWhereInput } from '@documenso/lib/utils/recipient-queries';
@@ -17,7 +19,11 @@ import { DocumentStatus, FieldType, RecipientRole, SigningStatus } from '@prisma
 import { match } from 'ts-pattern';
 
 import { procedure } from '../trpc';
-import { ZSignEnvelopeFieldRequestSchema, ZSignEnvelopeFieldResponseSchema } from './sign-envelope-field.types';
+import {
+  type TSignEnvelopeFieldValue,
+  ZSignEnvelopeFieldRequestSchema,
+  ZSignEnvelopeFieldResponseSchema,
+} from './sign-envelope-field.types';
 
 // Note that this is an unauthenticated public procedure route.
 export const signEnvelopeFieldRoute = procedure
@@ -135,6 +141,24 @@ export const signEnvelopeFieldRoute = procedure
     await assertFieldSignableByLogic({ tx: prisma, field });
 
     const insertionValues = extractFieldInsertionValues({ fieldValue, field, documentMeta });
+
+    // Solid Ten Sign (L round 2): the one set of value rules every signing route uses, on the
+    // value as this envelope stores it (option indexes). Uninserting is not a value.
+    if (insertionValues.inserted) {
+      const valueCheck = checkFieldValue({
+        field,
+        value: toRuleValue(fieldValue),
+        representation: 'option-index',
+        isRequired: isRequiredField(field),
+        isBase64:
+          fieldValue.type === FieldType.SIGNATURE && Boolean(fieldValue.value && isBase64Image(fieldValue.value)),
+        typedSignatureEnabled: documentMeta?.typedSignatureEnabled,
+      });
+
+      if (valueCheck.result === 'refused') {
+        throw new AppError(AppErrorCode.INVALID_BODY, { message: valueCheck.reason, userMessage: valueCheck.reason });
+      }
+    }
 
     // Early return for uninserting fields.
     if (!insertionValues.inserted) {
@@ -341,3 +365,11 @@ export const signEnvelopeFieldRoute = procedure
 
     return await deleteRemovedFieldFiles(signedResult);
   });
+
+/** A version-2 field value as the one string the value rules take (field-value-rules.ts). */
+const toRuleValue = (fieldValue: TSignEnvelopeFieldValue): string | null =>
+  match(fieldValue)
+    .with({ type: FieldType.CHECKBOX }, ({ value }) => JSON.stringify(value))
+    .with({ type: FieldType.RADIO }, ({ value }) => (value === null ? null : String(value)))
+    .with({ type: FieldType.DATE }, ({ value }) => (value ? 'date' : null))
+    .otherwise(({ value }) => (typeof value === 'string' ? value : null));

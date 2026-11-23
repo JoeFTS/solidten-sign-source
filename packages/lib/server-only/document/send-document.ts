@@ -88,7 +88,28 @@ export const sendDocument = async (options: SendDocumentOptions) =>
   await runHeavyPdfWork(
     await getEnvelopeStoredBytes(unsafeBuildEnvelopeIdQuery(options.id, EnvelopeType.DOCUMENT)),
     async () => await sendDocumentUnqueued(options),
-  );
+  ).catch(async (error: unknown) => {
+    // Solid Ten Sign (L3-A): the draft was deleted while it was being sent (a refused "use
+    // template" removes its draft, A-2): the database refuses the write with a foreign-key error.
+    // When the document is really gone, that is a 404, not a 500.
+    const isForeignKeyError =
+      typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'P2003';
+
+    if (isForeignKeyError) {
+      const stillThere = await prisma.envelope.count({
+        where: unsafeBuildEnvelopeIdQuery(options.id, EnvelopeType.DOCUMENT),
+      });
+
+      if (stillThere === 0) {
+        throw new AppError(AppErrorCode.NOT_FOUND, {
+          message: 'Document not found',
+          userMessage: 'This document was deleted.',
+        });
+      }
+    }
+
+    throw error;
+  });
 
 const sendDocumentUnqueued = async ({
   id,
@@ -158,11 +179,15 @@ const sendDocumentUnqueued = async ({
   });
 
   if (!envelope) {
-    throw new Error('Document not found');
+    // Solid Ten Sign (L-3): a 404 (for example a draft deleted a moment before), not a 500.
+    throw new AppError(AppErrorCode.NOT_FOUND, { message: 'Document not found', userMessage: 'Document not found' });
   }
 
   if (envelope.recipients.length === 0) {
-    throw new Error('Document has no recipients');
+    throw new AppError(AppErrorCode.INVALID_REQUEST, {
+      message: 'Document has no recipients',
+      userMessage: 'Add at least one recipient before sending.',
+    });
   }
 
   // A recipientCount of 0 means unlimited recipients are allowed.
@@ -176,7 +201,10 @@ const sendDocumentUnqueued = async ({
   }
 
   if (isDocumentCompleted(envelope.status)) {
-    throw new Error('Can not send completed document');
+    throw new AppError(AppErrorCode.INVALID_REQUEST, {
+      message: 'Can not send completed document',
+      userMessage: 'This document is already completed.',
+    });
   }
 
   const legacyDocumentId = mapSecondaryIdToDocumentId(envelope.secondaryId);

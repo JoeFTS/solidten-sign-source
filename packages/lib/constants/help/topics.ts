@@ -126,7 +126,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['your-documents-page'],
-    video: null,
+    video: video('folders', 31, { narrated: true }),
   },
 
   // Send a document.
@@ -226,7 +226,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['add-signers-and-signing-order', 'place-fields'],
-    video: null,
+    video: video('recipient-roles', 36, { narrated: true }),
   },
   {
     slug: 'place-fields',
@@ -305,7 +305,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['calculated-fields', 'place-fields'],
-    video: null,
+    video: video('conditional-fields', 33, { narrated: true }),
   },
   {
     slug: 'calculated-fields',
@@ -328,7 +328,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['conditional-fields', 'place-fields'],
-    video: null,
+    video: video('calculated-fields', 53, { narrated: true }),
   },
   {
     slug: 'attach-a-file-field',
@@ -353,7 +353,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['attach-a-file-as-signer', 'place-fields'],
-    video: null,
+    video: video('attach-a-file-field', 40, { narrated: true }),
   },
   {
     slug: 'message-and-subject',
@@ -374,7 +374,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['upload-and-send', 'email-settings'],
-    video: null,
+    video: video('message-and-subject', 32, { narrated: true }),
   },
   {
     slug: 'schedule-send',
@@ -396,7 +396,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['reminders-and-expiry', 'upload-and-send'],
-    video: null,
+    video: video('schedule-send', 31, { narrated: true }),
   },
   {
     slug: 'reminders-and-expiry',
@@ -492,7 +492,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['how-to-sign', 'document-lifecycle'],
-    video: null,
+    video: video('in-person-signing', 63, { narrated: true }),
   },
 
   // Templates, links and forms.
@@ -573,7 +573,9 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         text: msg`Choose the recipient that the visitor will be, or select "Create one automatically".`,
       },
-      { text: msg`Select "Copy Shareable Link" and share the link.` },
+      {
+        text: msg`Under "Copy Shareable Link", select the copy icon at the right end of the link, and share the link.`,
+      },
       {
         text: msg`To stop the link, select "Manage Direct Link", turn off "Enable Direct Link Signing" and select "Save".`,
         tip: msg`By default the visitor confirms their email address with a code, as on a public form. If you turn that off, a visitor gets no email copy and can only download it on the page.`,
@@ -605,7 +607,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['direct-links', 'fill-in-a-public-form'],
-    video: null,
+    video: video('public-forms', 49, { narrated: true }),
   },
 
   // For signers.
@@ -720,7 +722,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['how-to-sign', 'signer-identity-check'],
-    video: null,
+    video: video('enter-the-emailed-code', 26, { narrated: true }),
   },
   {
     slug: 'decline-to-sign',
@@ -764,7 +766,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['decline-to-sign', 'correct-a-signers-email'],
-    video: null,
+    video: video('reassign-to-someone-else', 24, { narrated: true }),
   },
   {
     slug: 'ask-a-question',
@@ -890,7 +892,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['resend-the-request', 'the-certificate-and-audit-log', 'your-documents-page'],
-    video: null,
+    video: video('track-status', 27, { narrated: true }),
   },
   {
     slug: 'resend-the-request',
@@ -905,7 +907,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Send reminder".` },
     ],
     related: ['reminders-and-expiry', 'correct-a-signers-email'],
-    video: null,
+    video: video('resend-the-request', 18, { narrated: true }),
   },
   {
     slug: 'correct-a-signers-email',
@@ -924,7 +926,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['reassign-to-someone-else', 'document-lifecycle', 'resend-the-request'],
-    video: null,
+    video: video('correct-a-signers-email', 32, { narrated: true }),
   },
   {
     slug: 'comments',
@@ -961,7 +963,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['delete-a-document', 'duplicate-and-save-as-template'],
-    video: null,
+    video: video('cancel-a-document', 22, { narrated: true }),
   },
   {
     slug: 'download-the-signed-copy',
@@ -1038,7 +1040,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['cancel-a-document', 'retention'],
-    video: null,
+    video: video('delete-a-document', 24, { narrated: true }),
   },
   {
     slug: 'duplicate-and-save-as-template',
@@ -1086,11 +1088,14 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: msg`A code from an authenticator app protects your account even if someone gets into your email.`,
     steps: [
       { text: msg`Open the account menu at the top right and select "Account". Then select "Security".` },
-      { text: msg`Under "Two factor authentication", select "Enable 2FA".` },
+      {
+        text: msg`Under "Two factor authentication", select "Enable 2FA".`,
+        tip: msg`If the app asks you to sign in again first, do that, then make the change within 10 minutes.`,
+      },
       { text: msg`Scan the QR code with your authenticator app.` },
       { text: msg`Type the code from the app in "Token" and select "Enable 2FA".` },
       {
-        text: msg`Download the backup codes and keep them in a safe place.`,
+        text: msg`Download the backup codes and keep them in a safe place. You can see them again under "Recovery codes" with "View Codes".`,
         tip: msg`A change to how you sign in needs a sign-in from the last 10 minutes. It signs you out on your other devices.`,
       },
       { text: msg`To see where you are signed in, select "Manage sessions".` },
@@ -1189,7 +1194,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Save changes".` },
     ],
     related: ['email-settings', 'document-defaults'],
-    video: null,
+    video: video('branding', 43, { narrated: true }),
   },
   {
     slug: 'document-lifecycle',
@@ -1210,7 +1215,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       { text: msg`Set "Staff can host signing in person".` },
       { text: msg`Set "Signers can ask questions" for new documents.` },
-      { text: msg`Select "Save changes" in the bar at the bottom of the page.` },
+      { text: msg`Select "Save changes" under the part you changed. Each part saves on its own.` },
     ],
     related: ['retention', 'in-person-signing', 'comments', 'correct-a-signers-email'],
     video: video('document-lifecycle', 40, { narrated: true }),
@@ -1263,7 +1268,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`To see what was sent, open the webhook's menu and select "Logs".` },
     ],
     related: ['api-tokens', 'connect-other-tools'],
-    video: null,
+    video: video('webhooks', 41, { narrated: true }),
   },
   {
     slug: 'api-tokens',

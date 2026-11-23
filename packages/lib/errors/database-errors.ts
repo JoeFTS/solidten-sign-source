@@ -1,8 +1,8 @@
 import { recordDatabaseWriteFailure } from '../server-only/health/database-write-health';
 import { AppError, AppErrorCode } from './app-error';
-import { isDatabaseUnavailableError, isRawDatabaseError } from './database-error-kind';
+import { isDatabaseUnavailableError, isMissingRecordError, isRawDatabaseError } from './database-error-kind';
 
-export { isDatabaseUnavailableError, isRawDatabaseError };
+export { isDatabaseUnavailableError, isMissingRecordError, isRawDatabaseError };
 
 /**
  * Solid Ten: database errors never reach a caller with their internals (DISK-L1).
@@ -28,6 +28,16 @@ export const createDatabaseUnavailableError = () =>
     headers: { 'Retry-After': String(DATABASE_UNAVAILABLE_RETRY_AFTER_SECONDS) },
   });
 
+/** Solid Ten Sign (L-3): the row a request needs was deleted (often a moment before). */
+export const RECORD_NOT_FOUND_MESSAGE = 'Not found. It may have been deleted.';
+
+export const createRecordNotFoundError = () =>
+  new AppError(AppErrorCode.NOT_FOUND, {
+    message: RECORD_NOT_FOUND_MESSAGE,
+    userMessage: RECORD_NOT_FOUND_MESSAGE,
+    statusCode: 404,
+  });
+
 export const createDatabaseError = () =>
   new AppError(AppErrorCode.UNKNOWN_ERROR, {
     message: DATABASE_ERROR_MESSAGE,
@@ -45,6 +55,13 @@ export const toPublicDatabaseError = (error: unknown, where = 'request'): AppErr
     recordDatabaseWriteFailure();
 
     return createDatabaseUnavailableError();
+  }
+
+  // Solid Ten Sign (L-3): a missing row is a 404, not a 500 (a deleted draft, a deleted field).
+  if (isMissingRecordError(error)) {
+    console.warn(`[DATABASE]: missing row during ${where}; answered 404`);
+
+    return createRecordNotFoundError();
   }
 
   if (isRawDatabaseError(error)) {

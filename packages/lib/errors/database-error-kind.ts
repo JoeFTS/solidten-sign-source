@@ -59,3 +59,14 @@ export const isRawDatabaseError = (error: unknown): boolean =>
   chain(error).some(
     (entry) => isPrismaError(entry) || RAW_TEXT.test(textOf(entry)) || /^P\d{4}$/.test(String(entry.code)),
   );
+
+/**
+ * Solid Ten Sign (L-3): Prisma's "the row is not there" errors: P2025 (a record to update, delete
+ * or find-or-throw does not exist), P2015 and P2018 (a related record not found). They mean the
+ * thing was deleted, often a moment before. Not P2003 (a foreign key): it also means "still in
+ * use" on a delete, which is not a 404.
+ */
+const MISSING_RECORD_PRISMA_CODES = new Set(['P2025', 'P2015', 'P2018']);
+
+export const isMissingRecordError = (error: unknown): boolean =>
+  chain(error).some((entry) => typeof entry.code === 'string' && MISSING_RECORD_PRISMA_CODES.has(entry.code));

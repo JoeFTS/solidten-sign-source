@@ -122,7 +122,7 @@ test('a missing video file shows no player, and a topic without a video shows no
   await expect(page.getByTestId('help-video')).toHaveCount(0);
   await expect(page.locator('video')).toHaveCount(0);
 
-  await page.goto('/help/folders');
+  await page.goto('/help/connect-other-tools');
   await expect(page.getByTestId('help-steps')).toBeVisible();
   await expect(page.locator('video')).toHaveCount(0);
 });
@@ -185,7 +185,7 @@ test('an article without a video asks for no media at all', async ({ page }) => 
     }
   });
 
-  await page.goto('/help/conditional-fields');
+  await page.goto('/help/connect-other-tools');
   await expect(page.getByTestId('help-steps')).toBeVisible();
   await page.waitForLoadState('networkidle');
 

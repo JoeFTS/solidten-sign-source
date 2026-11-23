@@ -1,4 +1,4 @@
-import { AppError } from '@documenso/lib/errors/app-error';
+import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { trpc as trpcReact } from '@documenso/trpc/react';
 import { Badge } from '@documenso/ui/primitives/badge';
 import { Button } from '@documenso/ui/primitives/button';
@@ -29,6 +29,10 @@ export const RecipientDeliveryFailedBadge = ({
 
   const { mutateAsync: redistributeEnvelope, isPending } = trpcReact.envelope.redistribute.useMutation();
 
+  // Solid Ten Sign (L-4): a stop by the organisation's email limit gets its own advice.
+  const { data: failure } = trpcReact.lifecycle.getDeliveryFailure.useQuery({ envelopeId, recipientId });
+  const isLimit = failure?.reason === 'LIMIT';
+
   const onResend = async () => {
     try {
       await redistributeEnvelope({ envelopeId, recipients: [recipientId] });
@@ -47,7 +51,10 @@ export const RecipientDeliveryFailedBadge = ({
 
       toast({
         title: t`Could not send`,
-        description: error.userMessage ?? t`The email could not be sent. Try again later.`,
+        description:
+          error.code === AppErrorCode.TOO_MANY_REQUESTS
+            ? t`The organization's email limit was reached. Ask your administrator to raise it, then send again.`
+            : (error.userMessage ?? t`The email could not be sent. Try again later.`),
         variant: 'destructive',
       });
     }
@@ -62,13 +69,29 @@ export const RecipientDeliveryFailedBadge = ({
         </Badge>
       }
     >
-      <p className="text-sm">
-        <Trans>The signing request could not be delivered.</Trans>
-      </p>
+      {isLimit ? (
+        <>
+          <p className="text-sm" data-testid={`recipient-not-delivered-limit-${recipientId}`}>
+            <Trans>The organization's email limit was reached, so the signing request was not sent.</Trans>
+          </p>
 
-      <p className="mt-1 text-muted-foreground text-xs">
-        <Trans>Check the email address, then send it again. You can also copy the signing link.</Trans>
-      </p>
+          <p className="mt-1 text-muted-foreground text-xs">
+            <Trans>
+              Ask your administrator to raise the limit, then send it again. You can also copy the signing link.
+            </Trans>
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="text-sm">
+            <Trans>The signing request could not be delivered.</Trans>
+          </p>
+
+          <p className="mt-1 text-muted-foreground text-xs">
+            <Trans>Check the email address, then send it again. You can also copy the signing link.</Trans>
+          </p>
+        </>
+      )}
 
       <Button
         className="mt-2"

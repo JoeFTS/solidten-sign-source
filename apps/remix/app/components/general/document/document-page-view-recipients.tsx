@@ -90,7 +90,11 @@ export const DocumentPageViewRecipients = ({ envelope, documentRootPath }: Docum
         )}
 
         {recipients.map((recipient, i) => (
-          <li key={recipient.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
+          // Solid Ten Sign (L-4): the badges wrap under the name instead of overflowing the card.
+          <li
+            key={recipient.id}
+            className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-4 py-2.5 text-sm"
+          >
             <AvatarWithText
               avatarFallback={recipient.email.slice(0, 1).toUpperCase()}
               primaryText={<p className="text-muted-foreground text-sm">{recipient.email}</p>}
@@ -101,7 +105,7 @@ export const DocumentPageViewRecipients = ({ envelope, documentRootPath }: Docum
               }
             />
 
-            <div className="flex flex-row items-center">
+            <div className="flex min-w-0 flex-row flex-wrap items-center justify-end gap-1">
               {envelope.status !== DocumentStatus.DRAFT && recipient.signingStatus === SigningStatus.SIGNED && (
                 <Badge variant="default">
                   {match(recipient.role)

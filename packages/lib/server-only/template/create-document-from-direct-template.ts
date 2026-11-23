@@ -18,6 +18,8 @@ import { DateTime } from 'luxon';
 import pMap from 'p-map';
 import { match } from 'ts-pattern';
 import { z } from 'zod';
+import { checkFieldValue, representationForVersion } from '../../advanced-fields-validation/field-value-rules';
+import { isBase64Image } from '../../constants/signatures';
 
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { jobs } from '../../jobs/client';
@@ -336,6 +338,21 @@ export const createDocumentFromDirectTemplate = async ({
     });
   }
 
+  // Solid Ten Sign (L round 2, L1-F): a value for a field this link does not have (another
+  // template's field, an id that does not exist) refuses the whole submission; before, it was
+  // silently ignored.
+  const knownFieldIds = new Set(directTemplateRecipient.fields.map((templateField) => templateField.id));
+
+  // The version-1 page sends { fieldId: 0 } for a field it has no value for: not a field.
+  const isUnknownField = (fieldId: number) => fieldId !== 0 && !knownFieldIds.has(fieldId);
+
+  if (signedFieldValues.some((signedFieldValue) => isUnknownField(signedFieldValue.fieldId))) {
+    throw new AppError(AppErrorCode.INVALID_BODY, {
+      message: 'A submitted field is not part of this form.',
+      userMessage: 'A submitted field is not part of this form.',
+    });
+  }
+
   // Associate, validate and map to a query every direct template recipient field with the provided fields.
   // Only process fields that are either required or have been signed by the user
   const fieldsToProcess = directTemplateRecipient.fields.filter((templateField) => {
@@ -392,6 +409,26 @@ export const createDocumentFromDirectTemplate = async ({
 
       const { value, isBase64 } = signedFieldValue;
 
+      // Solid Ten Sign (L round 2): the one set of value rules every signing route uses
+      // (field-value-rules.ts), in the representation this template stores. Nothing filled in is
+      // allowed for an optional field (the V2 page sends "" for an untouched one), refused for a
+      // required one; a field hidden by field logic is not required.
+      const valueCheck = checkFieldValue({
+        field: templateField,
+        value,
+        representation: representationForVersion(directTemplateEnvelope.internalVersion),
+        isRequired: isRequiredField(templateField) && !notRequiredFieldIds.has(templateField.id),
+        isBase64: isBase64 ?? (typeof value === 'string' && isBase64Image(value)),
+        typedSignatureEnabled: derivedDocumentMeta.typedSignatureEnabled,
+      });
+
+      if (valueCheck.result === 'refused') {
+        const label = getFieldLabel(templateField);
+        const message = label ? `"${label}": ${valueCheck.reason}` : valueCheck.reason;
+
+        throw new AppError(AppErrorCode.INVALID_BODY, { message, userMessage: message });
+      }
+
       const isSignatureField =
         templateField.type === FieldType.SIGNATURE || templateField.type === FieldType.FREE_SIGNATURE;
 
@@ -405,7 +442,10 @@ export const createDocumentFromDirectTemplate = async ({
       }
 
       if (isSignatureField && !signatureImageAsBase64 && !typedSignature) {
-        throw new Error('Signature field must have a signature');
+        throw new AppError(AppErrorCode.INVALID_BODY, {
+          message: 'Signature field must have a signature',
+          userMessage: 'Signature field must have a signature',
+        });
       }
 
       return {
@@ -995,4 +1035,11 @@ export const createDocumentFromDirectTemplate = async ({
     documentId: incrementedDocumentId.documentId,
     recipientId,
   };
+};
+
+/** A field's label for a refusal message ("Guests": ...), when it has one. */
+const getFieldLabel = (field: { fieldMeta: unknown }) => {
+  const meta = field.fieldMeta as { label?: unknown } | null;
+
+  return typeof meta?.label === 'string' && meta.label.trim() ? meta.label.trim() : null;
 };

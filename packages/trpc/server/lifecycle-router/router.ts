@@ -1,5 +1,6 @@
 import { router } from '../trpc';
 import { findScheduledSendsRoute } from './find-scheduled-sends';
+import { getDeliveryFailureRoute } from './get-delivery-failure';
 import { getSignerReassignOptionsRoute } from './get-signer-reassign-options';
 import { getSigningLinkStatusRoute } from './get-signing-link-status';
 import { getLifecycleSettingsRoute, previewRetentionRoute, updateLifecycleSettingsRoute } from './lifecycle-settings';
@@ -25,4 +26,5 @@ export const lifecycleRouter = router({
   updateSettings: updateLifecycleSettingsRoute,
   previewRetention: previewRetentionRoute,
   resendSignedCopy: resendSignedCopyRoute,
+  getDeliveryFailure: getDeliveryFailureRoute,
 });

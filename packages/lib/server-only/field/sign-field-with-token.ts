@@ -1,28 +1,15 @@
-import { validateCheckboxField } from '@documenso/lib/advanced-fields-validation/validate-checkbox';
-import { validateDropdownField } from '@documenso/lib/advanced-fields-validation/validate-dropdown';
-import { validateNumberField } from '@documenso/lib/advanced-fields-validation/validate-number';
-import { validateRadioField } from '@documenso/lib/advanced-fields-validation/validate-radio';
-import { validateTextField } from '@documenso/lib/advanced-fields-validation/validate-text';
-import { fromCheckboxValue } from '@documenso/lib/universal/field-checkbox';
+import { checkFieldValue, representationForVersion } from '@documenso/lib/advanced-fields-validation/field-value-rules';
+import { isRequiredField } from '@documenso/lib/utils/advanced-fields-helpers';
 import { prisma } from '@documenso/prisma';
 import { DocumentStatus, FieldType, RecipientRole, SigningStatus } from '@prisma/client';
 import { DateTime } from 'luxon';
-import { isDeepEqual } from 'remeda';
 import { match } from 'ts-pattern';
 
-import { AUTO_SIGNABLE_FIELD_TYPES } from '../../constants/autosign';
 import { DEFAULT_DOCUMENT_DATE_FORMAT } from '../../constants/date-formats';
 import { DEFAULT_DOCUMENT_TIME_ZONE } from '../../constants/time-zones';
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '../../types/document-audit-logs';
 import type { TRecipientActionAuth } from '../../types/document-auth';
-import {
-  ZCheckboxFieldMeta,
-  ZDropdownFieldMeta,
-  ZNumberFieldMeta,
-  ZRadioFieldMeta,
-  ZTextFieldMeta,
-} from '../../types/field-meta';
 import type { RequestMetadata } from '../../universal/extract-request-metadata';
 import { createDocumentAuditLogData } from '../../utils/document-audit-logs';
 import { getRecipientFieldsWhereInput } from '../../utils/recipient-queries';
@@ -68,13 +55,19 @@ export const signFieldWithToken = async ({
   authOptions,
   requestMetadata,
 }: SignFieldWithTokenOptions) => {
-  const recipient = await prisma.recipient.findFirstOrThrow({
+  // Solid Ten Sign (L-3): an unknown link or a field this link does not own is a 404, not a raw
+  // database error (500).
+  const recipient = await prisma.recipient.findFirst({
     where: {
       token,
     },
   });
 
-  const field = await prisma.field.findFirstOrThrow({
+  if (!recipient) {
+    throw new AppError(AppErrorCode.NOT_FOUND, { message: 'Recipient not found', userMessage: 'Recipient not found' });
+  }
+
+  const field = await prisma.field.findFirst({
     where: {
       id: fieldId,
       recipient: getRecipientFieldsWhereInput({
@@ -92,6 +85,13 @@ export const signFieldWithToken = async ({
     },
   });
 
+  if (!field) {
+    throw new AppError(AppErrorCode.NOT_FOUND, {
+      message: 'This field is not part of the document for this link.',
+      userMessage: 'This field is not part of the document for this link.',
+    });
+  }
+
   const { envelope } = field;
 
   if (!envelope) {
@@ -105,21 +105,34 @@ export const signFieldWithToken = async ({
   await assertSenderNotDisabled({ userId: envelope.userId });
 
   if (envelope.deletedAt) {
-    throw new Error(`Document ${envelope.id} has been deleted`);
+    throw new AppError(AppErrorCode.INVALID_REQUEST, {
+      message: 'This document was deleted.',
+      userMessage: 'This document was deleted.',
+    });
   }
 
   if (envelope.status !== DocumentStatus.PENDING) {
-    throw new Error(`Document ${envelope.id} must be pending for signing`);
+    throw new AppError(AppErrorCode.INVALID_REQUEST, {
+      message: 'This document can no longer be signed.',
+      userMessage: 'This document can no longer be signed.',
+    });
   }
 
   assertRecipientNotExpired(recipient);
 
   if (recipient.signingStatus === SigningStatus.SIGNED || field.recipient.signingStatus === SigningStatus.SIGNED) {
-    throw new Error(`Recipient ${recipient.id} has already signed`);
+    throw new AppError(AppErrorCode.INVALID_REQUEST, {
+      message: 'This document has already been signed with this link.',
+      userMessage: 'This document has already been signed with this link.',
+    });
   }
 
+  // Solid Ten Sign (L-2): a plain refusal (400), not a 500.
   if (field.inserted) {
-    throw new Error(`Field ${fieldId} has already been inserted`);
+    throw new AppError(AppErrorCode.ALREADY_EXISTS, {
+      message: 'This field is already filled in. Clear it first to change it.',
+      userMessage: 'This field is already filled in. Clear it first to change it.',
+    });
   }
 
   // Unreachable code based on the above query but we need to satisfy TypeScript
@@ -144,53 +157,6 @@ export const signFieldWithToken = async ({
     });
   }
 
-  if (field.type === FieldType.NUMBER && field.fieldMeta) {
-    const numberFieldParsedMeta = ZNumberFieldMeta.parse(field.fieldMeta);
-    const errors = validateNumberField(value, numberFieldParsedMeta, true);
-
-    if (errors.length > 0) {
-      throw fieldValueRefused(errors.join(', '));
-    }
-  }
-
-  if (field.type === FieldType.TEXT && field.fieldMeta) {
-    const textFieldParsedMeta = ZTextFieldMeta.parse(field.fieldMeta);
-    const errors = validateTextField(value, textFieldParsedMeta, true);
-
-    if (errors.length > 0) {
-      throw fieldValueRefused(errors.join(', '));
-    }
-  }
-
-  if (field.type === FieldType.CHECKBOX && field.fieldMeta) {
-    const checkboxFieldParsedMeta = ZCheckboxFieldMeta.parse(field.fieldMeta);
-    const checkboxFieldValues: string[] = fromCheckboxValue(value);
-
-    const errors = validateCheckboxField(checkboxFieldValues, checkboxFieldParsedMeta, true);
-
-    if (errors.length > 0) {
-      throw fieldValueRefused(errors.join(', '));
-    }
-  }
-
-  if (field.type === FieldType.RADIO && field.fieldMeta) {
-    const radioFieldParsedMeta = ZRadioFieldMeta.parse(field.fieldMeta);
-    const errors = validateRadioField(value, radioFieldParsedMeta, true);
-
-    if (errors.length > 0) {
-      throw fieldValueRefused(errors.join(', '));
-    }
-  }
-
-  if (field.type === FieldType.DROPDOWN && field.fieldMeta) {
-    const dropdownFieldParsedMeta = ZDropdownFieldMeta.parse(field.fieldMeta);
-    const errors = validateDropdownField(value, dropdownFieldParsedMeta, true);
-
-    if (errors.length > 0) {
-      throw fieldValueRefused(errors.join(', '));
-    }
-  }
-
   const derivedRecipientActionAuth = await validateFieldAuth({
     documentAuthOptions: envelope.authOptions,
     recipient,
@@ -207,6 +173,21 @@ export const signFieldWithToken = async ({
     },
   });
 
+  // Solid Ten Sign (L round 2): the one set of value rules every signing route uses
+  // (field-value-rules.ts), in the representation this envelope stores.
+  const valueCheck = checkFieldValue({
+    field,
+    value,
+    representation: representationForVersion(envelope.internalVersion),
+    isRequired: isRequiredField(field),
+    isBase64,
+    typedSignatureEnabled: documentMeta?.typedSignatureEnabled,
+  });
+
+  if (valueCheck.result === 'refused') {
+    throw fieldValueRefused(valueCheck.reason);
+  }
+
   const isSignatureField = field.type === FieldType.SIGNATURE || field.type === FieldType.FREE_SIGNATURE;
 
   let customText = !isSignatureField ? value : undefined;
@@ -218,37 +199,6 @@ export const signFieldWithToken = async ({
     customText = DateTime.now()
       .setZone(documentMeta?.timezone ?? DEFAULT_DOCUMENT_TIME_ZONE)
       .toFormat(documentMeta?.dateFormat ?? DEFAULT_DOCUMENT_DATE_FORMAT);
-  }
-
-  if (isSignatureField && !signatureImageAsBase64 && !typedSignature) {
-    throw fieldValueRefused('Signature field must have a signature');
-  }
-
-  if (isSignatureField && documentMeta?.typedSignatureEnabled === false && typedSignature) {
-    throw fieldValueRefused('Typed signatures are not allowed. Please draw your signature');
-  }
-
-  if (field.fieldMeta?.readOnly && !AUTO_SIGNABLE_FIELD_TYPES.includes(field.type)) {
-    // !: This is a bit of a hack at the moment, readonly fields with default values
-    // !: should be inserted with their default value on document creation instead of
-    // !: this weird programattic approach. Until that's fixed though this will verify
-    // !: that the programmatic signed value is only that of its default.
-    const isAutomaticSigningValueValid = match(field.fieldMeta)
-      .with({ type: 'text' }, (meta) => customText === meta.text)
-      .with({ type: 'number' }, (meta) => customText === meta.value)
-      .with({ type: 'checkbox' }, (meta) =>
-        isDeepEqual(
-          fromCheckboxValue(customText ?? ''),
-          meta.values?.filter((v) => v.checked).map((v) => v.value) ?? [],
-        ),
-      )
-      .with({ type: 'radio' }, (meta) => customText === meta.values?.find((v) => v.checked)?.value)
-      .with({ type: 'dropdown' }, (meta) => customText === meta.defaultValue)
-      .otherwise(() => false);
-
-    if (!isAutomaticSigningValueValid) {
-      throw fieldValueRefused('Field is read only and only accepts its default value for signing.');
-    }
   }
 
   const assistant = recipient.role === RecipientRole.ASSISTANT ? recipient : undefined;
