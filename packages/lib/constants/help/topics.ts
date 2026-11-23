@@ -84,7 +84,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['your-documents-page', 'account-security'],
-    video: null,
+    video: video('sign-in-with-emailed-link', 22, { narrated: true }),
   },
   {
     slug: 'your-documents-page',
@@ -107,7 +107,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['folders', 'track-status', 'upload-and-send'],
-    video: null,
+    video: video('your-documents-page', 36, { narrated: true }),
   },
   {
     slug: 'folders',
@@ -169,13 +169,16 @@ export const HELP_TOPICS: HelpTopic[] = [
         text: msg`Drag the next PDF onto "Add a document", or select that box and choose the file.`,
         tip: msg`Each PDF can be up to 5 MB.`,
       },
-      { text: msg`To rename a file, select the pencil next to its name and type the new name.` },
+      {
+        text: msg`To rename a file, select its name, type the new name and select somewhere else. The name saves by itself.`,
+        tip: msg`The pencil next to the name does not rename: it replaces the PDF with another file.`,
+      },
       {
         text: msg`Select "Add Fields" and choose each file at the top to place its fields.`,
       },
     ],
     related: ['upload-and-send', 'place-fields'],
-    video: null,
+    video: video('add-several-files', 33, { narrated: true }),
   },
   {
     slug: 'add-signers-and-signing-order',
@@ -272,7 +275,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['place-fields', 'conditional-fields'],
-    video: null,
+    video: video('required-and-prefilled-fields', 37, { narrated: true }),
   },
   {
     slug: 'conditional-fields',
@@ -413,7 +416,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Update".` },
     ],
     related: ['schedule-send', 'resend-the-request', 'document-defaults'],
-    video: null,
+    video: video('reminders-and-expiry', 33, { narrated: true }),
   },
   {
     slug: 'signer-identity-check',
@@ -435,7 +438,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['enter-the-emailed-code', 'the-certificate-and-audit-log'],
-    video: null,
+    video: video('signer-identity-check', 22, { narrated: true }),
   },
   {
     slug: 'send-links-yourself',
@@ -460,7 +463,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['upload-and-send', 'in-person-signing'],
-    video: null,
+    video: video('send-links-yourself', 30, { narrated: true }),
   },
   {
     slug: 'in-person-signing',
@@ -513,7 +516,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['send-from-a-template', 'duplicate-and-save-as-template', 'direct-links'],
-    video: null,
+    video: video('create-a-template', 35, { narrated: true }),
   },
   {
     slug: 'send-from-a-template',
@@ -532,7 +535,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Create and send", or "Create as draft".` },
     ],
     related: ['create-a-template', 'bulk-send'],
-    video: null,
+    video: video('send-from-a-template', 25, { narrated: true }),
   },
   {
     slug: 'bulk-send',
@@ -555,7 +558,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['send-from-a-template', 'create-a-template'],
-    video: null,
+    video: video('bulk-send', 31, { narrated: true }),
   },
   {
     slug: 'direct-links',
@@ -577,7 +580,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['public-forms', 'sign-from-a-shared-link'],
-    video: null,
+    video: video('direct-links', 37, { narrated: true }),
   },
   {
     slug: 'public-forms',
@@ -782,7 +785,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['comments', 'how-to-sign'],
-    video: null,
+    video: video('ask-a-question', 24, { narrated: true }),
   },
   {
     slug: 'attach-a-file-as-signer',
@@ -801,7 +804,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Done".` },
     ],
     related: ['how-to-sign', 'fill-in-fields'],
-    video: null,
+    video: video('attach-a-file-as-signer', 25, { narrated: true }),
   },
   {
     slug: 'sign-from-a-shared-link',
@@ -823,7 +826,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['fill-in-a-public-form', 'how-to-sign'],
-    video: null,
+    video: video('sign-from-a-shared-link', 46, { narrated: true }),
   },
   {
     slug: 'fill-in-a-public-form',
@@ -843,7 +846,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['sign-from-a-shared-link', 'public-forms'],
-    video: null,
+    video: video('fill-in-a-public-form', 50, { narrated: true }),
   },
   {
     slug: 'no-account-needed',
@@ -940,7 +943,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Resolve" when the question is answered.` },
     ],
     related: ['ask-a-question', 'document-lifecycle'],
-    video: null,
+    video: video('comments', 32, { narrated: true }),
   },
   {
     slug: 'cancel-a-document',
@@ -975,7 +978,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['the-certificate-and-audit-log', 'resend-signed-copy'],
-    video: null,
+    video: video('download-the-signed-copy', 18, { narrated: true }),
   },
   {
     slug: 'the-certificate-and-audit-log',
@@ -994,7 +997,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['download-the-signed-copy', 'track-status'],
-    video: null,
+    video: video('the-certificate-and-audit-log', 27, { narrated: true }),
   },
   {
     slug: 'resend-signed-copy',
@@ -1016,7 +1019,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`If it fails again, download the copy and send it another way.` },
     ],
     related: ['download-the-signed-copy', 'correct-a-signers-email'],
-    video: null,
+    video: video('resend-signed-copy', 22, { narrated: true }),
   },
   {
     slug: 'delete-a-document',
@@ -1056,7 +1059,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['create-a-template', 'send-from-a-template'],
-    video: null,
+    video: video('duplicate-and-save-as-template', 34, { narrated: true }),
   },
 
   // Team and settings.
@@ -1073,7 +1076,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Update profile".` },
     ],
     related: ['account-security', 'adopt-a-signature'],
-    video: null,
+    video: video('profile-and-signature', 30, { narrated: true }),
   },
   {
     slug: 'account-security',
@@ -1093,7 +1096,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`To see where you are signed in, select "Manage sessions".` },
     ],
     related: ['sign-in-with-emailed-link', 'profile-and-signature'],
-    video: null,
+    video: video('account-security', 40, { narrated: true }),
   },
   {
     slug: 'team-members',
@@ -1119,7 +1122,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Choose the "Team Role" and select "Add Members".` },
     ],
     related: ['document-defaults', 'usage-reports'],
-    video: null,
+    video: video('team-members', 41, { narrated: true }),
   },
   {
     slug: 'document-defaults',
@@ -1145,7 +1148,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['email-settings', 'branding', 'reminders-and-expiry'],
-    video: null,
+    video: video('document-defaults', 48, { narrated: true }),
   },
   {
     slug: 'email-settings',
@@ -1165,7 +1168,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Save changes".` },
     ],
     related: ['message-and-subject', 'branding'],
-    video: null,
+    video: video('email-settings', 32, { narrated: true }),
   },
   {
     slug: 'branding',
@@ -1210,7 +1213,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Save changes" in the bar at the bottom of the page.` },
     ],
     related: ['retention', 'in-person-signing', 'comments', 'correct-a-signers-email'],
-    video: null,
+    video: video('document-lifecycle', 40, { narrated: true }),
   },
   {
     slug: 'retention',
@@ -1238,7 +1241,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['document-lifecycle', 'delete-a-document'],
-    video: null,
+    video: video('retention', 37, { narrated: true }),
   },
   {
     slug: 'webhooks',
@@ -1281,7 +1284,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['webhooks', 'connect-other-tools'],
-    video: null,
+    video: video('api-tokens', 36, { narrated: true }),
   },
   {
     slug: 'usage-reports',
@@ -1299,7 +1302,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Under "Usage report", select "Members CSV" or "Documents CSV" to save a list.` },
     ],
     related: ['team-members', 'track-status'],
-    video: null,
+    video: video('usage-reports', 28, { narrated: true }),
   },
   {
     slug: 'connect-other-tools',

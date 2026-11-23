@@ -49,7 +49,8 @@ export const TemplateFooter = ({ isDocument = true, reportUrl }: TemplateFooterP
 
       {/* Solid Ten Sign (AGPL-3.0): the source link also when the "sent using" line is hidden. */}
       {(!isDocument || branding.brandingHidePoweredBy) && (
-        <Text className="my-4 text-muted-foreground text-xs">
+        <Text className="my-4 text-muted-foreground text-sm">
+          <Trans>Solid Ten Sign is open source (AGPL-3.0).</Trans>{' '}
           <Link className="text-muted-foreground underline" href={sourceCodeUrl} target="_blank">
             <Trans>Source code</Trans>
           </Link>

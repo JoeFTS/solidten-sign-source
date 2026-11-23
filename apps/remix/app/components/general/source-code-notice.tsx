@@ -11,28 +11,26 @@ export type SourceCodeNoticeProps = {
 };
 
 /**
- * Solid Ten Sign (AGPL-3.0 section 13): one quiet footer line that tells every user of the
- * service where the source code is. It also carries the "Help" link of the public pages.
- *
- * Joe, 2026-11-22: no sentence about the license, only a small plain "Source code" link after
- * "Help". The link stays on every page, with its plain label: the license asks for that.
+ * Solid Ten Sign (AGPL-3.0 section 13): one quiet line that tells every user of the service where
+ * the source code is. It also carries the "Help" link of the public pages.
  */
 export const SourceCodeNotice = ({ className, showHelp = true }: SourceCodeNoticeProps) => (
-  <div className={cn('text-center text-[11px] text-muted-foreground/70', className)} data-testid="source-code-notice">
-    {showHelp && (
-      <>
-        <HelpFooterLink className="no-underline hover:underline" />
-        <span aria-hidden="true"> · </span>
-      </>
-    )}
+  <div className={cn('text-center text-muted-foreground text-xs', className)} data-testid="source-code-notice">
+    <Trans>Solid Ten Sign is open source (AGPL-3.0).</Trans>{' '}
     <a
       href={NEXT_PUBLIC_ST_SOURCE_URL()}
       target="_blank"
       rel="noopener noreferrer"
-      className="underline-offset-2 duration-200 hover:text-foreground hover:underline"
+      className="underline underline-offset-2 duration-200 hover:text-foreground"
       data-testid="source-code-link"
     >
       <Trans>Source code</Trans>
     </a>
+    {showHelp && (
+      <>
+        <span aria-hidden="true"> · </span>
+        <HelpFooterLink />
+      </>
+    )}
   </div>
 );
