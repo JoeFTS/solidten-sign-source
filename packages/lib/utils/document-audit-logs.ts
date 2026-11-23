@@ -806,9 +806,11 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
     })
     .with({ type: DOCUMENT_AUDIT_LOG_TYPE.EMAIL_NOT_DELIVERED }, ({ data }) => {
       const message =
-        data.emailType === 'DOCUMENT_COMPLETED'
-          ? msg`The signed copy to ${data.recipientEmail} could not be delivered after ${data.attempts} attempts`
-          : msg`The signing request to ${data.recipientEmail} could not be delivered after ${data.attempts} attempts`;
+        data.reason === 'LIMIT'
+          ? msg`The signing request to ${data.recipientEmail} was not sent: the organization's email limit was reached`
+          : data.emailType === 'DOCUMENT_COMPLETED'
+            ? msg`The signed copy to ${data.recipientEmail} could not be delivered after ${data.attempts} attempts`
+            : msg`The signing request to ${data.recipientEmail} could not be delivered after ${data.attempts} attempts`;
 
       return { anonymous: message, you: message, user: message };
     })

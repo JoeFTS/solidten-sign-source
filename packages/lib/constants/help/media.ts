@@ -1,6 +1,6 @@
 import { env } from '../../utils/env';
-import type { HelpVideo } from './types';
 import { resolveHelpMediaUrl } from './media-url';
+import type { HelpVideo } from './types';
 
 export { DEFAULT_HELP_MEDIA_URL, getHelpMediaCspSources, resolveHelpMediaUrl } from './media-url';
 

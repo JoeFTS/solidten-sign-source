@@ -103,13 +103,13 @@ export default function CancelledSigningPage({ loaderData }: Route.ComponentProp
             <BanIcon className="h-10 w-10 text-destructive" />
 
             <h2 className="max-w-[35ch] text-center font-semibold text-2xl leading-normal md:text-3xl lg:text-4xl">
-              <Trans>This document was cancelled</Trans>
+              <Trans>This document was canceled</Trans>
             </h2>
           </div>
 
           <p className="mt-6 max-w-[60ch] text-center text-muted-foreground text-sm">
             <Trans>
-              The sender cancelled this document, so it can no longer be signed. Contact the sender if you think this is
+              The sender canceled this document, so it can no longer be signed. Contact the sender if you think this is
               a mistake.
             </Trans>
           </p>

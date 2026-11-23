@@ -243,6 +243,13 @@ export const run = async ({ payload, io }: { payload: TSendSigningEmailJobDefini
         envelopeId: envelope.id,
       });
 
+      // Solid Ten Sign (K-2): not silent any more: the recipient shows "Not delivered" (with
+      // Resend), an EMAIL_NOT_DELIVERED audit entry says why, and the owner is told.
+      // Loaded on use: it imports the jobs client, which imports this handler's definition.
+      const { markSigningRequestUndelivered } = await import('../solidten/signing-request-delivery');
+
+      await markSigningRequestUndelivered({ payload: { recipientId: recipient.id }, attempts: 1, reason: 'LIMIT' });
+
       // Job is consumed and NOT retried.
       return;
     }

@@ -31,6 +31,14 @@ import { validateFieldAuth } from '../document/validate-field-auth';
 import { assertSenderNotDisabled } from '../user/assert-user-not-disabled';
 import { lockEnvelopeForFieldWrite } from './lock-field-write';
 
+/**
+ * Solid Ten Sign (A-3): a value the field's own rules refuse (over the character limit, out of
+ * the number range, not one of the options, a missing or typed signature where not allowed) is
+ * the signer's input: a 400 with the reason, not a 500.
+ */
+const fieldValueRefused = (message: string) =>
+  new AppError(AppErrorCode.INVALID_BODY, { message, userMessage: message });
+
 export type SignFieldWithTokenOptions = {
   token: string;
   fieldId: number;
@@ -141,7 +149,7 @@ export const signFieldWithToken = async ({
     const errors = validateNumberField(value, numberFieldParsedMeta, true);
 
     if (errors.length > 0) {
-      throw new Error(errors.join(', '));
+      throw fieldValueRefused(errors.join(', '));
     }
   }
 
@@ -150,7 +158,7 @@ export const signFieldWithToken = async ({
     const errors = validateTextField(value, textFieldParsedMeta, true);
 
     if (errors.length > 0) {
-      throw new Error(errors.join(', '));
+      throw fieldValueRefused(errors.join(', '));
     }
   }
 
@@ -161,7 +169,7 @@ export const signFieldWithToken = async ({
     const errors = validateCheckboxField(checkboxFieldValues, checkboxFieldParsedMeta, true);
 
     if (errors.length > 0) {
-      throw new Error(errors.join(', '));
+      throw fieldValueRefused(errors.join(', '));
     }
   }
 
@@ -170,7 +178,7 @@ export const signFieldWithToken = async ({
     const errors = validateRadioField(value, radioFieldParsedMeta, true);
 
     if (errors.length > 0) {
-      throw new Error(errors.join(', '));
+      throw fieldValueRefused(errors.join(', '));
     }
   }
 
@@ -179,7 +187,7 @@ export const signFieldWithToken = async ({
     const errors = validateDropdownField(value, dropdownFieldParsedMeta, true);
 
     if (errors.length > 0) {
-      throw new Error(errors.join(', '));
+      throw fieldValueRefused(errors.join(', '));
     }
   }
 
@@ -213,11 +221,11 @@ export const signFieldWithToken = async ({
   }
 
   if (isSignatureField && !signatureImageAsBase64 && !typedSignature) {
-    throw new Error('Signature field must have a signature');
+    throw fieldValueRefused('Signature field must have a signature');
   }
 
   if (isSignatureField && documentMeta?.typedSignatureEnabled === false && typedSignature) {
-    throw new Error('Typed signatures are not allowed. Please draw your signature');
+    throw fieldValueRefused('Typed signatures are not allowed. Please draw your signature');
   }
 
   if (field.fieldMeta?.readOnly && !AUTO_SIGNABLE_FIELD_TYPES.includes(field.type)) {
@@ -239,7 +247,7 @@ export const signFieldWithToken = async ({
       .otherwise(() => false);
 
     if (!isAutomaticSigningValueValid) {
-      throw new Error('Field is read only and only accepts its default value for signing.');
+      throw fieldValueRefused('Field is read only and only accepts its default value for signing.');
     }
   }
 

@@ -183,7 +183,7 @@ export const buildMemberUsageCsv = (members: TUsageReportMemberSummary[]) =>
       'Completed',
       'Declined',
       'Expired',
-      'Cancelled',
+      'Canceled',
       'Pending',
       'Completion rate (%)',
       'Average hours to complete',

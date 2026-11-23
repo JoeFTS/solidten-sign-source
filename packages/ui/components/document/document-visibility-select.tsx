@@ -87,13 +87,14 @@ export const DocumentVisibilityTooltip = () => {
         </ul>
 
         <p>
+          {/* Solid Ten Sign (K-1): our own Help article, not the upstream documentation. */}
           <a
-            href="https://docs.documenso.com/docs/users/documents/advanced/document-visibility#examples"
+            href="/help/document-defaults"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="text-documenso-700 hover:text-documenso-600 hover:underline"
           >
-            <Trans>Examples</Trans>
+            <Trans>Learn more</Trans>
           </a>
         </p>
       </TooltipContent>

@@ -204,7 +204,7 @@ export const RetentionPreferencesForm = ({
                         />
                       </FormControl>
                       <FormLabel>
-                        <Trans>Also cancelled documents</Trans>
+                        <Trans>Also canceled documents</Trans>
                       </FormLabel>
                     </FormItem>
                   )}

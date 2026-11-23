@@ -50,6 +50,8 @@ export const ZSolidTenNoticeEmailPayloadSchema = z.discriminatedUnion('kind', [
     kind: z.literal('SIGNING_REQUEST_NOT_DELIVERED'),
     envelopeId: z.string(),
     recipientId: z.number(),
+    /** Solid Ten Sign (K-2): LIMIT when the organisation's email limit stopped it. */
+    reason: z.enum(['LIMIT']).optional(),
   }),
   z.object({
     // Solid Ten: the completion emails failed on every attempt for these recipients (and maybe

@@ -112,7 +112,7 @@ export const assertRetentionRuleChangeAllowed = async ({
   }
 
   throw new AppError(AppErrorCode.FORBIDDEN, {
-    message: 'Only a team or organisation admin can set a rule that deletes documents permanently.',
+    message: 'Only a team or organization admin can set a rule that deletes documents permanently.',
   });
 };
 

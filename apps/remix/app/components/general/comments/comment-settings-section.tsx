@@ -38,7 +38,7 @@ export const CommentSettingsSection = ({ canInherit, values, onSubmit }: Comment
             description: (
               <Trans>
                 Before signing, a signer can leave a question or a note, and your team can reply. Comments close when
-                the document is completed, rejected or cancelled.
+                the document is completed, rejected or canceled.
               </Trans>
             ),
             testId: 'comments-enabled',

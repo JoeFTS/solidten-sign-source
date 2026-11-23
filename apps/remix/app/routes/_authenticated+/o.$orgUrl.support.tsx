@@ -1,10 +1,10 @@
 import { useCurrentOrganisation } from '@documenso/lib/client-only/providers/organisation';
 import { useSession } from '@documenso/lib/client-only/providers/session';
-import { IS_BILLING_ENABLED } from '@documenso/lib/constants/app';
+import { IS_BILLING_ENABLED, SUPPORT_EMAIL } from '@documenso/lib/constants/app';
 import { Button } from '@documenso/ui/primitives/button';
 import { msg } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
-import { BookIcon, HelpCircleIcon, Link2Icon } from 'lucide-react';
+import { BookIcon, HelpCircleIcon, Link2Icon, MailIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
@@ -47,46 +47,32 @@ export default function SupportPage() {
         </p>
 
         <div className="mt-6 flex flex-col gap-4">
+          {/* Solid Ten Sign (A-6): our own Help and support address, not the upstream docs and Discord. */}
           <div className="rounded-lg border p-4">
             <h2 className="flex items-center gap-2 font-bold text-lg">
               <BookIcon className="h-5 w-5 text-muted-foreground" />
-              <Link
-                to="https://docs.documenso.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline"
-              >
-                <Trans>Documentation</Trans>
+              <Link to="/help" className="hover:underline">
+                <Trans>Help</Trans>
               </Link>
             </h2>
             <p className="mt-1 text-muted-foreground">
-              <Trans>Read our documentation to get started with Solid Ten Sign.</Trans>
+              <Trans>Short guides for every part of Solid Ten Sign, with videos.</Trans>
             </p>
           </div>
           <div className="rounded-lg border p-4">
             <h2 className="flex items-center gap-2 font-bold text-lg">
-              <Link2Icon className="h-5 w-5 text-muted-foreground" />
-              <Link
-                to="https://documen.so/discord"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline"
-              >
-                <Trans>Discord</Trans>
-              </Link>
+              <MailIcon className="h-5 w-5 text-muted-foreground" />
+              <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:underline">
+                <Trans>Email us</Trans>
+              </a>
             </h2>
             <p className="mt-1 text-muted-foreground">
               <Trans>
-                Join our community on{' '}
-                <Link
-                  to="https://documen.so/discord"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:underline"
-                >
-                  Discord
-                </Link>{' '}
-                for community support and discussion.
+                Write to{' '}
+                <a href={`mailto:${SUPPORT_EMAIL}`} className="underline">
+                  {SUPPORT_EMAIL}
+                </a>
+                . We answer on working days.
               </Trans>
             </p>
           </div>

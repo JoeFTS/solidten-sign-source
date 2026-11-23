@@ -103,12 +103,8 @@ export default function ApiTokensPage() {
         subtitle={
           <Trans>
             Create and manage API tokens. See our{' '}
-            <a
-              className="text-primary underline"
-              href={'https://docs.documenso.com/developers/public-api'}
-              target="_blank"
-              rel="noopener"
-            >
+            {/* Solid Ten Sign (A-6): our own Help, not the upstream documentation. */}
+            <a className="text-primary underline" href="/help/api-tokens" target="_blank" rel="noopener noreferrer">
               documentation
             </a>{' '}
             for more information.

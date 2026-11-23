@@ -268,7 +268,7 @@ const PendingInvitation = ({
           ) : (
             <p className="mt-1 mb-4 text-muted-foreground text-sm">
               <Trans>
-                To accept this invitation you need an account for this email address. Ask the organisation's
+                To accept this invitation you need an account for this email address. Ask the organization's
                 administrator to create it, then open this invitation again.
               </Trans>
             </p>

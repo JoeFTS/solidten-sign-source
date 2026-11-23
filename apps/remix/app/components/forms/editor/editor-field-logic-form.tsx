@@ -1,6 +1,9 @@
 import type { TLocalField } from '@documenso/lib/client-only/hooks/use-editor-fields';
 import { IS_FIELD_LOGIC_ENABLED } from '@documenso/lib/constants/field-logic';
-import { FIELD_LOGIC_FORMULA_HINT, FIELD_LOGIC_FORMULA_PLACEHOLDER } from '@documenso/lib/constants/field-logic-messages';
+import {
+  FIELD_LOGIC_FORMULA_HINT,
+  FIELD_LOGIC_FORMULA_PLACEHOLDER,
+} from '@documenso/lib/constants/field-logic-messages';
 import { type TFieldCondition, type TFieldConditionOperator, ZFieldKeySchema } from '@documenso/lib/types/field-logic';
 import type { TFieldMetaSchema } from '@documenso/lib/types/field-meta';
 import { readFieldLogicMeta } from '@documenso/lib/utils/field-conditions';
@@ -273,9 +276,7 @@ export const EditorFieldLogicForm = ({
               {formulaParseResult.error}
             </p>
           )}
-          <p className="text-muted-foreground text-xs">
-            {i18n._(FIELD_LOGIC_FORMULA_HINT)}
-          </p>
+          <p className="text-muted-foreground text-xs">{i18n._(FIELD_LOGIC_FORMULA_HINT)}</p>
 
           {formula && (
             <div className="flex items-center gap-2">

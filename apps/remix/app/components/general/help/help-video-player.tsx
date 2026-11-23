@@ -41,7 +41,11 @@ export const HelpVideoPlayer = ({ video, title }: HelpVideoPlayerProps) => {
   const playback = getHelpVideoPlayback(video);
 
   return (
-    <figure className="overflow-hidden rounded-xl border border-border bg-muted" data-testid="help-video" data-narrated={playback.muted ? 'false' : 'true'}>
+    <figure
+      className="overflow-hidden rounded-xl border border-border bg-muted"
+      data-testid="help-video"
+      data-narrated={playback.muted ? 'false' : 'true'}
+    >
       <video
         ref={ref}
         className="aspect-video w-full bg-black"

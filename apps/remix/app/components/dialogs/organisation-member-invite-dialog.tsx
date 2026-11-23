@@ -233,9 +233,10 @@ export const OrganisationMemberInviteDialog = ({ trigger, ...props }: Organisati
 
   const downloadTemplate = () => {
     const data = [
-      { email: 'admin@documenso.com', role: 'Admin' },
-      { email: 'manager@documenso.com', role: 'Manager' },
-      { email: 'member@documenso.com', role: 'Member' },
+      // Solid Ten Sign (K-1): example addresses from the reserved example.com domain.
+      { email: 'admin@example.com', role: 'Admin' },
+      { email: 'manager@example.com', role: 'Manager' },
+      { email: 'member@example.com', role: 'Member' },
     ];
 
     const csvContent = 'Email address,Role\n' + data.map((row) => `${row.email},${row.role}`).join('\n');

@@ -3,6 +3,7 @@ import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { sendDocument } from '@documenso/lib/server-only/document/send-document';
 import { getEnvelopeById } from '@documenso/lib/server-only/envelope/get-envelope-by-id';
 import { createDocumentFromTemplate } from '@documenso/lib/server-only/template/create-document-from-template';
+import { discardUnsentDraft } from '@documenso/lib/server-only/template/discard-unsent-draft';
 import { putNormalizedPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
 import { formatSigningLink } from '@documenso/lib/utils/recipients';
 import { EnvelopeType } from '@prisma/client';
@@ -146,8 +147,16 @@ export const useEnvelopeRoute = authenticatedProcedure
         userId: user.id,
         teamId,
         requestMetadata: ctx.metadata,
-      }).catch((err) => {
+      }).catch(async (err) => {
         console.error(err);
+
+        // Solid Ten Sign (A-2): the refused send leaves no draft behind.
+        await discardUnsentDraft({
+          envelopeId: createdEnvelope.id,
+          userId: user.id,
+          teamId,
+          requestMetadata: ctx.metadata,
+        });
 
         // Keep specific errors (e.g. a missing signature field) so callers
         // can act on them, only generic failures become a send failure.

@@ -190,9 +190,9 @@ export const TeamMemberCreateDialog = ({ trigger, ...props }: TeamMemberCreateDi
                       To be able to add members to a team, you must first add them to the organisation. For more
                       information, please see the{' '}
                       <Link
-                        to="https://docs.documenso.com/users/organisations/members"
+                        to="/help/team-members"
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         className="text-documenso-700 hover:text-documenso-600 hover:underline"
                       >
                         documentation

@@ -312,6 +312,8 @@ export const ZDocumentAuditLogEventEmailNotDeliveredSchema = z.object({
     recipientRole: z.string(),
     emailType: z.enum(['SIGNING_REQUEST', 'DOCUMENT_COMPLETED']),
     attempts: z.number(),
+    // Solid Ten Sign (K-2): LIMIT when the organisation's email limit stopped the email (not sent).
+    reason: z.enum(['LIMIT']).optional(),
   }),
 });
 

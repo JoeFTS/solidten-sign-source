@@ -53,6 +53,11 @@ const BANNED = [
   /leverage/i,
   /synergy/i,
   /\btext messages? (are|is) sent\b/i,
+  // Owner's decision (11/22): Help never mentions health documents.
+  /\bhealth\b/i,
+  /hipaa/i,
+  /\bmedical\b/i,
+  /\bpatients?\b/i,
 ];
 
 describe('help topics', () => {
@@ -127,19 +132,26 @@ describe('help topics', () => {
     // Update this list when the video team ships a file and the topic's video is switched on.
     expect(HELP_TOPICS.filter((topic) => topic.video).map((topic) => topic.slug)).toEqual([
       'upload-and-send',
+      'add-signers-and-signing-order',
+      'place-fields',
       'how-to-sign',
+      'adopt-a-signature',
+      'fill-in-fields',
+      'decline-to-sign',
+      'no-account-needed',
     ]);
   });
 
-  it('marks the pilots as silent until the voiced files exist', () => {
+  it('marks every rendered video as narrated (all batches are voiced)', () => {
     for (const topic of HELP_TOPICS) {
       if (topic.video) {
         expect(typeof topic.video.narrated, topic.slug).toBe('boolean');
       }
     }
 
-    expect(HELP_TOPICS.find((topic) => topic.slug === 'how-to-sign')?.video?.narrated).toBe(false);
-    expect(HELP_TOPICS.find((topic) => topic.slug === 'upload-and-send')?.video?.narrated).toBe(false);
+    for (const topic of HELP_TOPICS.filter((item) => item.video)) {
+      expect(topic.video?.narrated, topic.slug).toBe(true);
+    }
   });
 
   it('starts a narrated video with sound and a silent one muted', () => {

@@ -53,11 +53,11 @@ export const getIsAwaitingSeal = (recipients: Array<{ signingStatus: SigningStat
 };
 
 export const ENVELOPE_AWAITING_SEAL_MESSAGE =
-  'Everyone has signed this document and it is being finalised. It can no longer be cancelled or deleted.';
+  'Everyone has signed this document and it is being finalized. It can no longer be canceled or deleted.';
 
 /** Solid Ten Sign (SEC3-L1): the same refusal when the cause is a decline, not a full set of signatures. */
 export const ENVELOPE_DECLINED_AWAITING_SEAL_MESSAGE =
-  'A recipient declined this document and it is being finalised. It can no longer be cancelled or deleted.';
+  'A recipient declined this document and it is being finalized. It can no longer be canceled or deleted.';
 
 /** Why the envelope is waiting for its seal, or null when someone can still act. */
 export const getAwaitingSealReason = async (

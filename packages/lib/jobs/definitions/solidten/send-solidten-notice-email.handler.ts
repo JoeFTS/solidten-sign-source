@@ -275,7 +275,7 @@ export const run = async ({ payload, io }: { payload: TSendSolidTenNoticeEmailJo
         ],
       };
     })
-    .with({ kind: 'SIGNING_REQUEST_NOT_DELIVERED' }, async ({ recipientId }): Promise<Notice | null> => {
+    .with({ kind: 'SIGNING_REQUEST_NOT_DELIVERED' }, async ({ recipientId, reason }): Promise<Notice | null> => {
       const recipient = await prisma.recipient.findFirst({ where: { id: recipientId, envelopeId: envelope.id } });
 
       // Sent or signed in the meantime (a resend, a text): nothing to report.
@@ -289,14 +289,25 @@ export const run = async ({ payload, io }: { payload: TSendSolidTenNoticeEmailJo
         to: [{ name: envelope.user.name || '', address: envelope.user.email }],
         subject: i18n._(msg`"${envelope.title}": a signing request was not delivered`),
         heading: i18n._(msg`A signing request was not delivered`),
-        paragraphs: [
-          i18n._(
-            msg`Solid Ten Sign could not deliver the signing request for "${envelope.title}" to ${who}. It tried for about five hours.`,
-          ),
-          i18n._(
-            msg`Check the email address. Then open the document and use Resend on that recipient, or copy their signing link and send it another way.`,
-          ),
-        ],
+        paragraphs:
+          // Solid Ten Sign (K-2): stopped by the organisation's email limit, not by the mail server.
+          reason === 'LIMIT'
+            ? [
+                i18n._(
+                  msg`Solid Ten Sign did not send the signing request for "${envelope.title}" to ${who}: your organization's email limit was reached.`,
+                ),
+                i18n._(
+                  msg`Ask your administrator to raise the limit, then open the document and use Resend on that recipient. You can also copy their signing link and send it another way.`,
+                ),
+              ]
+            : [
+                i18n._(
+                  msg`Solid Ten Sign could not deliver the signing request for "${envelope.title}" to ${who}. It tried for about five hours.`,
+                ),
+                i18n._(
+                  msg`Check the email address. Then open the document and use Resend on that recipient, or copy their signing link and send it another way.`,
+                ),
+              ],
         actionLabel: i18n._(msg`Open document`),
         actionLink: documentLink,
       };

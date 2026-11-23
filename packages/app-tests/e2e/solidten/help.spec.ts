@@ -122,7 +122,7 @@ test('a missing video file shows no player, and a topic without a video shows no
   await expect(page.getByTestId('help-video')).toHaveCount(0);
   await expect(page.locator('video')).toHaveCount(0);
 
-  await page.goto('/help/no-account-needed');
+  await page.goto('/help/folders');
   await expect(page.getByTestId('help-steps')).toBeVisible();
   await expect(page.locator('video')).toHaveCount(0);
 });
@@ -147,14 +147,14 @@ test('a video file that loads shows the player (needs E2E_HELP_VIDEO_FILE)', asy
   await expect(video).toHaveAttribute('controls', '');
   await expect(video).toHaveAttribute('playsinline', '');
 
-  // The metadata loads, the player stays, and it is muted.
+  // The metadata loads, the player stays, and the sound is on (narrated).
   await expect.poll(async () => video.evaluate((element: HTMLVideoElement) => element.readyState)).toBeGreaterThan(0);
-  expect(await video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(true);
+  expect(await video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(false);
   await expect(page.getByTestId('help-video')).toBeVisible();
 
-  // A silent file (narrated: false): the captions note, and it never starts by itself.
-  await expect(page.getByTestId('help-video')).toHaveAttribute('data-narrated', 'false');
-  await expect(page.getByTestId('help-video')).toContainText('The video has no sound. The captions show each step.');
+  // A narrated file: sound on, the voiceover note, and it never starts by itself.
+  await expect(page.getByTestId('help-video')).toHaveAttribute('data-narrated', 'true');
+  await expect(page.getByTestId('help-video')).toContainText('The video has a voiceover and captions.');
   await expect(video).not.toHaveAttribute('autoplay', /.*/);
   await page.waitForTimeout(1_000);
   expect(await video.evaluate((element: HTMLVideoElement) => element.paused && element.currentTime === 0)).toBe(true);
@@ -185,7 +185,7 @@ test('an article without a video asks for no media at all', async ({ page }) => 
     }
   });
 
-  await page.goto('/help/place-fields');
+  await page.goto('/help/conditional-fields');
   await expect(page.getByTestId('help-steps')).toBeVisible();
   await page.waitForLoadState('networkidle');
 

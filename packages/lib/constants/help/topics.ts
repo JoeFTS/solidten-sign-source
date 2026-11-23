@@ -96,7 +96,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Documents" at the top of the page.` },
       {
         text: msg`Select "Status" and choose a status, for example "Pending".`,
-        tip: msg`"Draft" is not sent yet. "Pending" waits for signatures. "Completed" is signed by everyone. Documents that others sent you are under "Inbox" in the account menu.`,
+        tip: msg`"Draft" is not sent yet. "Pending" waits for signatures. "Completed" is signed by everyone. Documents that others sent you are under "Inbox": in the account menu, and also in the "Status" list when your organization is not a personal one.`,
       },
       { text: msg`Type part of a title in "Search documents..." to find one document.` },
       { text: msg`Select "Period" to show only the last 7, 14 or 30 days.` },
@@ -154,7 +154,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['add-signers-and-signing-order', 'place-fields', 'message-and-subject', 'track-status'],
-    video: video('upload-and-send', 35),
+    video: video('upload-and-send', 39, { narrated: true }),
   },
   {
     slug: 'add-several-files',
@@ -166,10 +166,10 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Upload the first PDF as usual.` },
       { text: msg`On "Document & Recipients", find the "Documents" box.` },
       {
-        text: msg`Drag the next PDF onto "Add a document", or select "Choose File".`,
+        text: msg`Drag the next PDF onto "Add a document", or select that box and choose the file.`,
         tip: msg`Each PDF can be up to 5 MB.`,
       },
-      { text: msg`Change a file name in "Document Title" if you want.` },
+      { text: msg`To rename a file, select the pencil next to its name and type the new name.` },
       {
         text: msg`Select "Add Fields" and choose each file at the top to place its fields.`,
       },
@@ -203,7 +203,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['recipient-roles', 'upload-and-send'],
-    video: null,
+    video: video('add-signers-and-signing-order', 31, { narrated: true }),
   },
   {
     slug: 'recipient-roles',
@@ -247,7 +247,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Preview" to see the document as the signer will see it.` },
     ],
     related: ['required-and-prefilled-fields', 'conditional-fields', 'calculated-fields', 'attach-a-file-field'],
-    video: null,
+    video: video('place-fields', 39, { narrated: true }),
   },
   {
     slug: 'required-and-prefilled-fields',
@@ -260,7 +260,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Tick "Required Field" if the signer must fill it.` },
       {
         text: msg`For a "Text" field, type the value in "Add text". For a "Number" field, type it in "Value".`,
-        tip: msg`For a "Dropdown", choose the "Default Value". For a "Radio" field, choose the "Default value".`,
+        tip: msg`For a "Dropdown", choose the "Default Value". For a "Radio" field, tick the box next to the option that should be chosen at first.`,
       },
       {
         text: msg`Tick "Read Only" so the signer sees the value and cannot change it.`,
@@ -289,7 +289,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         text: msg`Select the field that must appear or hide.`,
-        tip: msg`The "Rules" part stays open. If you do not see it, select "Set up rules" again.`,
+        tip: msg`The "Rules" part closes when you select another field, so select "Set up rules" again.`,
       },
       { text: msg`Under "Show this field only when", choose the key you typed.` },
       {
@@ -360,11 +360,11 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: msg`Change the subject and the text of the email that asks people to sign.`,
     steps: [
       { text: msg`Select "Send Document".` },
-      { text: msg`Type a "Subject (Optional)".` },
-      { text: msg`Type a "Message (Optional)".` },
       {
         text: msg`Type a "Reply To Email (Optional)" if replies should go to another address.`,
       },
+      { text: msg`Type a "Subject (Optional)".` },
+      { text: msg`Type a "Message (Optional)".` },
       {
         text: msg`Select "Send".`,
         tip: msg`You can also set these before you send: select "Document Settings" and open "Notifications".`,
@@ -388,7 +388,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       { text: msg`Select "Schedule".` },
       {
-        text: msg`To stop it, select the "Scheduled" badge and then "Cancel schedule".`,
+        text: msg`To stop it, open the document with "Edit", select the "Scheduled" badge at the top and then "Cancel schedule".`,
         tip: msg`You can keep editing the document until it is sent.`,
       },
     ],
@@ -483,7 +483,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         text: msg`Take the device back, type your PIN in "Host PIN" and select "Unlock".`,
         tip: msg`Forgot the PIN? End in-person signing from the document page on another device.`,
       },
-      { text: msg`When everyone is done, select "Exit in-person signing".` },
+      {
+        text: msg`When everyone is done, select "Exit in-person signing".`,
+        tip: msg`It asks for your "Host PIN" again.`,
+      },
     ],
     related: ['how-to-sign', 'document-lifecycle'],
     video: null,
@@ -636,7 +639,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['adopt-a-signature', 'fill-in-fields', 'decline-to-sign', 'no-account-needed'],
-    video: video('how-to-sign', 34),
+    video: video('how-to-sign', 37, { narrated: true }),
   },
   {
     slug: 'adopt-a-signature',
@@ -662,7 +665,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select an initials field. Your initials fill in by themselves.` },
     ],
     related: ['how-to-sign', 'fill-in-fields'],
-    video: null,
+    video: video('adopt-a-signature', 35, { narrated: true }),
   },
   {
     slug: 'fill-in-fields',
@@ -688,7 +691,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`A field with a value you cannot change was filled in by the sender.` },
     ],
     related: ['how-to-sign', 'attach-a-file-as-signer'],
-    video: null,
+    video: video('fill-in-fields', 45, { narrated: true }),
   },
   {
     slug: 'enter-the-emailed-code',
@@ -737,7 +740,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['reassign-to-someone-else', 'ask-a-question'],
-    video: null,
+    video: video('decline-to-sign', 27, { narrated: true }),
   },
   {
     slug: 'reassign-to-someone-else',
@@ -861,7 +864,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ['how-to-sign', 'enter-the-emailed-code'],
-    video: null,
+    video: video('no-account-needed', 21, { narrated: true }),
   },
 
   // After sending.
@@ -933,7 +936,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         text: msg`Tick "All recipients share one thread" if everyone should see every question.`,
         tip: msg`When off, each recipient sees only their own conversation with your team.`,
       },
-      { text: msg`When a question arrives, type in "Your reply" and select "Reply".` },
+      { text: msg`When a question arrives, type your reply in the box and select "Reply".` },
       { text: msg`Select "Resolve" when the question is answered.` },
     ],
     related: ['ask-a-question', 'document-lifecycle'],
@@ -951,7 +954,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Type a "Reason (optional)".` },
       {
         text: msg`Select "Cancel document".`,
-        tip: msg`The recipients get an email. Their link shows "This document was cancelled".`,
+        tip: msg`The recipients get an email. Their link shows "This document was canceled".`,
       },
     ],
     related: ['delete-a-document', 'duplicate-and-save-as-template'],
@@ -1228,7 +1231,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         text: msg`Type the "Days after the document finished".`,
         tip: msg`The page shows how many documents the rule affects.`,
       },
-      { text: msg`Tick "Also rejected documents" or "Also cancelled documents" if you want.` },
+      { text: msg`Tick "Also rejected documents" or "Also canceled documents" if you want.` },
       {
         text: msg`Select "Save changes".`,
         tip: msg`Drafts, documents that wait for signatures and templates are never touched. On our server, automatic deletion runs in a test mode for now: it records what it would delete and deletes nothing.`,

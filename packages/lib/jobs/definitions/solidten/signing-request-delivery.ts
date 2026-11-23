@@ -16,7 +16,16 @@ const ZSigningEmailPayloadSchema = z.object({
  * resend action), write an audit entry, and queue a notice to the document owner. The notice is
  * an email job with the same retries, so it arrives once mail works again.
  */
-export const markSigningRequestUndelivered = async ({ payload, attempts }: { payload: unknown; attempts: number }) => {
+export const markSigningRequestUndelivered = async ({
+  payload,
+  attempts,
+  reason,
+}: {
+  payload: unknown;
+  attempts: number;
+  /** Solid Ten Sign (K-2): LIMIT when the organisation's email limit stopped the email. */
+  reason?: 'LIMIT';
+}) => {
   const parsed = ZSigningEmailPayloadSchema.safeParse(payload);
 
   if (!parsed.success) {
@@ -54,6 +63,7 @@ export const markSigningRequestUndelivered = async ({ payload, attempts }: { pay
         recipientRole: recipient.role,
         emailType: 'SIGNING_REQUEST',
         attempts,
+        ...(reason ? { reason } : {}),
       },
     }),
   });
@@ -64,6 +74,7 @@ export const markSigningRequestUndelivered = async ({ payload, attempts }: { pay
       kind: 'SIGNING_REQUEST_NOT_DELIVERED',
       envelopeId: recipient.envelopeId,
       recipientId: recipient.id,
+      ...(reason ? { reason } : {}),
     },
   });
 };

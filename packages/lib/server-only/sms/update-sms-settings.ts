@@ -44,7 +44,7 @@ const assertMaySetSenderLabel = async ({
 
   if (!admin) {
     throw new AppError(AppErrorCode.FORBIDDEN, {
-      message: 'Only an organisation admin can change the text message sender name.',
+      message: 'Only an organization admin can change the text message sender name.',
     });
   }
 };
@@ -76,7 +76,7 @@ export const getOrganisationSmsSettings = async ({
   });
 
   if (!organisation) {
-    throw new AppError(AppErrorCode.FORBIDDEN, { message: 'You cannot manage this organisation.' });
+    throw new AppError(AppErrorCode.FORBIDDEN, { message: 'You cannot manage this organization.' });
   }
 
   return {
@@ -109,7 +109,7 @@ export const updateOrganisationSmsSettings = async ({
   });
 
   if (!organisation) {
-    throw new AppError(AppErrorCode.FORBIDDEN, { message: 'You cannot manage this organisation.' });
+    throw new AppError(AppErrorCode.FORBIDDEN, { message: 'You cannot manage this organization.' });
   }
 
   const label = cleanLabel(senderLabel);
@@ -163,7 +163,7 @@ export const updateTeamSmsSettings = async ({
   // Solid Ten Sign (S-M4): a team can turn texts off for itself, not on over the organisation.
   if (enabled === true && !team.organisation.smsSettings?.enabled) {
     throw new AppError(AppErrorCode.FORBIDDEN, {
-      message: 'Text messages are off for your organisation. Ask an organisation admin to turn them on.',
+      message: 'Text messages are off for your organization. Ask an organization admin to turn them on.',
     });
   }
 

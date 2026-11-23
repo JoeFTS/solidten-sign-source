@@ -51,7 +51,7 @@ export const findSettingsIdForManager = async ({
 
     if (!organisation) {
       throw new AppError(AppErrorCode.FORBIDDEN, {
-        message: 'You do not have permission to manage this organisation.',
+        message: 'You do not have permission to manage this organization.',
       });
     }
 

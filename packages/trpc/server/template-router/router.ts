@@ -18,6 +18,7 @@ import { createDocumentFromTemplate } from '@documenso/lib/server-only/template/
 import { createTemplateDirectLink } from '@documenso/lib/server-only/template/create-template-direct-link';
 import { deleteTemplate } from '@documenso/lib/server-only/template/delete-template';
 import { deleteTemplateDirectLink } from '@documenso/lib/server-only/template/delete-template-direct-link';
+import { discardUnsentDraft } from '@documenso/lib/server-only/template/discard-unsent-draft';
 import { findOrganisationTemplates } from '@documenso/lib/server-only/template/find-organisation-templates';
 import { findTemplates } from '@documenso/lib/server-only/template/find-templates';
 import { getOrganisationTemplateById } from '@documenso/lib/server-only/template/get-organisation-template-by-id';
@@ -585,8 +586,16 @@ export const templateRouter = router({
           userId: ctx.user.id,
           teamId,
           requestMetadata: ctx.metadata,
-        }).catch((err) => {
+        }).catch(async (err) => {
           console.error(err);
+
+          // Solid Ten Sign (A-2): the refused send leaves no draft behind.
+          await discardUnsentDraft({
+            envelopeId: envelope.id,
+            userId: ctx.user.id,
+            teamId,
+            requestMetadata: ctx.metadata,
+          });
 
           if (err instanceof AppError) {
             throw err;
