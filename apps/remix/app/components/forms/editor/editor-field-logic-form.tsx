@@ -1,5 +1,6 @@
 import type { TLocalField } from '@documenso/lib/client-only/hooks/use-editor-fields';
 import { IS_FIELD_LOGIC_ENABLED } from '@documenso/lib/constants/field-logic';
+import { FIELD_LOGIC_FORMULA_HINT, FIELD_LOGIC_FORMULA_PLACEHOLDER } from '@documenso/lib/constants/field-logic-messages';
 import { type TFieldCondition, type TFieldConditionOperator, ZFieldKeySchema } from '@documenso/lib/types/field-logic';
 import type { TFieldMetaSchema } from '@documenso/lib/types/field-meta';
 import { readFieldLogicMeta } from '@documenso/lib/utils/field-conditions';
@@ -46,7 +47,7 @@ export const EditorFieldLogicForm = ({
   unavailableReason,
   onValueChange,
 }: EditorFieldLogicFormProps) => {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
 
   const { fieldKey, condition, formula, formulaEmptySourcesAsZero } = readFieldLogicMeta(field.fieldMeta);
 
@@ -264,7 +265,7 @@ export const EditorFieldLogicForm = ({
             className="bg-background font-mono"
             value={formulaInput}
             maxLength={FORMULA_MAX_LENGTH}
-            placeholder={t`For example: {{price}} * {{quantity}}`}
+            placeholder={i18n._(FIELD_LOGIC_FORMULA_PLACEHOLDER)}
             onChange={(event) => onFormulaChange(event.target.value)}
           />
           {formulaParseResult && !formulaParseResult.success && (
@@ -273,11 +274,7 @@ export const EditorFieldLogicForm = ({
             </p>
           )}
           <p className="text-muted-foreground text-xs">
-            <Trans>
-              Use the keys of other number fields of this recipient, for example {'{{price}}'}. You can use + - * /,
-              brackets, SUM, MIN, MAX and ROUND(value, digits). The signer cannot change a calculated field, and it is
-              never required.
-            </Trans>
+            {i18n._(FIELD_LOGIC_FORMULA_HINT)}
           </p>
 
           {formula && (

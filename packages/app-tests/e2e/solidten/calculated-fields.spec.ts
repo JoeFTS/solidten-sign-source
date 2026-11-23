@@ -536,6 +536,10 @@ test.describe('Solid Ten calculated fields', () => {
 
     const formulaInput = page.getByTestId('field-logic-formula');
 
+    // The examples show their curly brackets (they were lost as message placeholders: "{} * {}").
+    await expect(formulaInput).toHaveAttribute('placeholder', 'For example: {{price}} * {{quantity}}');
+    await expect(page.getByText('for example {{price}}.', { exact: false })).toBeVisible();
+
     await formulaInput.fill('{{price}} *');
     await expect(page.getByTestId('field-logic-formula-error')).toContainText('ends too early');
 

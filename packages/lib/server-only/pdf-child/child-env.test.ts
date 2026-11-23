@@ -34,7 +34,6 @@ describe('PDF child environment (SEC3-M1)', () => {
       NEXT_PRIVATE_TELEMETRY_HOST: 'h',
       NEXTAUTH_SECRET: 'auth',
       NEXT_PRIVATE_SMTP_PASSWORD: 'mail',
-      NEXT_PRIVATE_INTERNAL_WEBAPP_URL: 'http://localhost:3000',
       NEXT_PRIVATE_ST_HEALTH_TOKEN: 'health',
       NEXT_PRIVATE_UPLOAD_SECRET_ACCESS_KEY: 's3',
       NEXT_PRIVATE_STRIPE_API_KEY: 'pay',
@@ -45,6 +44,18 @@ describe('PDF child environment (SEC3-M1)', () => {
     });
 
     expect(env).toEqual({});
+  });
+
+  it('passes the internal app URL: the seal fetches its fonts there (S-1)', () => {
+    expect(
+      buildPdfChildEnv({
+        NEXT_PUBLIC_WEBAPP_URL: 'https://sign.example',
+        NEXT_PRIVATE_INTERNAL_WEBAPP_URL: 'http://localhost:3000',
+      }),
+    ).toEqual({
+      NEXT_PUBLIC_WEBAPP_URL: 'https://sign.example',
+      NEXT_PRIVATE_INTERNAL_WEBAPP_URL: 'http://localhost:3000',
+    });
   });
 
   it('the list holds no prefix and no database or key name', () => {

@@ -59,6 +59,13 @@ export const ZSolidTenNoticeEmailPayloadSchema = z.discriminatedUnion('kind', [
     recipientIds: z.array(z.number()),
     isOwnerCopyUndelivered: z.boolean(),
   }),
+  z.object({
+    // Solid Ten Sign (S-2): the seal (final PDF) failed on every attempt. To the owner and the
+    // server operators; never to signers.
+    kind: z.literal('SEAL_FAILED'),
+    envelopeId: z.string(),
+    isRejected: z.boolean(),
+  }),
 ]);
 
 export type TSendSolidTenNoticeEmailJobDefinition = z.infer<typeof ZSolidTenNoticeEmailPayloadSchema>;

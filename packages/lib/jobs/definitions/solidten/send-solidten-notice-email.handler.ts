@@ -8,6 +8,10 @@ import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { withoutServiceAccounts } from '../../../server-only/email/deliverable-recipients';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
+import {
+  notifyOperatorsOfSealFailed,
+  sealFailedNoticeText,
+} from '../../../server-only/jobs/seal-failed-operator-notice';
 import { canOwnerReachTeam } from '../../../server-only/team/reassign-envelopes-after-access-loss';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { getRecipientCommentThreadKey, SHARED_COMMENT_THREAD_KEY } from '../../../utils/envelope-comments';
@@ -52,7 +56,11 @@ export const run = async ({ payload, io }: { payload: TSendSolidTenNoticeEmailJo
     payload.kind === 'SIGNER_DEADLINE_PASSED';
 
   // Solid Ten: an owner who lost access to the team gets no more notices of its documents.
-  if (!isToRecipient && !(await canOwnerReachTeam({ userId: envelope.user.id, teamId: envelope.teamId }))) {
+  // Solid Ten Sign (S-2): a failed seal still reaches the server operators (their copy is sent below).
+  const canOwnerReach =
+    isToRecipient || (await canOwnerReachTeam({ userId: envelope.user.id, teamId: envelope.teamId }));
+
+  if (!canOwnerReach && payload.kind !== 'SEAL_FAILED') {
     return;
   }
 
@@ -91,6 +99,22 @@ export const run = async ({ payload, io }: { payload: TSendSolidTenNoticeEmailJo
     },
     meta: envelope.documentMeta,
   });
+
+  // Solid Ten Sign (S-2): a failed seal is a server-health notice for the operators, sent like the
+  // other operator notices whatever the team's email settings; the owner's copy below obeys them.
+  if (payload.kind === 'SEAL_FAILED' && envelope.status === 'PENDING') {
+    const isOwnerCopySent = canOwnerReach && !emailsDisabled;
+
+    await runTaskAtMostOnce(io, 'send-seal-failed-operator-notice', async (markSending) => {
+      await notifyOperatorsOfSealFailed({
+        envelopeId: envelope.id,
+        title: envelope.title,
+        isRejected: payload.isRejected,
+        excludeAddress: isOwnerCopySent ? envelope.user.email : undefined,
+        beforeSend: markSending,
+      });
+    });
+  }
 
   if (emailsDisabled) {
     return;
@@ -317,6 +341,19 @@ export const run = async ({ payload, io }: { payload: TSendSolidTenNoticeEmailJo
         };
       },
     )
+    .with({ kind: 'SEAL_FAILED' }, ({ isRejected }): Notice | null => {
+      // The owner's copy (team mail). The operators got theirs above, whatever the team settings.
+      if (!canOwnerReach || envelope.status !== 'PENDING') {
+        return null;
+      }
+
+      return {
+        to: [{ name: envelope.user.name || '', address: envelope.user.email }],
+        ...sealFailedNoticeText(i18n, { title: envelope.title, isRejected }),
+        actionLabel: i18n._(msg`Open document`),
+        actionLink: documentLink,
+      };
+    })
     .exhaustive();
 
   if (!notice) {

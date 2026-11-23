@@ -6,6 +6,7 @@ import {
   DEFAULT_HELP_MEDIA_URL,
   formatHelpMediaUrl,
   getHelpMediaCspSources,
+  getHelpVideoPlayback,
   NEXT_PUBLIC_ST_HELP_MEDIA_URL,
   resolveHelpMediaUrl,
 } from './media';
@@ -128,6 +129,23 @@ describe('help topics', () => {
       'upload-and-send',
       'how-to-sign',
     ]);
+  });
+
+  it('marks the pilots as silent until the voiced files exist', () => {
+    for (const topic of HELP_TOPICS) {
+      if (topic.video) {
+        expect(typeof topic.video.narrated, topic.slug).toBe('boolean');
+      }
+    }
+
+    expect(HELP_TOPICS.find((topic) => topic.slug === 'how-to-sign')?.video?.narrated).toBe(false);
+    expect(HELP_TOPICS.find((topic) => topic.slug === 'upload-and-send')?.video?.narrated).toBe(false);
+  });
+
+  it('starts a narrated video with sound and a silent one muted', () => {
+    expect(getHelpVideoPlayback({ narrated: true })).toEqual({ muted: false, note: 'voiceover' });
+    expect(getHelpVideoPlayback({ narrated: false })).toEqual({ muted: true, note: 'silent' });
+    expect(getHelpVideoPlayback({})).toEqual({ muted: true, note: 'silent' });
   });
 
   it('has a "how-to-sign" article for the signing pages', () => {

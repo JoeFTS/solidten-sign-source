@@ -31,6 +31,11 @@ export type HelpVideo = {
   poster: string;
   /** Planned length in seconds. The video team replaces it with the real length. */
   seconds: number;
+  /**
+   * True when the file has a voiceover. Then the player starts with sound on (never autoplay).
+   * Missing or false: a silent file, shown muted with the captions note.
+   */
+  narrated?: boolean;
 };
 
 export type HelpTopic = {

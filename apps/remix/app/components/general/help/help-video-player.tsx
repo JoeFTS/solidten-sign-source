@@ -1,4 +1,4 @@
-import { formatHelpMediaUrl } from '@documenso/lib/constants/help/media';
+import { formatHelpMediaUrl, getHelpVideoPlayback } from '@documenso/lib/constants/help/media';
 import type { HelpVideo } from '@documenso/lib/constants/help/types';
 import { Trans } from '@lingui/react/macro';
 import { useEffect, useRef, useState } from 'react';
@@ -37,8 +37,11 @@ export const HelpVideoPlayer = ({ video, title }: HelpVideoPlayerProps) => {
     return null;
   }
 
+  // Never autoplay. A narrated file starts with sound on; a silent one stays muted.
+  const playback = getHelpVideoPlayback(video);
+
   return (
-    <figure className="overflow-hidden rounded-xl border border-border bg-muted" data-testid="help-video">
+    <figure className="overflow-hidden rounded-xl border border-border bg-muted" data-testid="help-video" data-narrated={playback.muted ? 'false' : 'true'}>
       <video
         ref={ref}
         className="aspect-video w-full bg-black"
@@ -46,13 +49,17 @@ export const HelpVideoPlayer = ({ video, title }: HelpVideoPlayerProps) => {
         poster={formatHelpMediaUrl(video.poster)}
         controls
         playsInline
-        muted
+        muted={playback.muted}
         preload="metadata"
         aria-label={title}
         onError={() => setHasFailed(true)}
       />
       <figcaption className="px-4 py-2 text-muted-foreground text-xs">
-        <Trans>The video has no sound. The captions show each step.</Trans>
+        {playback.note === 'voiceover' ? (
+          <Trans>The video has a voiceover and captions.</Trans>
+        ) : (
+          <Trans>The video has no sound. The captions show each step.</Trans>
+        )}
       </figcaption>
     </figure>
   );

@@ -18,10 +18,12 @@ import type { HelpCategory, HelpTopic, HelpVideo } from './types';
  * the file is rendered and served; a topic with `video: null` requests no media at all. The video
  * team names new files after the slug and asks for the topic to be switched on here.
  */
-const video = (slug: string, seconds: number): HelpVideo => ({
+const video = (slug: string, seconds: number, { narrated = false }: { narrated?: boolean } = {}): HelpVideo => ({
   file: `${slug}.mp4`,
   poster: `${slug}.jpg`,
   seconds,
+  // Set true only when the video team confirms the voiced file is in place.
+  narrated,
 });
 
 export const HELP_CATEGORIES: HelpCategory[] = [
@@ -164,7 +166,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Upload the first PDF as usual.` },
       { text: msg`On "Document & Recipients", find the "Documents" box.` },
       {
-        text: msg`Drag the next PDF into the box, or select the box and choose the file.`,
+        text: msg`Drag the next PDF onto "Add a document", or select "Choose File".`,
         tip: msg`Each PDF can be up to 5 MB.`,
       },
       { text: msg`Change a file name in "Document Title" if you want.` },
@@ -187,14 +189,14 @@ export const HELP_TOPICS: HelpTopic[] = [
         tip: msg`Select "Add Myself" to add yourself.`,
       },
       { text: msg`Type each person's "Email" and "Name".` },
-      { text: msg`Select "Show advanced settings".` },
       {
-        text: msg`Turn on "Enable signing order".`,
-        tip: msg`You need 2 or more signers for this. The next person gets the email only after the person before them has signed.`,
+        text: msg`Tick "Enable signing order".`,
+        tip: msg`The next person gets the email only after the person before them has signed.`,
       },
       { text: msg`Drag the people into the order in which they sign.` },
       {
-        text: msg`To let each signer choose who signs next, turn on "Allow signers to dictate next signer".`,
+        text: msg`To let each signer choose who signs next, tick "Allow signers to dictate next signer".`,
+        tip: msg`This box shows after you tick "Enable signing order".`,
       },
     ],
     related: ['recipient-roles', 'upload-and-send'],
@@ -236,7 +238,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Drag the field to move it. Drag its edge to make it bigger or smaller.` },
       { text: msg`Select the field to open its settings, for example "Text Settings".` },
       {
-        text: msg`To copy a field, select it and choose "Duplicate". To delete it, choose "Remove".`,
+        text: msg`To copy a field, select it and then the copy icon ("Duplicate"). To delete it, select the bin icon ("Remove").`,
         tip: msg`If two fields lie on top of each other, the editor shows "Overlapping fields detected".`,
       },
       { text: msg`Select "Preview" to see the document as the signer will see it.` },
@@ -252,12 +254,12 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: msg`Decide which fields the signer must fill, and give fields a value before you send.`,
     steps: [
       { text: msg`On "Add Fields", select a field.` },
-      { text: msg`Turn on "Required Field" if the signer must fill it.` },
+      { text: msg`Tick "Required Field" if the signer must fill it.` },
       {
         text: msg`For a "Text" field, type the value in "Add text". For a "Number" field, type it in "Value".`,
         tip: msg`For a "Dropdown", choose the "Default Value". For a "Radio" field, choose the "Default value".`,
       },
-      { text: msg`Turn on "Read Only" so the signer sees the value and cannot change it.` },
+      { text: msg`Tick "Read Only" so the signer sees the value and cannot change it.` },
       { text: msg`Type a "Label" or a "Placeholder" to tell the signer what to enter.` },
       {
         text: msg`Set limits if you need them: "Character Limit" for text, "Min" and "Max" for numbers.`,
@@ -323,9 +325,12 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`On "Add Fields", drag "Attach a file" onto the page.` },
       { text: msg`Select the field to open "Attach a File Settings".` },
       { text: msg`Set the "Number of files" the signer can attach.` },
-      { text: msg`Choose the "Allowed file types", for example PDF, PNG or JPEG.` },
       {
-        text: msg`Turn on "Visible to all recipients" if the other recipients may see the files.`,
+        text: msg`Select "Allowed file types" and untick the types you do not accept.`,
+        tip: msg`All types are ticked at first: PDF, PNG, JPEG, HEIC, Word, Excel, text and CSV.`,
+      },
+      {
+        text: msg`Tick "Visible to all recipients" if the other recipients may see the files.`,
       },
       {
         text: msg`After signing, find the files under "Attached files" on the document page.`,
@@ -435,7 +440,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Generate Links".` },
       { text: msg`Copy each signer's link and send it to that person only.` },
       {
-        text: msg`To copy the links again later, open the document page and select "Copy Signing Links" in "Recipients".`,
+        text: msg`To copy the links again later, open the three-dot menu of the document, select "Signing Links" and then "Copy" next to each person.`,
         tip: msg`Each link belongs to one person. Anyone who has the link can act as that person.`,
       },
     ],
@@ -452,8 +457,8 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Send the document, then open its page.` },
       { text: msg`In "Sign in person", select "Sign in person".` },
       {
-        text: msg`Choose the signers who are with you.`,
-        tip: msg`Turn on "Ask for a code sent to their email" for a signer who has their phone.`,
+        text: msg`Check the list under "Signers".`,
+        tip: msg`Tick "Ask for a code sent to their email" if the signers have their phones and should confirm with a code.`,
       },
       { text: msg`Type a PIN in "Your PIN (4 to 8 digits)" and again in "Repeat the PIN".` },
       { text: msg`Select "Start in-person signing".` },
@@ -525,7 +530,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         text: msg`Select "Upload CSV" and choose your file.`,
         tip: msg`Up to 100 rows and 4 MB per file. Empty cells use the template's values.`,
       },
-      { text: msg`Turn on "Send documents to recipients immediately" if they should go out now.` },
+      { text: msg`Tick "Send documents to recipients immediately" if they should go out now.` },
       {
         text: msg`Select "Upload and Process".`,
         tip: msg`We email you when all documents are made.`,
@@ -842,7 +847,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`On the documents page, select the document.` },
       {
         text: msg`Read the status of each person under "Recipients".`,
-        tip: msg`For example "Sent", "Viewed", "Signed", "Approved", "Rejected" or "Expired".`,
+        tip: msg`For example "Pending", "Viewed", "Signed", "Approved", "Rejected" or "Expired".`,
       },
       { text: msg`Read "Recent activity" for each step with its time.` },
       { text: msg`Select "Load older activity" to see earlier steps.` },
@@ -894,10 +899,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: msg`Let signers ask questions, and reply`,
     summary: msg`Turn on comments for a document. Signers ask on the signing page, and your team replies from the document page.`,
     steps: [
-      { text: msg`Open the document page and find "Comments".` },
-      { text: msg`Turn on "Signers can ask questions on this document".` },
+      { text: msg`Open the document page and select "Show" next to "Comments".` },
+      { text: msg`Tick "Signers can ask questions on this document".` },
       {
-        text: msg`Turn on "All recipients share one thread" if everyone should see every question.`,
+        text: msg`Tick "All recipients share one thread" if everyone should see every question.`,
         tip: msg`When off, each recipient sees only their own conversation with your team.`,
       },
       { text: msg`When a question arrives, type in "Your reply" and select "Reply".` },
@@ -970,7 +975,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Open the completed document's page.` },
       {
         text: msg`Under "Recipients", point to or tap the badge "Copy not delivered".`,
-        tip: msg`A box opens under the badge. "Resend signed copy" is in that box.`,
+        tip: msg`A box opens next to the badge. "Resend signed copy" is in that box.`,
       },
       { text: msg`Check that the email address is right.` },
       {
@@ -1010,7 +1015,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       { text: msg`Open the three-dot menu of the document.` },
       { text: msg`Select "Duplicate".` },
-      { text: msg`Choose "Include Recipients", "Include Fields" and "Include Contents" as you need.` },
+      {
+        text: msg`Untick what the copy should not get.`,
+        tip: msg`"Include Recipients", "Include Fields" and "Include Contents" are ticked at first.`,
+      },
       { text: msg`Select "Duplicate". The copy is a new draft.` },
       {
         text: msg`To make a template instead, select "Save as Template" in the menu, choose what to include and select "Save as Template".`,
@@ -1076,6 +1084,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         tip: msg`If the page says "Currently all organization members can access this team", the person is already in the team. You are done.`,
       },
       { text: msg`Otherwise, select "Add members" and choose the person.` },
+      { text: msg`Select "Next".` },
       { text: msg`Choose the "Team Role" and select "Add Members".` },
     ],
     related: ['document-defaults', 'usage-reports'],

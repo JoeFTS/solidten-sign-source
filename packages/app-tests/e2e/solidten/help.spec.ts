@@ -151,6 +151,13 @@ test('a video file that loads shows the player (needs E2E_HELP_VIDEO_FILE)', asy
   await expect.poll(async () => video.evaluate((element: HTMLVideoElement) => element.readyState)).toBeGreaterThan(0);
   expect(await video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(true);
   await expect(page.getByTestId('help-video')).toBeVisible();
+
+  // A silent file (narrated: false): the captions note, and it never starts by itself.
+  await expect(page.getByTestId('help-video')).toHaveAttribute('data-narrated', 'false');
+  await expect(page.getByTestId('help-video')).toContainText('The video has no sound. The captions show each step.');
+  await expect(video).not.toHaveAttribute('autoplay', /.*/);
+  await page.waitForTimeout(1_000);
+  expect(await video.evaluate((element: HTMLVideoElement) => element.paused && element.currentTime === 0)).toBe(true);
 });
 
 test('an unknown article answers 404 with a help page and a search link', async ({ page }) => {

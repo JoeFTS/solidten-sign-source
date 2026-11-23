@@ -812,6 +812,11 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
 
       return { anonymous: message, you: message, user: message };
     })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_SEAL_FAILED }, ({ data }) => {
+      const message = msg`The final PDF could not be made after ${data.attempts} attempts. Solid Ten Sign keeps trying for 6 hours`;
+
+      return { anonymous: message, you: message, user: message };
+    })
     .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_SCHEDULED_SEND_FAILED }, ({ data }) => {
       const message = msg`The scheduled send failed: ${data.reason}`;
 

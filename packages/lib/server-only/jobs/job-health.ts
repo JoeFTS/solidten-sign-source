@@ -1,5 +1,7 @@
 import { prisma } from '@documenso/prisma';
 
+import { countStuckUnsealed } from './stuck-unsealed';
+
 export type TJobHealth = {
   /** Jobs marked FAILED in the last 24 hours (each used every attempt it had). */
   failedLast24h: number;
@@ -7,6 +9,8 @@ export type TJobHealth = {
   oldestPendingAgeSeconds: number | null;
   /** PENDING jobs waiting for a later retry (email backoff). */
   waitingForRetry: number;
+  /** Solid Ten Sign (S-2): documents whose seal failed and that nothing retries any more. */
+  stuckUnsealed: number;
 };
 
 /**
@@ -14,7 +18,7 @@ export type TJobHealth = {
  * A ready PENDING job older than a few minutes means jobs are not being run.
  */
 export const getJobHealth = async (now = new Date()): Promise<TJobHealth> => {
-  const [failedLast24h, oldestPending, waitingForRetry] = await Promise.all([
+  const [failedLast24h, oldestPending, waitingForRetry, stuckUnsealed] = await Promise.all([
     prisma.backgroundJob.count({
       where: {
         status: 'FAILED',
@@ -32,6 +36,7 @@ export const getJobHealth = async (now = new Date()): Promise<TJobHealth> => {
     prisma.backgroundJob.count({
       where: { status: 'PENDING', nextRunAt: { gt: now } },
     }),
+    countStuckUnsealed(now),
   ]);
 
   const readySince = oldestPending ? (oldestPending.nextRunAt ?? oldestPending.submittedAt) : null;
@@ -40,5 +45,6 @@ export const getJobHealth = async (now = new Date()): Promise<TJobHealth> => {
     failedLast24h,
     oldestPendingAgeSeconds: readySince ? Math.max(0, Math.round((now.getTime() - readySince.getTime()) / 1000)) : null,
     waitingForRetry,
+    stuckUnsealed,
   };
 };

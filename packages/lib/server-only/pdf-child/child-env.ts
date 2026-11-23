@@ -4,7 +4,7 @@
  * The child only runs PDF operations on files (pdf-operations.ts): normalise an upload, read a
  * page size, and the PDF part of a seal, which signs. It never opens the database. So it gets an
  * exact list of names: the signing certificate settings (it signs), its temp folder, the public
- * app URL, and a few basics. Not the database URLs, the encryption keys, the auth secret, mail,
+ * and internal app URLs, and a few basics. Not the database URLs, the encryption keys, the auth secret, mail,
  * payment, sign-in, text-message, telemetry or AI credentials, nor anything else of the machine.
  * Before, it got every NEXT_PRIVATE_ variable (the database URL and both encryption keys among
  * them), readable from /proc/<pid>/environ.
@@ -24,6 +24,10 @@ export const PDF_CHILD_ENV_NAMES: readonly string[] = [
 
   // The app URL the PDF code may print (public).
   'NEXT_PUBLIC_WEBAPP_URL',
+  // Where the app reaches itself (not a secret): the seal fetches its fonts from here (V1 fields,
+  // the rejection stamp). Without it the child fell back to the public URL, which a container
+  // behind a proxy may not reach (S-1).
+  'NEXT_PRIVATE_INTERNAL_WEBAPP_URL',
 
   // Signing (packages/signing): the seal's PDF part signs in the child.
   'NEXT_PRIVATE_SIGNING_TRANSPORT',

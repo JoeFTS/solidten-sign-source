@@ -27,6 +27,7 @@ export const SOLIDTEN_AUDIT_LOG_TYPES = [
   'FIELD_FILE_DOWNLOADED',
   'EMAIL_NOT_DELIVERED',
   'DOCUMENT_ACCESS_AUTH_2FA_LOCKED',
+  'DOCUMENT_SEAL_FAILED',
 ] as const;
 
 /**
@@ -328,6 +329,18 @@ export const ZDocumentAuditLogEventDocumentAccessAuth2FALockedSchema = z.object(
   }),
 });
 
+/**
+ * Event: The final PDF (the seal) could not be made after every attempt. Written once per
+ * envelope; the seal sweep keeps trying for 6 hours after the last signature (S-2).
+ */
+export const ZDocumentAuditLogEventDocumentSealFailedSchema = z.object({
+  type: z.literal('DOCUMENT_SEAL_FAILED'),
+  data: z.object({
+    attempts: z.number(),
+    isRejected: z.boolean(),
+  }),
+});
+
 export const ZSolidTenDocumentAuditLogEventSchemas = [
   ZDocumentAuditLogEventDocumentSendScheduledSchema,
   ZDocumentAuditLogEventDocumentSendUnscheduledSchema,
@@ -347,4 +360,5 @@ export const ZSolidTenDocumentAuditLogEventSchemas = [
   ZDocumentAuditLogEventFieldFileDownloadedSchema,
   ZDocumentAuditLogEventEmailNotDeliveredSchema,
   ZDocumentAuditLogEventDocumentAccessAuth2FALockedSchema,
+  ZDocumentAuditLogEventDocumentSealFailedSchema,
 ] as const;

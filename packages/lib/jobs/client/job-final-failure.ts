@@ -26,6 +26,12 @@ export const handleJobFinalFailure = async (row: TFailedJobRow) => {
 
       await markCompletedEmailsUndelivered({ jobRowId: row.id, payload: row.payload, attempts: row.retried + 1 });
     }
+
+    if (row.jobId === 'internal.seal-document') {
+      const { markSealFailed } = await import('../definitions/solidten/seal-failed');
+
+      await markSealFailed({ payload: row.payload, attempts: row.retried + 1 });
+    }
   } catch (error) {
     console.error(`[JOBS]: Final-failure handling for job ${row.id} failed`, error);
   }
