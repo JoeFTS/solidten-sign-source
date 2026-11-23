@@ -39,7 +39,7 @@ import { useEffect, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 import * as z from 'zod';
-import { getTemplateUseErrorMessage } from '~/utils/toast-error-messages';
+import { getServerRefusalReason, getTemplateUseErrorMessage } from '~/utils/toast-error-messages';
 
 const DOCUMENT_NAME_SOURCE = {
   TEMPLATE: 'template',
@@ -261,7 +261,8 @@ export function TemplateUseDialog({
 
       toast({
         title: _(errorMessage.title),
-        description: _(errorMessage.description),
+        // Solid Ten Sign (F-2): the server's reason when it gave one.
+        description: getServerRefusalReason(error) ?? _(errorMessage.description),
         variant: 'destructive',
       });
     }

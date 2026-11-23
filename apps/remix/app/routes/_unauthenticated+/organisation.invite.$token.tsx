@@ -2,6 +2,7 @@ import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session
 import { useOptionalSession } from '@documenso/lib/client-only/providers/session';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { findUserByProvidedEmail } from '@documenso/lib/server-only/user/find-user-by-provided-email';
+import { isSignupAvailable } from '@documenso/lib/utils/signup-availability';
 import { prisma } from '@documenso/prisma';
 import { trpc } from '@documenso/trpc/react';
 import { Button } from '@documenso/ui/primitives/button';
@@ -251,15 +252,27 @@ const PendingInvitation = ({
             </Trans>
           </p>
 
-          <p className="mt-1 mb-4 text-muted-foreground text-sm">
-            <Trans>To accept this invitation you must create an account.</Trans>
-          </p>
+          {/* Solid Ten Sign (F-6): with sign-up off, the account must come from an administrator. */}
+          {isSignupAvailable() ? (
+            <>
+              <p className="mt-1 mb-4 text-muted-foreground text-sm">
+                <Trans>To accept this invitation you must create an account.</Trans>
+              </p>
 
-          <Button asChild>
-            <Link to={`/signup#email=${encodeURIComponent(email)}`}>
-              <Trans>Create account</Trans>
-            </Link>
-          </Button>
+              <Button asChild>
+                <Link to={`/signup#email=${encodeURIComponent(email)}`}>
+                  <Trans>Create account</Trans>
+                </Link>
+              </Button>
+            </>
+          ) : (
+            <p className="mt-1 mb-4 text-muted-foreground text-sm">
+              <Trans>
+                To accept this invitation you need an account for this email address. Ask the organisation's
+                administrator to create it, then open this invitation again.
+              </Trans>
+            </p>
+          )}
         </div>
       </div>
     );

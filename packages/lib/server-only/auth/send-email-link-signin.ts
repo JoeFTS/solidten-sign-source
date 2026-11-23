@@ -7,7 +7,7 @@ import { createElement } from 'react';
 
 import { getI18nInstance } from '../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../constants/app';
-import { env } from '../../utils/env';
+import { DOCUMENSO_INTERNAL_EMAIL } from '../../constants/email';
 import { renderEmailWithI18N } from '../../utils/render-email-with-i18n';
 
 export const EMAIL_LINK_SIGNIN_IDENTIFIER = 'email-link-signin';
@@ -120,10 +120,7 @@ export const sendEmailLinkSignin = async ({ email }: { email: string }) => {
       address: user.email,
       name: user.name || '',
     },
-    from: {
-      name: env('NEXT_PRIVATE_SMTP_FROM_NAME') || 'Solid Ten Sign',
-      address: env('NEXT_PRIVATE_SMTP_FROM_ADDRESS') || 'noreply@documenso.com',
-    },
+    from: DOCUMENSO_INTERNAL_EMAIL,
     subject: i18n._(msg`Your sign-in link`),
     html,
     text,

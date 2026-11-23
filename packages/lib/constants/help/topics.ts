@@ -96,7 +96,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Documents" at the top of the page.` },
       {
         text: msg`Select "Status" and choose a status, for example "Pending".`,
-        tip: msg`"Draft" is not sent yet. "Pending" waits for signatures. "Completed" is signed by everyone. "Inbox" holds documents others sent to you.`,
+        tip: msg`"Draft" is not sent yet. "Pending" waits for signatures. "Completed" is signed by everyone. Documents that others sent you are under "Inbox" in the account menu.`,
       },
       { text: msg`Type part of a title in "Search documents..." to find one document.` },
       { text: msg`Select "Period" to show only the last 7, 14 or 30 days.` },
@@ -193,7 +193,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         text: msg`Tick "Enable signing order".`,
         tip: msg`The next person gets the email only after the person before them has signed.`,
       },
-      { text: msg`Drag the people into the order in which they sign.` },
+      {
+        text: msg`Drag each group by the handle on its left into the order in which they sign.`,
+        tip: msg`Each person sits in a numbered group, for example "Group 1" and "Group 2".`,
+      },
       {
         text: msg`To let each signer choose who signs next, tick "Allow signers to dictate next signer".`,
         tip: msg`This box shows after you tick "Enable signing order".`,
@@ -259,7 +262,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         text: msg`For a "Text" field, type the value in "Add text". For a "Number" field, type it in "Value".`,
         tip: msg`For a "Dropdown", choose the "Default Value". For a "Radio" field, choose the "Default value".`,
       },
-      { text: msg`Tick "Read Only" so the signer sees the value and cannot change it.` },
+      {
+        text: msg`Tick "Read Only" so the signer sees the value and cannot change it.`,
+        tip: msg`A read-only field cannot also be required: ticking "Read Only" unticks "Required Field". Both boxes are at the bottom of the settings.`,
+      },
       { text: msg`Type a "Label" or a "Placeholder" to tell the signer what to enter.` },
       {
         text: msg`Set limits if you need them: "Character Limit" for text, "Min" and "Max" for numbers.`,
@@ -281,13 +287,19 @@ export const HELP_TOPICS: HelpTopic[] = [
         text: msg`Type a short name in "Field key", for example deposit.`,
         tip: msg`Start with a letter. Use only letters, digits and underscores.`,
       },
-      { text: msg`Select the field that must appear or hide, and select "Set up rules".` },
+      {
+        text: msg`Select the field that must appear or hide.`,
+        tip: msg`The "Rules" part stays open. If you do not see it, select "Set up rules" again.`,
+      },
       { text: msg`Under "Show this field only when", choose the key you typed.` },
       {
         text: msg`Choose the test, for example "is checked", "equals" or "is not empty".`,
         tip: msg`While the rule is false, the signer does not see the field.`,
       },
-      { text: msg`Select "Preview" and try the rule.` },
+      {
+        text: msg`To try the rule, send the document to yourself and open the signing link.`,
+        tip: msg`"Preview" fills every field with sample data, so a rule cannot be tried there.`,
+      },
     ],
     related: ['calculated-fields', 'place-fields'],
     video: null,
@@ -438,7 +450,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         tip: msg`We will not send anything to the recipients.`,
       },
       { text: msg`Select "Generate Links".` },
-      { text: msg`Copy each signer's link and send it to that person only.` },
+      {
+        text: msg`On the document page, select the copy icon next to each signer and send the link to that person only.`,
+        tip: msg`The page says "Envelope distributed". No list of links appears; the copy icons are under "Recipients".`,
+      },
       {
         text: msg`To copy the links again later, open the three-dot menu of the document, select "Signing Links" and then "Copy" next to each person.`,
         tip: msg`Each link belongs to one person. Anyone who has the link can act as that person.`,
@@ -465,7 +480,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Select "Hand over to sign" next to a signer and give them the device.` },
       { text: msg`The signer types their name, selects "Confirm and continue" and signs.` },
       {
-        text: msg`Take the device back, type your PIN and select "Unlock".`,
+        text: msg`Take the device back, type your PIN in "Host PIN" and select "Unlock".`,
         tip: msg`Forgot the PIN? End in-person signing from the document page on another device.`,
       },
       { text: msg`When everyone is done, select "Exit in-person signing".` },
@@ -523,7 +538,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: msg`Send one template to many people`,
     summary: msg`Upload a spreadsheet file (CSV) with one row per document. Each row becomes its own document.`,
     steps: [
-      { text: msg`On "Templates", open the three-dot menu of the template.` },
+      { text: msg`On "Templates", select the template to open its page.` },
       { text: msg`Select "Bulk Send via CSV".` },
       { text: msg`Select "Download Template CSV" and fill in one row for each document.` },
       {
@@ -546,15 +561,16 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: msg`Share one signing link that anyone can open`,
     summary: msg`A direct link lets anyone who has it sign your template, for example a sign-up sheet on your website.`,
     steps: [
-      { text: msg`On "Templates", open the three-dot menu of the template and select "Direct link".` },
+      { text: msg`On "Templates", select the template to open its page.` },
+      { text: msg`Select "Create Direct Link".` },
       { text: msg`Select "Enable direct link signing".` },
       {
         text: msg`Choose the recipient that the visitor will be, or select "Create one automatically".`,
       },
       { text: msg`Select "Copy Shareable Link" and share the link.` },
       {
-        text: msg`To stop the link, open the dialog again and turn off "Enable Direct Link Signing".`,
-        tip: msg`A visitor whose email address is not checked by a code gets no email copy. They can download the copy on the page.`,
+        text: msg`To stop the link, select "Manage Direct Link", turn off "Enable Direct Link Signing" and select "Save".`,
+        tip: msg`By default the visitor confirms their email address with a code, as on a public form. If you turn that off, a visitor gets no email copy and can only download it on the page.`,
       },
     ],
     related: ['public-forms', 'sign-from-a-shared-link'],
@@ -634,13 +650,16 @@ export const HELP_TOPICS: HelpTopic[] = [
         text: msg`Choose "Draw" and sign with your mouse or finger.`,
         tip: msg`Select "Clear Signature" to start again, or "Undo" for the last stroke.`,
       },
-      { text: msg`Or choose "Type" and type your name in "Type your signature".` },
+      {
+        text: msg`Or choose "Type". Your name already shows as a signature.`,
+        tip: msg`Type in "Type your signature" only if you want to change it.`,
+      },
       {
         text: msg`Or choose "Upload" and select "Upload Signature" to use a picture of your signature.`,
         tip: msg`The image must be smaller than 5 MB.`,
       },
       { text: msg`Select "Sign".` },
-      { text: msg`For an initials field, type your initials in "Initials" and select "Enter".` },
+      { text: msg`Select an initials field. Your initials fill in by themselves.` },
     ],
     related: ['how-to-sign', 'fill-in-fields'],
     video: null,
@@ -652,12 +671,15 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: msg`Fill in dates, text, numbers and choices`,
     summary: msg`Besides your signature, the sender can ask for text, numbers, dates and choices.`,
     steps: [
-      { text: msg`Select a text field, type in "Enter your text here" and select "Save".` },
+      { text: msg`Select a text field, type in "Enter your text here" and select "Enter".` },
       {
         text: msg`Select a number field, type in "Enter your number here" and select "Enter".`,
         tip: msg`If the number must have a format, the box says which one.`,
       },
-      { text: msg`Select a checkbox or a radio button to choose it.` },
+      {
+        text: msg`Select a checkbox or a radio button to choose it.`,
+        tip: msg`Select the small box itself, not the text next to it.`,
+      },
       { text: msg`Select a dropdown and choose an option.` },
       {
         text: msg`Select a date, name or email field. It fills in by itself, or asks you to type the value.`,
@@ -677,7 +699,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       { text: msg`Fill in the fields and select "Complete".` },
       { text: msg`In the box "Are you sure?", select "Sign".` },
-      { text: msg`If the page asks "Choose verification method", choose "Email verification".` },
+      {
+        text: msg`If the page asks "Choose verification method", choose "Email verification".`,
+        tip: msg`Most signers do not see this. It shows only if you set up an authenticator app.`,
+      },
       { text: msg`Open the new email from Solid Ten Sign and copy the 6-digit code.` },
       {
         text: msg`Type the code under "Enter verification code" and select "Verify & Complete".`,
@@ -744,9 +769,9 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       {
         text: msg`Select "Questions and comments".`,
-        tip: msg`On a phone, select "Actions" at the top first.`,
+        tip: msg`On a phone, select "Actions" at the top first. If you do not see the button, the sender has not turned on comments.`,
       },
-      { text: msg`Type your question in "Your comment".` },
+      { text: msg`Type your question in the box.` },
       { text: msg`Select "Send".` },
       {
         text: msg`When the sender's team replies, we email you. Open your signing link again to read the answer.`,
@@ -780,15 +805,18 @@ export const HELP_TOPICS: HelpTopic[] = [
     category: 'signers',
     audience: 'signer',
     title: msg`Sign from a link on a website`,
-    summary: msg`Some documents are shared as one link for everyone. You fill in the document and give your name and email address.`,
+    summary: msg`Some documents are shared as one link for everyone. You confirm your email address with a code, then fill in the document and sign.`,
     steps: [
       { text: msg`Open the link.` },
-      { text: msg`Fill in the fields and sign.` },
-      { text: msg`Select "Complete".` },
-      { text: msg`Type "Your Name" and "Your Email".` },
       {
-        text: msg`Select "Sign".`,
-        tip: msg`Your email address may not get a copy, because nobody checked it. Select "Download" on the next page to keep a copy.`,
+        text: msg`Type your "Email address" and select "Send code".`,
+        tip: msg`No email box? Then the sender turned the check off. You type "Your Name" and "Your Email" when you sign, you may get no email copy, and you select "Download" on the last page to keep one.`,
+      },
+      { text: msg`Type the code from the email in "Verification code" and select "Confirm code".` },
+      { text: msg`Fill in the fields, sign, and select "Complete".` },
+      {
+        text: msg`In the box "Are you sure?", select "Sign".`,
+        tip: msg`The page says "Document Signed". You get an email copy of the signed document.`,
       },
     ],
     related: ['fill-in-a-public-form', 'how-to-sign'],
@@ -828,8 +856,8 @@ export const HELP_TOPICS: HelpTopic[] = [
         tip: msg`Keep the email. The same link opens the document again until you finish.`,
       },
       {
-        text: msg`If the page asks you to sign in, contact the sender.`,
-        tip: msg`Some senders send documents only to people who have an account. The sender can change this.`,
+        text: msg`If the page says "Authentication required", contact the sender.`,
+        tip: msg`The sender asked for signers with an account. Do not use "Sign up": accounts here are for staff only. The sender can change the setting.`,
       },
     ],
     related: ['how-to-sign', 'enter-the-emailed-code'],
@@ -850,7 +878,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         tip: msg`For example "Pending", "Viewed", "Signed", "Approved", "Rejected" or "Expired".`,
       },
       { text: msg`Read "Recent activity" for each step with its time.` },
-      { text: msg`Select "Load older activity" to see earlier steps.` },
+      { text: msg`If the list is long, select "Load older activity" to see earlier steps.` },
       {
         text: msg`For the full record, open the three-dot menu and select "Audit Logs".`,
       },
@@ -1098,10 +1126,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: msg`Set the language, date format, time zone, visibility and signature types once for every new document.`,
     steps: [
       { text: msg`Open the account menu at the top right and select "Settings".` },
-      { text: msg`Select "Preferences".` },
+      { text: msg`Under "Organization Settings", select "Preferences" and then "General".` },
       {
-        text: msg`Choose the "Default Document Visibility".`,
-        tip: msg`It decides which team members can see a new document. The owner and the recipients always can.`,
+        text: msg`If you see "Default Document Visibility", choose which team members can see a new document.`,
+        tip: msg`It shows only in an organization with its own teams, not in a personal one. The owner and the recipients can always see the document.`,
       },
       {
         text: msg`Choose the "Default Document Language", "Default Date Format" and "Default Time Zone".`,
@@ -1121,14 +1149,15 @@ export const HELP_TOPICS: HelpTopic[] = [
     category: 'settings',
     audience: 'admin',
     title: msg`Change how our emails look to recipients`,
-    summary: msg`Choose the reply-to address and whether the email names the person who sent it.`,
+    summary: msg`Choose the reply-to address and which emails go out for new documents.`,
     steps: [
       { text: msg`Open the account menu at the top right and select "Settings".` },
       { text: msg`Under "Preferences", select "Email".` },
-      { text: msg`Type a "Reply to email" and a "Reply to name".` },
+      { text: msg`Type a "Reply to email".` },
+      { text: msg`Under "Default Email Settings", untick the emails you do not want to send.` },
       {
-        text: msg`Choose "Include Sender Details".`,
-        tip: msg`"Yes" shows the sender's name with the team name. "No" shows only the team name.`,
+        text: msg`If you see "Include Sender Details", choose "Yes" or "No".`,
+        tip: msg`"Yes" shows the sender's name with the team name. "No" shows only the team name. It shows only in an organization with its own teams, not in a personal one.`,
       },
       { text: msg`Select "Save changes".` },
     ],
@@ -1164,7 +1193,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: msg`The "Document lifecycle" page holds the switches for reassigning, in-person signing and comments.`,
     steps: [
       { text: msg`Open the account menu at the top right and select "Settings".` },
-      { text: msg`Select "Document lifecycle".` },
+      { text: msg`Under "Preferences", select "Document lifecycle".` },
       {
         text: msg`Set "Senders can reassign recipients" to "Allowed" or "Not allowed".`,
         tip: msg`It is allowed unless you turn it off.`,
@@ -1187,7 +1216,9 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: msg`Delete finished documents after a set time`,
     summary: msg`A retention rule deletes finished documents a set number of days after they were completed. It is off unless you turn it on.`,
     steps: [
-      { text: msg`Open the account menu at the top right and select "Settings". Then select "Document lifecycle".` },
+      {
+        text: msg`Open the account menu at the top right and select "Settings". Under "Preferences", select "Document lifecycle".`,
+      },
       { text: msg`Under "Retention", set "Delete finished documents automatically" to "On".` },
       {
         text: msg`Under "What to do", choose "Delete (hide from lists, keep the files)" or "Delete permanently (remove the files)".`,
@@ -1242,7 +1273,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: msg`Choose when it ends in "Expires in".` },
       { text: msg`Select "Create token".` },
       {
-        text: msg`Copy "Your new API token" and keep it in a safe place.`,
+        text: msg`Under "Token created", copy the token and keep it in a safe place. Then select "Done".`,
         tip: msg`You will not see the token again. Anyone who has it can act for your team.`,
       },
     ],

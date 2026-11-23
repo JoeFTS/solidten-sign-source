@@ -15,7 +15,6 @@ import { Link } from 'react-router';
 import { DocumentSigningAuthPageView } from '~/components/general/document-signing/document-signing-auth-page';
 import { RecipientBranding } from '~/components/general/recipient-branding';
 import { useCspNonce } from '~/utils/nonce';
-import { truncateTitle } from '~/utils/truncate-title';
 
 import type { Route } from './+types/rejected';
 
@@ -39,7 +38,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const branding = await loadRecipientBrandingByTeamId({ teamId: document.teamId });
 
-  const truncatedTitle = truncateTitle(document.title);
+  // Solid Ten Sign (F-7): the whole title; the chip cuts it at the end only when it does not fit.
+  const title = document.title;
 
   const [fields, recipient] = await Promise.all([
     getFieldsForToken({ token }),
@@ -64,7 +64,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     return {
       isDocumentAccessValid: true,
       recipientReference,
-      truncatedTitle,
+      title,
       branding,
     };
   }
@@ -82,7 +82,7 @@ export default function RejectedSigningPage({ loaderData }: Route.ComponentProps
   const user = sessionData?.user;
   const cspNonce = useCspNonce();
 
-  const { isDocumentAccessValid, recipientReference, truncatedTitle, branding } = loaderData;
+  const { isDocumentAccessValid, recipientReference, title, branding } = loaderData;
 
   if (!isDocumentAccessValid) {
     return (
@@ -97,8 +97,8 @@ export default function RejectedSigningPage({ loaderData }: Route.ComponentProps
     <>
       <RecipientBranding branding={branding} cspNonce={cspNonce} />
       <div className="flex flex-col items-center pt-24 lg:pt-36 xl:pt-44">
-        <Badge variant="neutral" size="default" className="mb-6 rounded-xl border bg-transparent">
-          {truncatedTitle}
+        <Badge variant="neutral" size="default" title={title} className="mb-6 rounded-xl border bg-transparent">
+          <span className="block max-w-[10rem] truncate md:max-w-[20rem]">{title}</span>
         </Badge>
 
         <div className="flex flex-col items-center">

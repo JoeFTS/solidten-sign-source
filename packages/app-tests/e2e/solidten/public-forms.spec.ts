@@ -923,7 +923,7 @@ test.describe('Solid Ten public forms: S-M6 code email limits', () => {
     await apiSignin({ page, email: user.email, redirectPath: `/t/${team.url}/templates/${template.id}` });
 
     await expect(page.getByTestId('public-form-captcha-warning')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId('public-form-captcha-warning')).toContainText('Bot protection');
+    await expect(page.getByTestId('public-form-captcha-warning')).toContainText('The human check');
   });
 });
 

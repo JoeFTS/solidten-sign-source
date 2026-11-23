@@ -4,6 +4,21 @@ import type { MessageDescriptor } from '@lingui/core';
 import { msg } from '@lingui/core/macro';
 import { match } from 'ts-pattern';
 
+/**
+ * Solid Ten Sign (F-2): the server's own reason when it refused a request it could explain (for
+ * example a formula that names a field key no field has). Such reasons are written for the user;
+ * other errors keep their mapped message. Null when there is no such reason.
+ */
+export const getServerRefusalReason = (error: { code: string; message?: string; userMessage?: string }) => {
+  if (error.userMessage) {
+    return error.userMessage;
+  }
+
+  const isExplainedRefusal = error.code === AppErrorCode.INVALID_BODY || error.code === AppErrorCode.INVALID_REQUEST;
+
+  return isExplainedRefusal && error.message ? error.message : null;
+};
+
 export type ToastMessageDescriptor = {
   title: MessageDescriptor;
   description: MessageDescriptor;

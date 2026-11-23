@@ -5,7 +5,7 @@ import { createElement } from 'react';
 
 import { getI18nInstance } from '../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../constants/app';
-import { env } from '../../utils/env';
+import { DOCUMENSO_INTERNAL_EMAIL } from '../../constants/email';
 import { renderEmailWithI18N } from '../../utils/render-email-with-i18n';
 import { getServerOperatorRecipients } from '../email/server-operators';
 import { SERVER_CAPS, type TServerCap } from './server-cap-alerts';
@@ -32,6 +32,7 @@ export const notifyAdminsOfServerCap = async (cap: TServerCap) => {
       ),
     ],
     assetBaseUrl: NEXT_PUBLIC_WEBAPP_URL(),
+    isOperatorNotice: true,
   });
 
   const [html, text] = await Promise.all([
@@ -41,10 +42,8 @@ export const notifyAdminsOfServerCap = async (cap: TServerCap) => {
 
   await mailer.sendMail({
     to,
-    from: {
-      name: env('NEXT_PRIVATE_SMTP_FROM_NAME') || 'Solid Ten Sign',
-      address: env('NEXT_PRIVATE_SMTP_FROM_ADDRESS') || 'noreply@documenso.com',
-    },
+    // The server's own sender (NEXT_PRIVATE_SMTP_FROM_*), as for the app's other system mail (F-4).
+    from: DOCUMENSO_INTERNAL_EMAIL,
     subject: i18n._(msg`A daily limit was reached on Solid Ten Sign`),
     html,
     text,

@@ -135,9 +135,9 @@ export const TemplatePublicFormPanel = ({ envelopeId }: TemplatePublicFormPanelP
           <Alert variant="warning" data-testid="public-form-captcha-warning">
             <AlertDescription>
               <Trans>
-                Bot protection (Cloudflare Turnstile) is not set up on this server. Anyone can submit this form or ask
-                for codes, limited only by rate limits and daily caps. Ask your administrator to set
-                NEXT_PRIVATE_TURNSTILE_SECRET_KEY and NEXT_PUBLIC_TURNSTILE_SITE_KEY.
+                The human check (a captcha that stops bots) is not set up on this server. Anyone can submit this form or
+                ask for codes, limited only by rate limits and daily caps. Ask your administrator to turn on the human
+                check in the server settings.
               </Trans>
             </AlertDescription>
           </Alert>

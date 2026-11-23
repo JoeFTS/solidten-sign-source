@@ -1,6 +1,7 @@
 /// <reference types="@documenso/tsconfig/process-env.d.ts" />
 
 import { AppError, AppErrorCode } from '../errors/app-error';
+import { computeSignupAvailable } from './signup-availability';
 
 const isSmsProviderNameValid = (value: string | undefined) => value === 'twilio' || value === 'fake';
 
@@ -58,6 +59,8 @@ export const createPublicEnv = () => ({
   // Derived from the private transport so the client can detect CSC mode for
   // authoring UI gating without exposing the raw transport value.
   NEXT_PUBLIC_SIGNING_TRANSPORT_IS_CSC: process.env.NEXT_PRIVATE_SIGNING_TRANSPORT === 'csc' ? 'true' : 'false',
+  // Solid Ten Sign (F-6): whether anyone can create an account (the provider settings are private).
+  NEXT_PUBLIC_ST_SIGNUP_AVAILABLE: computeSignupAvailable(process.env) ? 'true' : 'false',
   // Derived from the private Vertex credentials so the client can gate AI
   // feature UI on a boolean.
   NEXT_PUBLIC_AI_FEATURES_ENABLED:

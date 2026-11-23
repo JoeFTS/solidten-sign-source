@@ -15,7 +15,7 @@ export type SourceCodeNoticeProps = {
  * the source code is. It also carries the "Help" link of the public pages.
  */
 export const SourceCodeNotice = ({ className, showHelp = true }: SourceCodeNoticeProps) => (
-  <p className={cn('text-center text-muted-foreground text-xs', className)} data-testid="source-code-notice">
+  <div className={cn('text-center text-muted-foreground text-xs', className)} data-testid="source-code-notice">
     <Trans>Solid Ten Sign is open source (AGPL-3.0).</Trans>{' '}
     <a
       href={NEXT_PUBLIC_ST_SOURCE_URL()}
@@ -32,5 +32,5 @@ export const SourceCodeNotice = ({ className, showHelp = true }: SourceCodeNotic
         <HelpFooterLink />
       </>
     )}
-  </p>
+  </div>
 );

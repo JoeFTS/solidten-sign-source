@@ -45,7 +45,7 @@ import {
   createDefaultScheduleSendValue,
   ScheduleSendFields,
 } from '~/components/general/scheduled-send/schedule-send-fields';
-import { getDistributeErrorMessage } from '~/utils/toast-error-messages';
+import { getDistributeErrorMessage, getServerRefusalReason } from '~/utils/toast-error-messages';
 
 export type EnvelopeDistributeDialogProps = {
   onDistribute?: () => Promise<void>;
@@ -81,6 +81,8 @@ export const EnvelopeDistributeDialog = ({
 
   const [isOpen, setIsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  // Solid Ten Sign (F-2): why the last send was refused, shown in the dialog until the next try.
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   const { mutateAsync: distributeEnvelope } = trpcReact.envelope.distribute.useMutation();
   const { mutateAsync: scheduleSend } = trpcReact.lifecycle.scheduleSend.useMutation();
@@ -219,6 +221,8 @@ export const EnvelopeDistributeDialog = ({
   const isScheduling = scheduleSendValue.isEnabled && distributionMethod === DocumentDistributionMethod.EMAIL;
 
   const onFormSubmit = async ({ meta }: TEnvelopeDistributeFormSchema) => {
+    setRefusal(null);
+
     try {
       if (isScheduling) {
         await scheduleSend({ envelopeId: envelope.id, meta, ...scheduleSendValue });
@@ -259,16 +263,21 @@ export const EnvelopeDistributeDialog = ({
       });
 
       if (isScheduling) {
+        setRefusal(error.message);
         toast({ title: t`Could not schedule the document`, description: error.message, variant: 'destructive' });
 
         return;
       }
 
       const errorMessage = getDistributeErrorMessage(error.code);
+      const reason = getServerRefusalReason(error) ?? i18n._(errorMessage.description);
+
+      // Shown in the dialog too (it stays open), so the reason is not lost when the toast goes.
+      setRefusal(reason);
 
       toast({
         title: i18n._(errorMessage.title),
-        description: i18n._(errorMessage.description),
+        description: reason,
         variant: 'destructive',
         duration: 7500,
       });
@@ -292,6 +301,8 @@ export const EnvelopeDistributeDialog = ({
   };
 
   useEffect(() => {
+    setRefusal(null);
+
     // Default the distribution method tab to the envelope's configured setting.
     if (isOpen && envelope.documentMeta) {
       setValue('meta.distributionMethod', envelope.documentMeta.distributionMethod);
@@ -529,6 +540,15 @@ export const EnvelopeDistributeDialog = ({
                     onChange={setScheduleSendValue}
                     disabled={isSubmitting}
                   />
+                )}
+
+                {refusal && (
+                  <Alert variant="destructive" data-testid="envelope-distribute-error">
+                    <AlertTitle>
+                      <Trans>The document was not sent</Trans>
+                    </AlertTitle>
+                    <AlertDescription>{refusal}</AlertDescription>
+                  </Alert>
                 )}
 
                 <DialogFooter>

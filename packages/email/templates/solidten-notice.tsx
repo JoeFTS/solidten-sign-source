@@ -9,6 +9,8 @@ export type SolidTenNoticeTemplateProps = {
   actionLabel?: string;
   actionLink?: string;
   assetBaseUrl?: string;
+  /** A server notice to the operators: no "This document was sent using" line. */
+  isOperatorNotice?: boolean;
 };
 
 /**
@@ -21,6 +23,7 @@ export const SolidTenNoticeTemplate = ({
   actionLabel,
   actionLink,
   assetBaseUrl = 'http://localhost:3002',
+  isOperatorNotice = false,
 }: Partial<SolidTenNoticeTemplateProps>) => {
   return (
     <Html>
@@ -64,7 +67,7 @@ export const SolidTenNoticeTemplate = ({
           <Hr className="mx-auto mt-12 max-w-xl" />
 
           <Container className="mx-auto max-w-xl">
-            <TemplateFooter />
+            <TemplateFooter isDocument={!isOperatorNotice} />
           </Container>
         </Section>
       </Body>

@@ -6,7 +6,7 @@ import { createElement } from 'react';
 
 import { getI18nInstance } from '../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../constants/app';
-import { env } from '../../utils/env';
+import { DOCUMENSO_INTERNAL_EMAIL } from '../../constants/email';
 import { renderEmailWithI18N } from '../../utils/render-email-with-i18n';
 import { getServerOperatorRecipients } from '../email/server-operators';
 
@@ -22,9 +22,14 @@ export const sealFailedNoticeText = (i18n: I18n, { title, isRejected }: { title:
       : i18n._(
           msg`"${title}" is signed by everyone, but Solid Ten Sign could not make the final PDF. The document still shows as pending, and the signed copies have not been sent.`,
         ),
-    i18n._(
-      msg`Solid Ten Sign keeps trying for 6 hours after the last signature. You do not need to do anything if it works.`,
-    ),
+    // F-4: a rejection is not a signature; the 6 hours count from it.
+    isRejected
+      ? i18n._(
+          msg`Solid Ten Sign keeps trying for 6 hours after the rejection. You do not need to do anything if it works.`,
+        )
+      : i18n._(
+          msg`Solid Ten Sign keeps trying for 6 hours after the last signature. You do not need to do anything if it works.`,
+        ),
     i18n._(
       msg`If the document still shows as pending after that, an administrator must open it in the admin panel and use "Reseal document".`,
     ),
@@ -69,6 +74,7 @@ export const notifyOperatorsOfSealFailed = async ({
     actionLabel: i18n._(msg`Open in the admin panel`),
     actionLink: `${NEXT_PUBLIC_WEBAPP_URL()}/admin/documents/${envelopeId}`,
     assetBaseUrl: NEXT_PUBLIC_WEBAPP_URL(),
+    isOperatorNotice: true,
   });
 
   const [html, text] = await Promise.all([
@@ -80,10 +86,8 @@ export const notifyOperatorsOfSealFailed = async ({
 
   await mailer.sendMail({
     to,
-    from: {
-      name: env('NEXT_PRIVATE_SMTP_FROM_NAME') || 'Solid Ten Sign',
-      address: env('NEXT_PRIVATE_SMTP_FROM_ADDRESS') || 'noreply@documenso.com',
-    },
+    // The server's own sender (NEXT_PRIVATE_SMTP_FROM_*), as for the app's other system mail (F-4).
+    from: DOCUMENSO_INTERNAL_EMAIL,
     subject,
     html,
     text,

@@ -13,7 +13,6 @@ import { Link } from 'react-router';
 import { DocumentSigningAuthPageView } from '~/components/general/document-signing/document-signing-auth-page';
 import { RecipientBranding } from '~/components/general/recipient-branding';
 import { useCspNonce } from '~/utils/nonce';
-import { truncateTitle } from '~/utils/truncate-title';
 
 import type { Route } from './+types/expired';
 
@@ -91,7 +90,8 @@ export default function ExpiredSigningPage({ loaderData }: Route.ComponentProps)
       <RecipientBranding branding={branding} cspNonce={cspNonce} />
       <div className="flex flex-col items-center pt-24 lg:pt-36 xl:pt-44">
         <Badge variant="neutral" size="default" title={title} className="mb-6 rounded-xl border bg-transparent">
-          {truncateTitle(title ?? '')}
+          {/* Solid Ten Sign (F-7): cut at the end, and only when the title does not fit. */}
+          <span className="block max-w-[10rem] truncate md:max-w-[20rem]">{title ?? ''}</span>
         </Badge>
 
         <div className="flex flex-col items-center">

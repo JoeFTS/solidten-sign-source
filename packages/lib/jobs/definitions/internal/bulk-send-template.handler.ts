@@ -133,13 +133,18 @@ export const run = async ({ payload, io }: { payload: TBulkSendTemplateJobDefini
       assetBaseUrl: NEXT_PUBLIC_WEBAPP_URL(),
     });
 
-    const { branding, emailLanguage, senderEmail, emailTransport } = await getEmailContext({
+    const { branding, emailLanguage, senderEmail, emailTransport, emailsDisabled } = await getEmailContext({
       emailType: 'INTERNAL',
       source: {
         type: 'team',
         teamId,
       },
     });
+
+    // Solid Ten Sign (F-1): the organisation's "email off" applies to this report too.
+    if (emailsDisabled) {
+      return;
+    }
 
     const i18n = await getI18nInstance(emailLanguage);
 

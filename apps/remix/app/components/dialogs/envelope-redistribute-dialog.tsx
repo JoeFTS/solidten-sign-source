@@ -28,7 +28,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { match } from 'ts-pattern';
 import * as z from 'zod';
-import { getDistributeErrorMessage } from '~/utils/toast-error-messages';
+import { getDistributeErrorMessage, getServerRefusalReason } from '~/utils/toast-error-messages';
 import { StackAvatar } from '../general/stack-avatar';
 
 export type EnvelopeRedistributeDialogProps = {
@@ -108,7 +108,8 @@ export const EnvelopeRedistributeDialog = ({ envelope, envelopeType, trigger }: 
 
       toast({
         title: i18n._(errorMessage.title),
-        description: i18n._(errorMessage.description),
+        // Solid Ten Sign (F-2): the server's reason when it gave one.
+        description: getServerRefusalReason(error) ?? i18n._(errorMessage.description),
         variant: 'destructive',
         duration: 7500,
       });

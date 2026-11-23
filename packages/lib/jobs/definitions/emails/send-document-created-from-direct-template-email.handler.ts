@@ -50,7 +50,7 @@ export const run = async ({ payload }: { payload: TSendDocumentCreatedFromDirect
   const [recipient] = envelope.recipients;
   const { user: templateOwner } = envelope;
 
-  const { branding, emailLanguage, senderEmail, emailTransport } = await getEmailContext({
+  const { branding, emailLanguage, senderEmail, emailTransport, emailsDisabled } = await getEmailContext({
     emailType: 'INTERNAL',
     source: {
       type: 'team',
@@ -58,6 +58,11 @@ export const run = async ({ payload }: { payload: TSendDocumentCreatedFromDirect
     },
     meta: envelope.documentMeta,
   });
+
+  // Solid Ten Sign (F-1): the organisation's "email off" applies, as for the other document mails.
+  if (emailsDisabled) {
+    return;
+  }
 
   const assetBaseUrl = NEXT_PUBLIC_WEBAPP_URL() || 'http://localhost:3000';
 

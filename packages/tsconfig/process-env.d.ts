@@ -52,6 +52,8 @@ declare namespace NodeJS {
      * not set manually. Lets the client detect CSC mode for authoring UI gating.
      */
     NEXT_PUBLIC_SIGNING_TRANSPORT_IS_CSC?: 'true' | 'false';
+    /** Solid Ten Sign (F-6): derived by createPublicEnv, not configured. */
+    NEXT_PUBLIC_ST_SIGNUP_AVAILABLE?: 'true' | 'false';
     NEXT_PRIVATE_SIGNING_PASSPHRASE?: string;
     NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH?: string;
     NEXT_PRIVATE_SIGNING_LOCAL_FILE_CONTENTS?: string;

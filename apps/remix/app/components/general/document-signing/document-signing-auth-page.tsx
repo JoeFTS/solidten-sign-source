@@ -2,6 +2,7 @@ import { authClient } from '@documenso/auth/client';
 import { useIsFramed } from '@documenso/lib/client-only/hooks/use-is-framed';
 import { useOptionalSession } from '@documenso/lib/client-only/providers/session';
 import { formatPath } from '@documenso/lib/constants/app';
+import { isSignupAvailable } from '@documenso/lib/utils/signup-availability';
 import { Button } from '@documenso/ui/primitives/button';
 import { useToast } from '@documenso/ui/primitives/use-toast';
 import { msg } from '@lingui/core/macro';
@@ -26,6 +27,9 @@ export const DocumentSigningAuthPageView = ({ email, emailHasAccount }: Document
 
   const [isSigningOut, setIsSigningOut] = useState(false);
 
+  // Solid Ten Sign (F-6): no "Sign up" where nobody can create an account; sign in instead.
+  const isSignUp = !emailHasAccount && isSignupAvailable();
+
   const mismatchedUserEmail =
     sessionData?.user && email && sessionData.user.email !== email ? sessionData.user.email : undefined;
 
@@ -36,7 +40,7 @@ export const DocumentSigningAuthPageView = ({ email, emailHasAccount }: Document
       let redirectPath = formatPath('/signin');
 
       if (email) {
-        redirectPath = emailHasAccount ? formatPath(`/signin#email=${email}`) : formatPath(`/signup#email=${email}`);
+        redirectPath = isSignUp ? formatPath(`/signup#email=${email}`) : formatPath(`/signin#email=${email}`);
       }
 
       await authClient.signOut({
@@ -85,8 +89,14 @@ export const DocumentSigningAuthPageView = ({ email, emailHasAccount }: Document
             onClick={async () => handleChangeAccount(email)}
             loading={isSigningOut}
           >
-            {emailHasAccount ? <Trans>Login</Trans> : <Trans>Sign up</Trans>}
+            {isSignUp ? <Trans>Sign up</Trans> : <Trans>Login</Trans>}
           </Button>
+        )}
+
+        {!isFramed && !emailHasAccount && !isSignUp && (
+          <div className="mt-3 text-muted-foreground text-xs" data-testid="signing-auth-no-signup">
+            <Trans>If you do not have an account here, ask the person who sent you the document.</Trans>
+          </div>
         )}
       </div>
     </div>

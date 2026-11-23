@@ -38,16 +38,26 @@ const ZTextFieldFormSchema = ZTextFieldMeta.pick({
   verticalAlign: true,
   required: true,
   readOnly: true,
-}).refine(
-  (data) => {
-    // A read-only field must have text
-    return !data.readOnly || (data.text && data.text.length > 0);
-  },
-  {
-    message: 'A read-only field must have text',
-    path: ['text'],
-  },
-);
+})
+  .refine(
+    (data) => {
+      // A read-only field must have text
+      return !data.readOnly || (data.text && data.text.length > 0);
+    },
+    {
+      message: 'A read-only field must have text',
+      path: ['text'],
+    },
+  )
+  .refine(
+    // Solid Ten Sign (F-5): the text is never cut to fit a limit. A limit shorter than the text is
+    // shown as an error (and not saved) until the sender changes one of them.
+    (data) => !data.characterLimit || !data.text || data.text.length <= data.characterLimit,
+    {
+      message: 'The text is longer than the character limit. Shorten the text or raise the limit.',
+      path: ['characterLimit'],
+    },
+  );
 
 type TTextFieldFormSchema = z.infer<typeof ZTextFieldFormSchema>;
 
@@ -163,16 +173,10 @@ export const EditorFieldTextForm = ({
                     placeholder={t`Add text to the field`}
                     {...field}
                     onChange={(e) => {
-                      const values = form.getValues();
-                      const characterLimit = values.characterLimit || 0;
-                      let textValue = e.target.value;
-
-                      if (characterLimit > 0 && textValue.length > characterLimit) {
-                        textValue = textValue.slice(0, characterLimit);
-                      }
-
-                      e.target.value = textValue;
                       field.onChange(e);
+
+                      // Solid Ten Sign (F-5): re-check the limit against the new text (no cutting).
+                      void form.trigger('characterLimit');
                     }}
                     rows={1}
                   />
@@ -198,16 +202,12 @@ export const EditorFieldTextForm = ({
                     {...field}
                     value={field.value || ''}
                     onChange={(e) => {
-                      const values = form.getValues();
                       const characterLimit = parseInt(e.target.value, 10) || 0;
 
+                      // Solid Ten Sign (F-5): typing "120" passes through "1" and "12". The sender's
+                      // text is never cut to such a partial limit; a limit shorter than the text is
+                      // an error (shown below) and is not saved.
                       field.onChange(characterLimit || '');
-
-                      const textValue = values.text || '';
-
-                      if (characterLimit > 0 && textValue.length > characterLimit) {
-                        form.setValue('text', textValue.slice(0, characterLimit));
-                      }
                     }}
                   />
                 </FormControl>
