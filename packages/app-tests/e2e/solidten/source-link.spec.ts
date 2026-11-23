@@ -27,9 +27,7 @@ const expectSourceLink = async (page: Page) => {
   await expect(link).toHaveAttribute('href', SOURCE_URL);
   await expect(link).toHaveAttribute('target', '_blank');
   await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
-  await expect(page.getByTestId('source-code-notice').first()).toContainText(
-    'Solid Ten Sign is open source (AGPL-3.0).',
-  );
+  await expect(link).toHaveText('Source code');
 };
 
 test('the URL is the configured one or the default', () => {
