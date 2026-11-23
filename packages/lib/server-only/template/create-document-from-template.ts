@@ -1,4 +1,5 @@
 import { nanoid, prefixedId } from '@documenso/lib/universal/id';
+import { describeFieldForUser, describeFieldForUserAtStart } from '@documenso/lib/utils/describe-field';
 import { prisma } from '@documenso/prisma';
 import type { DocumentDistributionMethod, DocumentSigningOrder, Prisma } from '@prisma/client';
 import {
@@ -14,7 +15,6 @@ import {
 } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { match } from 'ts-pattern';
-
 import { DEFAULT_DOCUMENT_DATE_FORMAT } from '../../constants/date-formats';
 import type { TEnvelopeExpirationPeriod } from '../../constants/envelope-expiration';
 import type { SupportedLanguageCodes } from '../../constants/i18n';
@@ -136,11 +136,14 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
     return field.fieldMeta;
   }
 
+  // Solid Ten Sign (N-3): messages name the template field by its label or type and page.
+  const templateField = field;
+
   const advancedField = ['NUMBER', 'RADIO', 'CHECKBOX', 'DROPDOWN', 'TEXT'].includes(field.type);
 
   if (!advancedField) {
     throw new AppError(AppErrorCode.INVALID_BODY, {
-      message: `Field ${field.id} is not an advanced field and cannot have field meta information. Allowed types: NUMBER, RADIO, CHECKBOX, DROPDOWN, TEXT.`,
+      message: `${describeFieldForUserAtStart(field)} cannot take field settings. Only number, radio, checkbox, dropdown and text fields can.`,
     });
   }
 
@@ -154,7 +157,7 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
     .with({ type: 'text' }, (field) => {
       if (typeof field.value !== 'string') {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: `Invalid value for TEXT field ${field.id}: expected string, got ${typeof field.value}`,
+          message: `The value for ${describeFieldForUser(templateField)} must be text.`,
         });
       }
 
@@ -171,7 +174,7 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
     .with({ type: 'number' }, (field) => {
       if (typeof field.value !== 'string') {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: `Invalid value for NUMBER field ${field.id}: expected string, got ${typeof field.value}`,
+          message: `The value for ${describeFieldForUser(templateField)} must be a number written as text.`,
         });
       }
 
@@ -187,7 +190,9 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
       const numberProblem = findNumberFieldMetaProblem({ id: field.id, type: 'NUMBER', fieldMeta: meta });
 
       if (numberProblem) {
-        throw new AppError(AppErrorCode.INVALID_BODY, { message: `Prefill for field ${field.id}: ${numberProblem}` });
+        throw new AppError(AppErrorCode.INVALID_BODY, {
+          message: `${describeFieldForUserAtStart(templateField)}: ${numberProblem}`,
+        });
       }
 
       return meta;
@@ -195,7 +200,7 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
     .with({ type: 'radio' }, (field) => {
       if (typeof field.value !== 'string') {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: `Invalid value for RADIO field ${field.id}: expected string, got ${typeof field.value}`,
+          message: `The value for ${describeFieldForUser(templateField)} must be text.`,
         });
       }
 
@@ -203,7 +208,7 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
 
       if (!result.success) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: `Invalid field meta for RADIO field ${field.id}`,
+          message: `The settings of ${describeFieldForUser(templateField)} are not valid.`,
         });
       }
 
@@ -214,7 +219,7 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
 
       if (!valueExists) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: `Value "${field.value}" not found in options for RADIO field ${field.id}`,
+          message: `"${field.value}" is not one of the options of ${describeFieldForUser(templateField)}.`,
         });
       }
 
@@ -238,7 +243,7 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
 
       if (!result.success) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: `Invalid field meta for CHECKBOX field ${field.id}`,
+          message: `The settings of ${describeFieldForUser(templateField)} are not valid.`,
         });
       }
 
@@ -246,7 +251,7 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
 
       if (!field.value) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: `Value is required for CHECKBOX field ${field.id}`,
+          message: `${describeFieldForUserAtStart(templateField)} needs a value.`,
         });
       }
 
@@ -258,7 +263,7 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
 
         if (!valueExists) {
           throw new AppError(AppErrorCode.INVALID_BODY, {
-            message: `Value "${value}" not found in options for CHECKBOX field ${field.id}`,
+            message: `"${value}" is not one of the options of ${describeFieldForUser(templateField)}.`,
           });
         }
       }
@@ -283,7 +288,7 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
 
       if (!result.success) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: `Invalid field meta for DROPDOWN field ${field.id}`,
+          message: `The settings of ${describeFieldForUser(templateField)} are not valid.`,
         });
       }
 
@@ -294,7 +299,7 @@ const getUpdatedFieldMeta = (field: Field, prefillField?: TFieldMetaPrefillField
 
       if (!valueExists) {
         throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: `Value "${field.value}" not found in options for DROPDOWN field ${field.id}`,
+          message: `"${field.value}" is not one of the options of ${describeFieldForUser(templateField)}.`,
         });
       }
 
@@ -722,7 +727,7 @@ export const createDocumentFromTemplate = async ({
 
         if (expectedType !== actualType) {
           throw new AppError(AppErrorCode.INVALID_BODY, {
-            message: `Field type mismatch for field ${prefillField.id}: expected ${expectedType}, got ${actualType}`,
+            message: `${describeFieldForUserAtStart(templateField)} is a ${expectedType} field, not a ${actualType} field.`,
           });
         }
       }
@@ -759,7 +764,7 @@ export const createDocumentFromTemplate = async ({
               .with({ type: 'date' }, (selector) => {
                 if (!selector.value) {
                   throw new AppError(AppErrorCode.INVALID_BODY, {
-                    message: `Date value is required for field ${field.id}`,
+                    message: `${describeFieldForUserAtStart(field)} needs a date.`,
                   });
                 }
 
@@ -767,7 +772,7 @@ export const createDocumentFromTemplate = async ({
 
                 if (isNaN(date.getTime())) {
                   throw new AppError(AppErrorCode.INVALID_BODY, {
-                    message: `Invalid date value for field ${field.id}: ${selector.value}`,
+                    message: `"${selector.value}" is not a valid date for ${describeFieldForUser(field)}.`,
                   });
                 }
 

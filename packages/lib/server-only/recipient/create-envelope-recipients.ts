@@ -10,6 +10,7 @@ import { EnvelopeType, RecipientRole, SendStatus, SigningStatus } from '@prisma/
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapRecipientToLegacyRecipient } from '../../utils/recipients';
+import { assertPasswordActionAuthAllowed } from '../auth/assert-password-action-auth';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { assertCompatibleRecipientGrouping } from '../signature-level/assert-compatible-recipient-grouping';
@@ -135,6 +136,9 @@ export const createEnvelopeRecipients = async ({
 
     return await Promise.all(
       normalizedRecipients.map(async (recipient) => {
+        // Solid Ten Sign (N-5): no new "Require password" when password sign-in is off.
+        assertPasswordActionAuthAllowed(recipient.actionAuth);
+
         const authOptions = createRecipientAuthOptions({
           accessAuth: recipient.accessAuth ?? [],
           actionAuth: recipient.actionAuth ?? [],

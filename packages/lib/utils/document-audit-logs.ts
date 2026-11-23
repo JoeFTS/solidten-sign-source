@@ -807,10 +807,39 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
     .with({ type: DOCUMENT_AUDIT_LOG_TYPE.EMAIL_NOT_DELIVERED }, ({ data }) => {
       const message =
         data.reason === 'LIMIT'
-          ? msg`The signing request to ${data.recipientEmail} was not sent: the organization's email limit was reached`
+          ? match(data.emailType)
+              .with(
+                'REMINDER',
+                () =>
+                  msg`The reminder to ${data.recipientEmail} was not sent: the organization's email limit was reached`,
+              )
+              .with(
+                'DOCUMENT_COMPLETED',
+                () =>
+                  msg`The signed copy to ${data.recipientEmail} was not sent: the organization's email limit was reached`,
+              )
+              .with(
+                'DOCUMENT_CANCELLED',
+                () =>
+                  msg`The cancellation email to ${data.recipientEmail} was not sent: the organization's email limit was reached`,
+              )
+              .with(
+                'RECIPIENT_REMOVED',
+                () =>
+                  msg`The removal email to ${data.recipientEmail} was not sent: the organization's email limit was reached`,
+              )
+              .otherwise(
+                () =>
+                  msg`The signing request to ${data.recipientEmail} was not sent: the organization's email limit was reached`,
+              )
           : data.emailType === 'DOCUMENT_COMPLETED'
             ? msg`The signed copy to ${data.recipientEmail} could not be delivered after ${data.attempts} attempts`
             : msg`The signing request to ${data.recipientEmail} could not be delivered after ${data.attempts} attempts`;
+
+      return { anonymous: message, you: message, user: message };
+    })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DIRECT_LINK_SUBMISSION_REFUSED }, ({ data }) => {
+      const message = msg`A visitor could not submit the direct link form: ${data.problem}`;
 
       return { anonymous: message, you: message, user: message };
     })

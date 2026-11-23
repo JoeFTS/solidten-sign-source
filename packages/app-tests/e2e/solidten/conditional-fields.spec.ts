@@ -310,7 +310,7 @@ test.describe('Solid Ten conditional fields', () => {
     const hiddenResponse = await signField(page, token, addressField.id, { type: FieldType.TEXT, value: 'Main St 1' });
 
     expect(hiddenResponse.ok()).toBe(false);
-    expect(await hiddenResponse.text()).toContain('hidden because its condition is not met');
+    expect(await hiddenResponse.text()).toContain('is hidden by an answer you gave, so it cannot be filled in.');
     expect((await prisma.field.findUniqueOrThrow({ where: { id: addressField.id } })).inserted).toBe(false);
 
     await expectOk(signField(page, token, signatureField.id, { type: FieldType.SIGNATURE, value: 'Tampering Signer' }));

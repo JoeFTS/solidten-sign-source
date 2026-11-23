@@ -8,6 +8,8 @@
  *
  * This file reads its environment itself (no import of env.ts, which imports it).
  */
+import { computePasswordSignupAvailable } from './password-signin-availability';
+
 type TEnvSource = Record<string, string | undefined>;
 
 export const computeSignupAvailable = (source: TEnvSource): boolean => {
@@ -24,7 +26,8 @@ export const computeSignupAvailable = (source: TEnvSource): boolean => {
   );
 
   return (
-    isOn('NEXT_PUBLIC_DISABLE_EMAIL_PASSWORD_SIGNUP') ||
+    // Solid Ten Sign (M): e-mail sign-up sets a password, so it needs password sign-in.
+    computePasswordSignupAvailable(source) ||
     (isGoogle && isOn('NEXT_PUBLIC_DISABLE_GOOGLE_SIGNUP')) ||
     (isMicrosoft && isOn('NEXT_PUBLIC_DISABLE_MICROSOFT_SIGNUP')) ||
     (isOidc && isOn('NEXT_PUBLIC_DISABLE_OIDC_SIGNUP'))

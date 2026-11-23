@@ -1,8 +1,9 @@
+import { prisma } from '@documenso/prisma';
 import { isSignatureFieldType } from '@documenso/prisma/guards/is-signature-field';
-import type { EnvelopeType, Field, Recipient } from '@prisma/client';
-import { RecipientRole } from '@prisma/client';
+import type { Field, Recipient } from '@prisma/client';
+import { EnvelopeType, RecipientRole } from '@prisma/client';
 import { unique } from 'remeda';
-
+import { DIRECT_TEMPLATE_RECIPIENT_EMAIL } from '../../constants/direct-templates';
 import { IS_FIELD_LOGIC_ENABLED } from '../../constants/field-logic';
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { fieldUsesLogic, readFieldLogicKeys, readFieldLogicMeta } from '../../utils/field-conditions';
@@ -72,6 +73,8 @@ export const assertFieldLogicAllowed = async (options: AssertFieldLogicOptions) 
   }
 
   assertFieldLogicRulesAllowed(options);
+
+  await assertDirectLinkStaysUsable(options);
 };
 
 const assertFieldLogicRulesAllowed = ({
@@ -147,7 +150,21 @@ export const assertFieldLogicReadyToSend = ({
     strict: true,
   });
 
-  const signerWithoutFixedSignature = recipients.find(
+  const signerWithoutFixedSignature = findSignerWithoutFixedSignature(fields, recipients);
+
+  if (signerWithoutFixedSignature) {
+    throw new AppError(AppErrorCode.MISSING_SIGNATURE_FIELD, {
+      message: `${describeSignerForSender(signerWithoutFixedSignature)} needs at least one signature field without a condition.`,
+    });
+  }
+};
+
+/** A signer who has no signature field that no condition can hide. */
+const findSignerWithoutFixedSignature = <R extends Pick<Recipient, 'id' | 'role' | 'email'>>(
+  fields: { type: Field['type']; recipientId: number | null; fieldMeta?: unknown }[],
+  recipients: R[],
+) =>
+  recipients.find(
     (recipient) =>
       recipient.role === RecipientRole.SIGNER &&
       !fields.some(
@@ -158,9 +175,54 @@ export const assertFieldLogicReadyToSend = ({
       ),
   );
 
-  if (signerWithoutFixedSignature) {
+/**
+ * Solid Ten Sign (N-1): a signer as the sender knows them. The direct-link signer carries a
+ * placeholder address that nobody should read, so it is named by its role.
+ */
+const describeSignerForSender = (recipient: Pick<Recipient, 'email'> & { name?: string | null }) => {
+  if (recipient.email.toLowerCase() === DIRECT_TEMPLATE_RECIPIENT_EMAIL) {
+    return 'The direct link signer';
+  }
+
+  return recipient.name || recipient.email || 'A signer';
+};
+
+/**
+ * Solid Ten Sign (N-1): a template with a direct link that is on must stay usable. A field save
+ * that would leave a signer with only conditional signature fields is refused here, in the
+ * editor, so no visitor meets it.
+ */
+const assertDirectLinkStaysUsable = async ({ envelope, fields }: AssertFieldLogicOptions) => {
+  if (envelope.type !== EnvelopeType.TEMPLATE || !fields.some((field) => fieldUsesLogic(field.fieldMeta))) {
+    return;
+  }
+
+  const template = await prisma.envelope.findUnique({
+    where: { id: envelope.id },
+    select: {
+      directLink: { select: { enabled: true } },
+      recipients: true,
+      fields: { select: { type: true, recipientId: true, fieldMeta: true } },
+    },
+  });
+
+  if (!template?.directLink?.enabled) {
+    return;
+  }
+
+  // Only the signature rule: the other rules are checked strictly at send time, and the editor
+  // may save a rule that is not complete yet. Only a save that takes a signer's last
+  // unconditional signature field away is refused; a template that already lacks one is shown
+  // to its owner (template page and editor alerts) and is not made worse here.
+  const signer = template.recipients.find(
+    (recipient) =>
+      findSignerWithoutFixedSignature(fields, [recipient]) &&
+      !findSignerWithoutFixedSignature(template.fields, [recipient]),
+  );
+
+  if (signer) {
     throw new AppError(AppErrorCode.MISSING_SIGNATURE_FIELD, {
-      message: `${signerWithoutFixedSignature.email || 'A signer'} needs at least one signature field without a condition.`,
+      message: `${describeSignerForSender(signer)} needs at least one signature field without a condition. This template has a direct link that is on, so visitors could not submit it. Keep one signature field without a condition, or turn the direct link off first.`,
     });
   }
 };

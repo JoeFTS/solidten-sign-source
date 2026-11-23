@@ -3,10 +3,12 @@ import { useSession } from '@documenso/lib/client-only/providers/session';
 import { PDF_VIEWER_ERROR_MESSAGES } from '@documenso/lib/constants/pdf-viewer-i18n';
 import { mapSecondaryIdToTemplateId } from '@documenso/lib/utils/envelope';
 import { getDocumentDataUrlForPdfViewer } from '@documenso/lib/utils/envelope-download';
+import { getRecipientsWithMissingFields } from '@documenso/lib/utils/recipients';
 import { formatDocumentsPath, formatTemplatesPath } from '@documenso/lib/utils/teams';
 import { trpc } from '@documenso/trpc/react';
 import { DocumentReadOnlyFields } from '@documenso/ui/components/document/document-read-only-fields';
 import { cn } from '@documenso/ui/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@documenso/ui/primitives/alert';
 import { Button } from '@documenso/ui/primitives/button';
 import { Card, CardContent } from '@documenso/ui/primitives/card';
 import { Spinner } from '@documenso/ui/primitives/spinner';
@@ -15,7 +17,6 @@ import { Trans } from '@lingui/react/macro';
 import { DocumentSigningOrder, SigningStatus } from '@prisma/client';
 import { ChevronLeft, LucideEdit } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
-
 import { TemplateBulkSendDialog } from '~/components/dialogs/template-bulk-send-dialog';
 import { TemplateDirectLinkDialog } from '~/components/dialogs/template-direct-link-dialog';
 import { TemplateUseDialog } from '~/components/dialogs/template-use-dialog';
@@ -33,7 +34,6 @@ import { TemplatePublicFormPanel } from '~/components/general/template/template-
 import { TemplateType } from '~/components/general/template/template-type';
 import { TemplatesTableActionDropdown } from '~/components/tables/templates-table-action-dropdown';
 import { useCurrentTeam } from '~/providers/team';
-
 import type { Route } from './+types/templates.$id._index';
 
 export default function TemplatePage({ params }: Route.ComponentProps) {
@@ -116,8 +116,28 @@ export default function TemplatePage({ params }: Route.ComponentProps) {
 
   const isMultiEnvelopeItem = envelope.envelopeItems.length > 1 && envelope.internalVersion === 2;
 
+  // Solid Ten Sign (N-1): the owner sees here when visitors cannot submit the direct link.
+  const isDirectLinkBroken =
+    Boolean(envelope.directLink?.enabled) &&
+    getRecipientsWithMissingFields(envelope.recipients, envelope.fields).length > 0;
+
   return (
     <div className="mx-auto -mt-4 w-full max-w-screen-xl px-4 md:px-8">
+      {isDirectLinkBroken && (
+        <Alert variant="destructive" className="mb-4" data-testid="direct-link-broken-alert">
+          <AlertTitle>
+            <Trans>Visitors cannot submit this direct link</Trans>
+          </AlertTitle>
+          <AlertDescription>
+            <Trans>
+              A signer has no signature field, or only signature fields with a condition. Visitors see "This form is not
+              set up correctly". Edit the template and give each signer a signature field without a condition, or turn
+              the direct link off.
+            </Trans>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex flex-row justify-between">
         <Link to={templateRootPath} className="flex items-center text-documenso-700 hover:opacity-80">
           <ChevronLeft className="mr-2 inline-block h-5 w-5" />

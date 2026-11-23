@@ -1,4 +1,5 @@
 import { AppError } from '@documenso/lib/errors/app-error';
+import { isPasswordSigninAvailable } from '@documenso/lib/utils/password-signin-availability';
 import { trpc } from '@documenso/trpc/react';
 import { ZCreateUserRequestSchema } from '@documenso/trpc/server/admin-router/create-user.types';
 import { Button } from '@documenso/ui/primitives/button';
@@ -95,7 +96,11 @@ export const AdminUserCreateDialog = ({ trigger, ...props }: AdminUserCreateDial
           </DialogTitle>
 
           <DialogDescription>
-            <Trans>Create a new user. A welcome email will be sent with a link to set their password.</Trans>
+            {isPasswordSigninAvailable() ? (
+              <Trans>Create a new user. A welcome email will be sent with a link to set their password.</Trans>
+            ) : (
+              <Trans>Create a new user. A welcome email tells them to sign in with a link sent to their email.</Trans>
+            )}
           </DialogDescription>
         </DialogHeader>
 

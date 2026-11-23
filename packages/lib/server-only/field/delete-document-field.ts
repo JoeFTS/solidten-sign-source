@@ -1,9 +1,9 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
 import { prisma } from '@documenso/prisma';
 import { EnvelopeType } from '@prisma/client';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { canRecipientFieldsBeModified } from '../../utils/recipients';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
@@ -71,9 +71,11 @@ export const deleteDocumentField = async ({ userId, teamId, fieldId, requestMeta
   const recipient = envelope.recipients.find((recipient) => recipient.id === field.recipientId);
 
   if (!recipient) {
-    throw new AppError(AppErrorCode.INVALID_REQUEST, {
-      message: `Recipient for field ${fieldId} not found`,
-    });
+    throw plainRefusal(
+      AppErrorCode.INVALID_REQUEST,
+      'This document changed while you were editing it. Reload the page and try again.',
+      { fieldId },
+    );
   }
 
   // Check whether the recipient associated with the field can have new fields created.

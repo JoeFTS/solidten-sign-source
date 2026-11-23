@@ -352,7 +352,8 @@ test.describe('Solid Ten public forms', () => {
       verifiedProof: proof,
       signedFieldValues: values({ [fields.agree.id]: '' }),
     });
-    expect(await hiddenValue.text()).toContain('HIDDEN_FIELD_HAS_VALUE');
+    // Solid Ten Sign (N-3): plain reasons, no internal codes or ids.
+    expect(await hiddenValue.text()).toContain('is hidden by another answer, so it must stay empty.');
 
     const changedTotal = await submit(request, template, {
       email,
@@ -360,7 +361,7 @@ test.describe('Solid Ten public forms', () => {
       verifiedProof: proof,
       signedFieldValues: values({ [fields.total.id]: '999' }),
     });
-    expect(await changedTotal.text()).toContain('CALCULATED_VALUE_CHANGED');
+    expect(await changedTotal.text()).toContain('is calculated for you and cannot be changed.');
 
     const emptyRequired = await submit(request, template, {
       email,
@@ -368,7 +369,8 @@ test.describe('Solid Ten public forms', () => {
       verifiedProof: proof,
       signedFieldValues: values({ [fields.details.id]: '' }),
     });
-    expect(await emptyRequired.text()).toContain('CONDITIONAL_FIELD_EMPTY');
+    expect(await emptyRequired.text()).toContain('must be filled in.');
+    expect(await emptyRequired.text()).not.toMatch(/CONDITIONAL_FIELD_EMPTY|[Ff]ield \d+/);
 
     const noProof = await submit(request, template, { email, ip, signedFieldValues: values({}) });
     expect(await noProof.text()).toContain('Verify your email address');

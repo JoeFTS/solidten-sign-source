@@ -1,5 +1,6 @@
 import { DOCUMENT_AUTH_TYPES } from '@documenso/lib/constants/document-auth';
 import { DocumentActionAuth, DocumentAuth } from '@documenso/lib/types/document-auth';
+import { isPasswordSigninAvailable } from '@documenso/lib/utils/password-signin-availability';
 import { MultiSelect, type Option } from '@documenso/ui/primitives/multiselect';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@documenso/ui/primitives/tooltip';
 import { msg } from '@lingui/core/macro';
@@ -32,6 +33,15 @@ export const DocumentGlobalAuthActionSelect = ({
     },
     ...Object.values(DocumentActionAuth)
       .filter((auth) => auth !== DocumentAuth.ACCOUNT)
+      // Solid Ten Sign (M): with password sign-in off no signer can have a password. Keep the
+      // option only where it is already chosen, so the sender can see it and take it off.
+      .filter(
+        (auth) =>
+          auth !== DocumentActionAuth.PASSWORD ||
+          isPasswordSigninAvailable() ||
+          Boolean(value?.includes(auth)) ||
+          Boolean(defaultValue?.includes(auth)),
+      )
       .map((authType) => ({
         value: authType,
         label: _(DOCUMENT_AUTH_TYPES[authType].value),
@@ -103,12 +113,14 @@ export const DocumentGlobalAuthActionTooltip = () => (
           </Trans>
         </li>
 
-        <li>
-          <Trans>
-            <strong>Require password</strong> - The recipient must have an account and password configured via their
-            settings, the password will be verified during signing
-          </Trans>
-        </li>
+        {isPasswordSigninAvailable() && (
+          <li>
+            <Trans>
+              <strong>Require password</strong> - The recipient must have an account and password configured via their
+              settings, the password will be verified during signing
+            </Trans>
+          </li>
+        )}
 
         <li>
           <Trans>

@@ -1,7 +1,7 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { prisma } from '@documenso/prisma';
 import type { Prisma } from '@prisma/client';
 import { DocumentStatus, RecipientRole, SigningStatus } from '@prisma/client';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 
 /**
@@ -98,10 +98,12 @@ export const lockPendingEnvelope = async (
   }
 
   if (!allowedStatuses.includes(status)) {
-    throw new AppError(getEnvelopeStatusErrorCode(status), {
-      message: `Document ${envelopeId} is no longer pending, found ${status}`,
-      statusCode: 400,
-    });
+    throw plainRefusal(
+      getEnvelopeStatusErrorCode(status),
+      'This document is no longer open for signing. Reload the page.',
+      { envelopeId, status },
+      { statusCode: 400 },
+    );
   }
 
   if (refuseWhenAwaitingSeal && status === DocumentStatus.PENDING) {

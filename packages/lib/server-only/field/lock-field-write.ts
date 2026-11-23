@@ -1,6 +1,6 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import type { Prisma } from '@prisma/client';
 import { SigningStatus } from '@prisma/client';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { RequestMetadata } from '../../universal/extract-request-metadata';
 import { fieldsContainUnsignedRequiredVisibleField } from '../../utils/field-conditions';
@@ -70,9 +70,11 @@ export const assertRecipientFieldsCompleteUnderLock = async (
   const fields = await tx.field.findMany({ where: { envelopeId, recipientId } });
 
   if (fieldsContainUnsignedRequiredVisibleField(fields)) {
-    throw new AppError(AppErrorCode.RECIPIENT_HAS_UNSIGNED_FIELDS, {
-      message: `Recipient ${recipientId} has unsigned fields`,
-      statusCode: 400,
-    });
+    throw plainRefusal(
+      AppErrorCode.RECIPIENT_HAS_UNSIGNED_FIELDS,
+      'Fill in every required field before you finish.',
+      { recipientId, envelopeId },
+      { statusCode: 400 },
+    );
   }
 };

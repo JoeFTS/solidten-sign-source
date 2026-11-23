@@ -6,6 +6,7 @@ import { DEFAULT_DOCUMENT_DATE_FORMAT } from '@documenso/lib/constants/date-form
 import { isBase64Image } from '@documenso/lib/constants/signatures';
 import { DEFAULT_DOCUMENT_TIME_ZONE } from '@documenso/lib/constants/time-zones';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import type { TDocumentMeta } from '@documenso/lib/types/document-meta';
 import {
   ZCheckboxFieldMeta,
@@ -14,6 +15,7 @@ import {
   ZRadioFieldMeta,
   ZTextFieldMeta,
 } from '@documenso/lib/types/field-meta';
+import { describeFieldForUserAtStart } from '@documenso/lib/utils/describe-field';
 import { toCheckboxCustomText, toRadioCustomText } from '@documenso/lib/utils/fields';
 import { zEmail } from '@documenso/lib/utils/zod';
 import type { TSignEnvelopeFieldValue } from '@documenso/trpc/server/envelope-router/sign-envelope-field.types';
@@ -40,9 +42,11 @@ export const extractFieldInsertionValues = ({
       const parsedEmailValue = zEmail().nullable().safeParse(fieldValue.value);
 
       if (!parsedEmailValue.success) {
-        throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: 'Invalid email',
-        });
+        throw plainRefusal(
+          AppErrorCode.INVALID_BODY,
+          `${describeFieldForUserAtStart(field)} needs a valid email address.`,
+          { fieldId: field.id },
+        );
       }
 
       if (parsedEmailValue.data === null) {
@@ -61,8 +65,8 @@ export const extractFieldInsertionValues = ({
       const parsedGenericStringValue = z.string().min(1).nullable().safeParse(fieldValue.value);
 
       if (!parsedGenericStringValue.success) {
-        throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: 'Value is required',
+        throw plainRefusal(AppErrorCode.INVALID_BODY, `${describeFieldForUserAtStart(field)} needs a value.`, {
+          fieldId: field.id,
         });
       }
 
@@ -105,8 +109,8 @@ export const extractFieldInsertionValues = ({
       const errors = validateNumberField(fieldValue.value, numberFieldParsedMeta, true);
 
       if (errors.length > 0) {
-        throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: `Invalid number: ${errors[0]}`,
+        throw plainRefusal(AppErrorCode.INVALID_BODY, `${describeFieldForUserAtStart(field)}: ${errors[0]}`, {
+          fieldId: field.id,
         });
       }
 
@@ -127,8 +131,8 @@ export const extractFieldInsertionValues = ({
       const errors = validateTextField(fieldValue.value, parsedTextFieldMeta, true);
 
       if (errors.length > 0) {
-        throw new AppError(AppErrorCode.INVALID_BODY, {
-          message: 'Invalid text',
+        throw plainRefusal(AppErrorCode.INVALID_BODY, `${describeFieldForUserAtStart(field)}: ${errors[0]}`, {
+          fieldId: field.id,
         });
       }
 

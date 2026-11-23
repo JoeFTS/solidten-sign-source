@@ -6,10 +6,11 @@
 //
 // Code changes in one should probably be mirrored to the other, particularly in
 // relation to the jobs triggered after a rejection.
+
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { jobs } from '@documenso/lib/jobs/client';
 import { prisma } from '@documenso/prisma';
 import { DocumentStatus, EnvelopeType, SigningStatus } from '@prisma/client';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '../../types/document-audit-logs';
 import type { TRecipientAccessAuth } from '../../types/document-auth';
@@ -74,8 +75,9 @@ export async function rejectDocumentWithToken({
   await assertSenderNotDisabled({ userId: envelope.userId });
 
   if (envelope.status !== DocumentStatus.PENDING) {
-    throw new AppError(AppErrorCode.INVALID_REQUEST, {
-      message: `Document ${envelope.id} must be pending to reject`,
+    throw plainRefusal(AppErrorCode.INVALID_REQUEST, 'This document can no longer be declined.', {
+      envelopeId: envelope.id,
+      status: envelope.status,
     });
   }
 

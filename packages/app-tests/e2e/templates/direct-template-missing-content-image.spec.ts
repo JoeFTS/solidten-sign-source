@@ -120,7 +120,8 @@ test('the direct signing page still reports a signer with no signature field', a
   await page.goto(`/d/${envelope.directLink.token}`);
 
   await expect(page.getByRole('heading', { name: INVALID_TEMPLATE_HEADING })).toBeVisible();
-  await expect(page.getByText('do not have a signature field assigned')).toBeVisible();
+  // Solid Ten Sign (N-1): the visitor reads one plain line.
+  await expect(page.getByText('This form is not set up correctly. Contact the sender.')).toBeVisible();
 });
 
 /**

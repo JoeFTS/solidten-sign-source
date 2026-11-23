@@ -1,4 +1,5 @@
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import type { PlaceholderInfo } from '@documenso/lib/server-only/pdf/auto-place-fields';
 import { convertPlaceholdersToFieldInputs } from '@documenso/lib/server-only/pdf/auto-place-fields';
 import { findRecipientByPlaceholder } from '@documenso/lib/server-only/pdf/helpers';
@@ -21,7 +22,6 @@ import {
   SigningStatus,
   WebhookTriggerEvents,
 } from '@prisma/client';
-
 import type {
   TDocumentAccessAuthTypes,
   TDocumentActionAuthTypes,
@@ -40,6 +40,7 @@ import { extractDerivedDocumentMeta } from '../../utils/document';
 import { createDocumentAuthOptions, createRecipientAuthOptions } from '../../utils/document-auth';
 import { assertEnvelopeContentSaveWithinLimits } from '../../utils/envelope-content';
 import { buildTeamWhereQuery } from '../../utils/teams';
+import { assertPasswordActionAuthAllowed } from '../auth/assert-password-action-auth';
 import { incrementDocumentId, incrementTemplateId } from '../envelope/increment-id';
 import { assertFieldLogicAllowed, toFieldLogicDefinitions } from '../field-logic/assert-field-logic';
 import { assertOrganisationRatesAndLimits } from '../rate-limit/assert-organisation-rates-and-limits';
@@ -283,6 +284,13 @@ export const createEnvelope = async ({
         };
       }),
     );
+  }
+
+  // Solid Ten Sign (N-5): no new "Require password" when password sign-in is off.
+  assertPasswordActionAuthAllowed(globalActionAuth);
+
+  for (const recipient of data.recipients ?? []) {
+    assertPasswordActionAuthAllowed(recipient.actionAuth);
   }
 
   const authOptions = createDocumentAuthOptions({
@@ -731,9 +739,11 @@ export const createEnvelope = async ({
         const fieldRecipient = createdEnvelope.recipients.find((recipient) => recipient.id === field.recipientId);
 
         if (!fieldRecipient) {
-          throw new AppError(AppErrorCode.UNKNOWN_ERROR, {
-            message: `Recipient ${field.recipientId} not found for field ${field.secondaryId}`,
-          });
+          throw plainRefusal(
+            AppErrorCode.UNKNOWN_ERROR,
+            'A field belongs to a recipient who is not on this document.',
+            { recipientId: field.recipientId, fieldSecondaryId: field.secondaryId },
+          );
         }
 
         return createDocumentAuditLogData({

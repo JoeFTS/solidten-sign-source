@@ -1,6 +1,7 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
+import { describeFieldForUserAtStart } from '@documenso/lib/utils/describe-field';
 import { type Field, FieldType, type Prisma } from '@prisma/client';
-
-import { AppError, AppErrorCode } from '../../errors/app-error';
+import { AppErrorCode } from '../../errors/app-error';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '../../types/document-audit-logs';
 import type { RequestMetadata } from '../../universal/extract-request-metadata';
 import { createDocumentAuditLogData } from '../../utils/document-audit-logs';
@@ -162,14 +163,16 @@ export const assertFieldSignableByLogic = async ({
   field,
 }: {
   tx: Prisma.TransactionClient;
-  field: Pick<Field, 'id' | 'envelopeId' | 'envelopeItemId' | 'recipientId' | 'fieldMeta'>;
+  field: Pick<Field, 'id' | 'envelopeId' | 'envelopeItemId' | 'recipientId' | 'fieldMeta' | 'type' | 'page'>;
 }) => {
   const { condition, formula } = readFieldLogicMeta(field.fieldMeta);
 
   if (formula) {
-    throw new AppError(AppErrorCode.INVALID_REQUEST, {
-      message: `Field ${field.id} is calculated by the server and cannot be signed`,
-    });
+    throw plainRefusal(
+      AppErrorCode.INVALID_REQUEST,
+      `${describeFieldForUserAtStart(field)} is calculated for you and cannot be filled in.`,
+      { fieldId: field.id },
+    );
   }
 
   if (!condition) {
@@ -185,9 +188,11 @@ export const assertFieldSignableByLogic = async ({
   });
 
   if (resolveFieldLogic(siblingFields).get(field.id)?.isHidden) {
-    throw new AppError(AppErrorCode.INVALID_REQUEST, {
-      message: `Field ${field.id} is hidden because its condition is not met`,
-    });
+    throw plainRefusal(
+      AppErrorCode.INVALID_REQUEST,
+      `${describeFieldForUserAtStart(field)} is hidden by an answer you gave, so it cannot be filled in.`,
+      { fieldId: field.id },
+    );
   }
 };
 

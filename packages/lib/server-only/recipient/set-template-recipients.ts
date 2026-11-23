@@ -11,6 +11,7 @@ import { type TRecipientActionAuthTypes, ZRecipientAuthOptionsSchema } from '../
 import { nanoid } from '../../universal/id';
 import { createRecipientAuthOptions } from '../../utils/document-auth';
 import { type EnvelopeIdOptions, mapSecondaryIdToTemplateId } from '../../utils/envelope';
+import { assertPasswordActionAuthAllowed } from '../auth/assert-password-action-auth';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { assertCompatibleRecipientGrouping } from '../signature-level/assert-compatible-recipient-grouping';
 import { assertCompatibleRecipientRole } from '../signature-level/assert-compatible-recipient-role';
@@ -145,6 +146,9 @@ export const setTemplateRecipients = async ({ userId, teamId, id, recipients }: 
         let authOptions = ZRecipientAuthOptionsSchema.parse(recipient._persisted?.authOptions);
 
         if (recipient.actionAuth !== undefined) {
+          // Solid Ten Sign (N-5): a stored "Require password" may stay; a new one is refused.
+          assertPasswordActionAuthAllowed(recipient.actionAuth, authOptions.actionAuth);
+
           authOptions = createRecipientAuthOptions({
             accessAuth: authOptions.accessAuth,
             actionAuth: recipient.actionAuth,

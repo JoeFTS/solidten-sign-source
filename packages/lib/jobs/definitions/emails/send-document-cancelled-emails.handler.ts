@@ -13,6 +13,7 @@ import { unsafeBuildEnvelopeIdQuery } from '../../../utils/envelope';
 import { canSendMailToRecipient } from '../../../utils/recipient-mail';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import type { JobRunIO } from '../../client/_internal/job';
+import { recordEmailStoppedByLimit } from '../solidten/email-limit-drop';
 import type { TSendDocumentCancelledEmailsJobDefinition } from './send-document-cancelled-emails';
 
 export const run = async ({ payload, io }: { payload: TSendDocumentCancelledEmailsJobDefinition; io: JobRunIO }) => {
@@ -120,6 +121,9 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCancelledEmai
             recipientId: recipient.id,
             envelopeId: envelope.id,
           });
+
+          // Solid Ten Sign (N-6): not silent: one audit entry per recipient not told.
+          await recordEmailStoppedByLimit({ envelopeId: envelope.id, recipient, emailType: 'DOCUMENT_CANCELLED' });
 
           // On rate/quota exceeded, skip this recipient and continue with the rest.
           return;

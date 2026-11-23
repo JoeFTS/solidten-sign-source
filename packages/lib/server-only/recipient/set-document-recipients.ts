@@ -16,6 +16,7 @@ import { extractDerivedDocumentEmailSettings } from '../../types/document-email'
 import { type EnvelopeIdOptions, mapSecondaryIdToDocumentId } from '../../utils/envelope';
 import { canSendMailToRecipient } from '../../utils/recipient-mail';
 import { canRecipientBeModified } from '../../utils/recipients';
+import { assertPasswordActionAuthAllowed } from '../auth/assert-password-action-auth';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
 import { lockEnvelopeForRecipientChange } from '../envelope/envelope-transition-lock';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
@@ -190,6 +191,9 @@ export const setDocumentRecipients = async ({
         let authOptions = ZRecipientAuthOptionsSchema.parse(recipient._persisted?.authOptions);
 
         if (recipient.actionAuth !== undefined || recipient.accessAuth !== undefined) {
+          // Solid Ten Sign (N-5): a stored "Require password" may stay; a new one is refused.
+          assertPasswordActionAuthAllowed(recipient.actionAuth, authOptions.actionAuth);
+
           authOptions = createRecipientAuthOptions({
             accessAuth: recipient.accessAuth || authOptions.accessAuth,
             actionAuth: recipient.actionAuth || authOptions.actionAuth,

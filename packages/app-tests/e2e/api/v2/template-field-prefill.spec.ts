@@ -881,6 +881,7 @@ test.describe('Template Field Prefill API v2', () => {
     expect(response.status()).toBe(400);
 
     const errorData = await response.json();
-    expect(errorData.message).toContain('not found in options for RADIO field');
+    // Solid Ten Sign (N-3): the field is named by its label or type and page, not its id.
+    expect(errorData.message).toContain('is not one of the options of the');
   });
 });

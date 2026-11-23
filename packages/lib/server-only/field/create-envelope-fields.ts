@@ -1,3 +1,4 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import type { TFieldAndMeta } from '@documenso/lib/types/field-meta';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
@@ -6,7 +7,6 @@ import { putPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.s
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
 import { prisma } from '@documenso/prisma';
 import { EnvelopeType } from '@prisma/client';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapFieldToLegacyField } from '../../utils/fields';
@@ -173,9 +173,11 @@ export const createEnvelopeFields = async ({
 
     // Each field MUST have a recipient associated with it.
     if (!recipient) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Recipient ${field.recipientId} not found`,
-      });
+      throw plainRefusal(
+        AppErrorCode.INVALID_REQUEST,
+        'A field belongs to a recipient who is not on this document. Reload the page and try again.',
+        { recipientId: field.recipientId },
+      );
     }
 
     // Check whether the recipient associated with the field can have new fields created.
@@ -196,9 +198,11 @@ export const createEnvelopeFields = async ({
       const pdfDoc = pdfCache.get(envelopeItemId);
 
       if (!pdfDoc) {
-        throw new AppError(AppErrorCode.NOT_FOUND, {
-          message: `Could not load PDF for envelope item ${envelopeItemId}`,
-        });
+        throw plainRefusal(
+          AppErrorCode.NOT_FOUND,
+          'The PDF of this document could not be read. Try again, or upload the file again.',
+          { envelopeItemId },
+        );
       }
 
       const matches = pdfDoc.textMatches[field.placeholder] ?? [];

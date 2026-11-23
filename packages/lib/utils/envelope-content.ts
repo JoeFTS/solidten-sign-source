@@ -1,6 +1,6 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import type { EnvelopeContent, OrganisationClaim, Prisma } from '@prisma/client';
 import { firstBy, isDeepEqual, isNonNullish, sortBy, unique } from 'remeda';
-
 import { AppError, AppErrorCode } from '../errors/app-error';
 import {
   CONTENT_MAX_Z_INDEX,
@@ -198,9 +198,11 @@ export const buildEnvelopeContentCopyData = ({
     const envelopeItemId = envelopeItemIdMap[content.envelopeItemId];
 
     if (!envelopeItemId) {
-      throw new AppError(AppErrorCode.UNKNOWN_ERROR, {
-        message: `Cannot copy content on envelope item ${content.envelopeItemId}: the item was not copied`,
-      });
+      throw plainRefusal(
+        AppErrorCode.UNKNOWN_ERROR,
+        'A content block could not be copied because its file was not copied.',
+        { envelopeItemId: content.envelopeItemId },
+      );
     }
 
     return {

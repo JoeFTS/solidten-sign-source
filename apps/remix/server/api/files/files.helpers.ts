@@ -1,6 +1,7 @@
 import { getOptionalNonEmbedSession } from '@documenso/auth/server/lib/session/embed-session-restrictions';
 import { TEAM_DOCUMENT_VISIBILITY_MAP } from '@documenso/lib/constants/teams';
-import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { AppErrorCode } from '@documenso/lib/errors/app-error';
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embedding-presign/verify-embedding-presign-token';
 import { generatePartialSignedPdfIsolated } from '@documenso/lib/server-only/pdf-child/isolated-pdf';
 import { getTeamById } from '@documenso/lib/server-only/team/get-team';
@@ -22,7 +23,6 @@ import {
 import contentDisposition from 'content-disposition';
 import type { Context } from 'hono';
 import { match } from 'ts-pattern';
-
 import type { HonoEnv } from '../../router';
 
 type DocumentDataInput = {
@@ -177,17 +177,21 @@ const handlePendingFileRequest = async ({
       .with(DocumentStatus.REJECTED, () => AppErrorCode.ENVELOPE_REJECTED)
       .otherwise(() => AppErrorCode.INVALID_REQUEST);
 
-    throw new AppError(errorCode, {
-      message: `Envelope ${envelope.id} must be pending to download a partially signed PDF`,
-      statusCode: 400,
-    });
+    throw plainRefusal(
+      errorCode,
+      'A partly signed copy is only available while the document is waiting for signatures.',
+      { envelopeId: envelope.id },
+      { statusCode: 400 },
+    );
   }
 
   if (envelope.internalVersion !== 2) {
-    throw new AppError(AppErrorCode.ENVELOPE_LEGACY, {
-      message: `Envelope ${envelope.id} is a legacy envelope and does not support partially signed PDF downloads`,
-      statusCode: 400,
-    });
+    throw plainRefusal(
+      AppErrorCode.ENVELOPE_LEGACY,
+      'A partly signed copy is not available for this older document.',
+      { envelopeId: envelope.id },
+      { statusCode: 400 },
+    );
   }
 
   const fields = await prisma.field.findMany({

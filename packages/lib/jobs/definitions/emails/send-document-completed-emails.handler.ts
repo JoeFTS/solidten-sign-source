@@ -25,6 +25,7 @@ import { renderCustomEmailTemplate } from '../../../utils/render-custom-email-te
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import { formatDocumentsPath } from '../../../utils/teams';
 import type { JobRunIO } from '../../client/_internal/job';
+import { recordEmailStoppedByLimit } from '../solidten/email-limit-drop';
 import type { TSendDocumentCompletedEmailsJobDefinition } from './send-document-completed-emails';
 
 export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmailsJobDefinition; io: JobRunIO }) => {
@@ -266,6 +267,9 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
             recipientId: recipient.id,
             envelopeId: envelope.id,
           });
+
+          // Solid Ten Sign (N-6): not silent: the "Copy not delivered" mark and an audit entry.
+          await recordEmailStoppedByLimit({ envelopeId: envelope.id, recipient, emailType: 'DOCUMENT_COMPLETED' });
 
           // On rate/quota exceeded, early return to allow other recipients to be processed.
           return;

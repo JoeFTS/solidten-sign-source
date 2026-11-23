@@ -1,6 +1,7 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
+import { describeFieldForUserAtStart } from '@documenso/lib/utils/describe-field';
 import { prisma } from '@documenso/prisma';
 import { DocumentStatus, FieldType, type Prisma, SigningStatus } from '@prisma/client';
-
 import { IS_FILE_UPLOAD_ENABLED } from '../../constants/field-file';
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { ZFileFieldMeta } from '../../types/field-meta';
@@ -67,8 +68,8 @@ export const getSignerFileFieldContext = async ({ token, fieldId }: { token: str
   });
 
   if (!field) {
-    throw new AppError(AppErrorCode.NOT_FOUND, {
-      message: `Field ${fieldId} not found`,
+    throw plainRefusal(AppErrorCode.NOT_FOUND, 'This field is not part of this document any more. Reload the page.', {
+      fieldId,
     });
   }
 
@@ -95,9 +96,7 @@ export const getSignerFileFieldContext = async ({ token, fieldId }: { token: str
   }
 
   if (envelope.deletedAt) {
-    throw new AppError(AppErrorCode.INVALID_REQUEST, {
-      message: `Document ${envelope.id} has been deleted`,
-    });
+    throw plainRefusal(AppErrorCode.INVALID_REQUEST, 'This document was deleted.', { envelopeId: envelope.id });
   }
 
   if (envelope.status !== DocumentStatus.PENDING) {
@@ -118,8 +117,8 @@ export const getSignerFileFieldContext = async ({ token, fieldId }: { token: str
   const fileMeta = readFileFieldMeta(field.fieldMeta);
 
   if (fileMeta.readOnly) {
-    throw new AppError(AppErrorCode.INVALID_REQUEST, {
-      message: `Field ${fieldId} is read only`,
+    throw plainRefusal(AppErrorCode.INVALID_REQUEST, `${describeFieldForUserAtStart(field)} is read-only.`, {
+      fieldId,
     });
   }
 

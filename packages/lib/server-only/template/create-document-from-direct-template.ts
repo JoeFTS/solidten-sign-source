@@ -1,3 +1,4 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { nanoid, prefixedId } from '@documenso/lib/universal/id';
 import { prisma } from '@documenso/prisma';
 import type { TSignFieldWithTokenMutationSchema } from '@documenso/trpc/server/field-router/schema';
@@ -20,7 +21,6 @@ import { match } from 'ts-pattern';
 import { z } from 'zod';
 import { checkFieldValue, representationForVersion } from '../../advanced-fields-validation/field-value-rules';
 import { isBase64Image } from '../../constants/signatures';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { jobs } from '../../jobs/client';
 import { DOCUMENT_AUDIT_LOG_TYPE, RECIPIENT_DIFF_TYPE } from '../../types/document-audit-logs';
@@ -111,6 +111,27 @@ export const ZCreateDocumentFromDirectTemplateResponseSchema = z.object({
 });
 
 export type TCreateDocumentFromDirectTemplateResponse = z.infer<typeof ZCreateDocumentFromDirectTemplateResponseSchema>;
+
+/** Solid Ten Sign (N-1): what a visitor sees when the template behind a direct link is not set up right. */
+export const BROKEN_DIRECT_LINK_MESSAGE = 'This form is not set up correctly. Contact the sender.';
+
+const refuseBrokenDirectLink = async (
+  templateEnvelopeId: string,
+  problem: string,
+  code: string = AppErrorCode.MISSING_SIGNATURE_FIELD,
+) => {
+  await prisma.documentAuditLog
+    .create({
+      data: createDocumentAuditLogData({
+        type: DOCUMENT_AUDIT_LOG_TYPE.DIRECT_LINK_SUBMISSION_REFUSED,
+        envelopeId: templateEnvelopeId,
+        data: { problem },
+      }),
+    })
+    .catch((err) => console.error('[direct-link] could not record the refused submission', err));
+
+  return plainRefusal(code, BROKEN_DIRECT_LINK_MESSAGE, { templateEnvelopeId, problem });
+};
 
 export const createDocumentFromDirectTemplate = async ({
   directRecipientName: initialDirectRecipientName,
@@ -215,20 +236,32 @@ export const createDocumentFromDirectTemplate = async ({
   const directTemplateRecipient = recipients.find((recipient) => recipient.id === directLink.directTemplateRecipientId);
 
   if (!directTemplateRecipient || directTemplateRecipient.role === RecipientRole.CC) {
-    throw new AppError(AppErrorCode.INVALID_REQUEST, {
-      message: 'Invalid or missing direct recipient',
-    });
+    throw await refuseBrokenDirectLink(
+      directTemplateEnvelope.id,
+      'The direct link signer is missing or is a CC recipient.',
+      AppErrorCode.INVALID_REQUEST,
+    );
   }
 
   // Solid Ten: a submission arrives in one request with no signing token, so it cannot
   // carry attached files.
   assertNoFileFieldsForDirectTemplate(recipients.flatMap((recipient) => recipient.fields));
 
-  assertFieldLogicReadyToSend({
-    envelope: directTemplateEnvelope,
-    fields: recipients.flatMap((recipient) => recipient.fields),
-    recipients,
-  });
+  // Solid Ten Sign (N-1): a set-up fault of the template is not the visitor's to fix. The visitor
+  // gets a plain message; the template's owner gets an entry on the template page.
+  try {
+    assertFieldLogicReadyToSend({
+      envelope: directTemplateEnvelope,
+      fields: recipients.flatMap((recipient) => recipient.fields),
+      recipients,
+    });
+  } catch (err) {
+    if (err instanceof AppError && err.code === AppErrorCode.MISSING_SIGNATURE_FIELD) {
+      throw await refuseBrokenDirectLink(directTemplateEnvelope.id, err.message);
+    }
+
+    throw err;
+  }
 
   const { signedFieldValues, notRequiredFieldIds } = applyDirectTemplateSubmissionRules({
     directTemplateRecipient,
@@ -241,18 +274,20 @@ export const createDocumentFromDirectTemplate = async ({
   );
 
   if (recipientsWithMissingFields.length > 0) {
-    throw new AppError(AppErrorCode.MISSING_SIGNATURE_FIELD, {
-      message: 'One or more signers on this direct template are missing a signature field',
-    });
+    throw await refuseBrokenDirectLink(
+      directTemplateEnvelope.id,
+      'One or more signers on this template have no signature field.',
+    );
   }
 
   // Mirrors the checks in `sendDocument`, which this flow never reaches since
   // it creates the document directly in PENDING.
   if (getContentsMissingImages(directTemplateEnvelope.contents).length > 0) {
-    throw new AppError('MISSING_CONTENT_IMAGE', {
-      message: 'One or more image contents on this direct template have no image attached',
-      statusCode: 400,
-    });
+    throw await refuseBrokenDirectLink(
+      directTemplateEnvelope.id,
+      'An image block on this template has no image.',
+      'MISSING_CONTENT_IMAGE',
+    );
   }
 
   assertEnvelopeContentLimits(

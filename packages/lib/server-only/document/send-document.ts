@@ -1,5 +1,6 @@
 import { materializeTspAnchorsForEnvelope } from '@documenso/ee/server-only/signing/csc/materialize-anchors';
 import { resolveExpiresAt } from '@documenso/lib/constants/envelope-expiration';
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
@@ -17,7 +18,6 @@ import {
   WebhookTriggerEvents,
 } from '@prisma/client';
 import pMap from 'p-map';
-
 import { validateCheckboxLength } from '../../advanced-fields-validation/validate-checkbox';
 import { DIRECT_TEMPLATE_RECIPIENT_EMAIL } from '../../constants/direct-templates';
 import { AppError, AppErrorCode } from '../../errors/app-error';
@@ -269,9 +269,11 @@ const sendDocumentUnqueued = async ({
       (auth.recipientAccessAuthRequired || auth.recipientActionAuthRequired) &&
       !isRecipientEmailValidForSending(recipient)
     ) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Recipient ${recipient.id} requires an email because they have auth requirements.`,
-      });
+      throw plainRefusal(
+        AppErrorCode.INVALID_REQUEST,
+        `${recipient.name || 'A recipient'} needs an email address, because the document asks them to confirm who they are.`,
+        { recipientId: recipient.id },
+      );
     }
   });
 

@@ -28,6 +28,7 @@ export const SOLIDTEN_AUDIT_LOG_TYPES = [
   'EMAIL_NOT_DELIVERED',
   'DOCUMENT_ACCESS_AUTH_2FA_LOCKED',
   'DOCUMENT_SEAL_FAILED',
+  'DIRECT_LINK_SUBMISSION_REFUSED',
 ] as const;
 
 /**
@@ -306,11 +307,13 @@ export const ZDocumentAuditLogEventFieldFileDownloadedSchema = z.object({
 export const ZDocumentAuditLogEventEmailNotDeliveredSchema = z.object({
   type: z.literal('EMAIL_NOT_DELIVERED'),
   data: z.object({
-    recipientId: z.number(),
+    // Solid Ten Sign (N-6): absent for a recipient-removed email (the recipient row is gone).
+    recipientId: z.number().optional(),
     recipientEmail: z.string(),
     recipientName: z.string(),
     recipientRole: z.string(),
-    emailType: z.enum(['SIGNING_REQUEST', 'DOCUMENT_COMPLETED']),
+    // Solid Ten Sign (N-6): reminders, cancellation and recipient-removed mails stopped by the limit.
+    emailType: z.enum(['SIGNING_REQUEST', 'DOCUMENT_COMPLETED', 'REMINDER', 'DOCUMENT_CANCELLED', 'RECIPIENT_REMOVED']),
     attempts: z.number(),
     // Solid Ten Sign (K-2): LIMIT when the organisation's email limit stopped the email (not sent).
     reason: z.enum(['LIMIT']).optional(),
@@ -343,6 +346,18 @@ export const ZDocumentAuditLogEventDocumentSealFailedSchema = z.object({
   }),
 });
 
+/**
+ * Event (N-1): a visitor's direct-link submission was refused because the template is not set
+ * up for it (for example every signature field of a signer has a condition). Written on the
+ * template, so its owner sees it on the template page. Holds no visitor data.
+ */
+export const ZDocumentAuditLogEventDirectLinkSubmissionRefusedSchema = z.object({
+  type: z.literal('DIRECT_LINK_SUBMISSION_REFUSED'),
+  data: z.object({
+    problem: z.string(),
+  }),
+});
+
 export const ZSolidTenDocumentAuditLogEventSchemas = [
   ZDocumentAuditLogEventDocumentSendScheduledSchema,
   ZDocumentAuditLogEventDocumentSendUnscheduledSchema,
@@ -363,4 +378,5 @@ export const ZSolidTenDocumentAuditLogEventSchemas = [
   ZDocumentAuditLogEventEmailNotDeliveredSchema,
   ZDocumentAuditLogEventDocumentAccessAuth2FALockedSchema,
   ZDocumentAuditLogEventDocumentSealFailedSchema,
+  ZDocumentAuditLogEventDirectLinkSubmissionRefusedSchema,
 ] as const;

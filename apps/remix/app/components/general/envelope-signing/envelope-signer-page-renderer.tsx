@@ -52,6 +52,9 @@ type GenericLocalField = TEnvelope['fields'][number] & {
   recipient: Pick<Recipient, 'id' | 'name' | 'email' | 'signingStatus'>;
 };
 
+/** Solid Ten Sign (N-4): how long after a field shows up filled a tap on it is taken as meant to fill it. */
+const AUTO_FILL_TAP_GRACE_MS = 2000;
+
 export const EnvelopeSignerPageRenderer = ({ pageData }: { pageData: PageRenderData }) => {
   const { t, i18n } = useLingui();
   const { currentEnvelopeItem, contentImages, setRenderError } = useCurrentEnvelopeRender();
@@ -92,6 +95,11 @@ export const EnvelopeSignerPageRenderer = ({ pageData }: { pageData: PageRenderD
   }, [fullNameState, emailState, signatureState]);
 
   const cachedRenderFields = useRef<Map<number, Field & { signature?: Signature | null }>>(new Map());
+
+  // Solid Ten Sign (N-4): fields the app filled (at send, or while the page was loading) and when
+  // they showed up filled. A tap must not clear such a field by surprise (see the click handler).
+  const autoFilledAt = useRef<Map<number, number>>(new Map());
+  const tappedFieldIds = useRef<Set<number>>(new Set());
   const prevShowPendingFieldTooltip = useRef(showPendingFieldTooltip);
 
   const { onFieldSigned, onFieldUnsigned, onSignatureChanged } = useEmbedSigningContext() || {};
@@ -197,6 +205,27 @@ export const EnvelopeSignerPageRenderer = ({ pageData }: { pageData: PageRenderD
       if (!foundField || foundLoadingGroup || foundField.fieldMeta?.readOnly) {
         return;
       }
+
+      // Solid Ten Sign (N-4): a tap on a field the app filled does not clear it when the field
+      // only just showed up filled (the tap was meant to fill it), or when it holds the signer's
+      // own email address (filled in for them; there is nothing else to put there).
+      if (foundField.inserted && !tappedFieldIds.current.has(foundField.id)) {
+        const filledAt = autoFilledAt.current.get(foundField.id);
+        const isJustFilled = filledAt !== undefined && Date.now() - filledAt < AUTO_FILL_TAP_GRACE_MS;
+        const ownEmails = [email.current, recipient.email].filter(Boolean).map((value) => value!.toLowerCase());
+        const isOwnEmail =
+          foundField.type === FieldType.EMAIL && ownEmails.includes((foundField.customText ?? '').toLowerCase());
+
+        if (isJustFilled || isOwnEmail) {
+          if (isOwnEmail) {
+            toast({ description: t`This field is filled in for you with your email address.` });
+          }
+
+          return;
+        }
+      }
+
+      tappedFieldIds.current.add(foundField.id);
 
       let localEmail: string | null = email.current;
       let localFullName: string | null = fullName.current;
@@ -473,6 +502,17 @@ export const EnvelopeSignerPageRenderer = ({ pageData }: { pageData: PageRenderD
     for (const field of localPageFields) {
       const existingCachedField = cachedRenderFields.current.get(field.id);
       const isFieldCurrentlyRendered = pageLayer.current.findOne(`#${field.id}`);
+
+      // Solid Ten Sign (N-4): remember when a field on the page turns filled without a tap on it
+      // (not at first render: a field filled before the page opened is cleared by a tap as usual).
+      if (
+        field.inserted &&
+        existingCachedField &&
+        !existingCachedField.inserted &&
+        !tappedFieldIds.current.has(field.id)
+      ) {
+        autoFilledAt.current.set(field.id, Date.now());
+      }
 
       if (
         !isFieldCurrentlyRendered ||

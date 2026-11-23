@@ -10,6 +10,7 @@ import { assertOrganisationRatesAndLimits } from '../../../server-only/rate-limi
 import { isRecipientEmailValidForSending } from '../../../utils/recipients';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import type { JobRunIO } from '../../client/_internal/job';
+import { recordEmailStoppedByLimit } from '../solidten/email-limit-drop';
 import type { TSendAdminRecipientRemovedEmailsJobDefinition } from './send-admin-recipient-removed-emails';
 
 export const run = async ({
@@ -81,6 +82,13 @@ export const run = async ({
           msg: 'Admin recipient removed email dropped: org email limit exceeded',
           organisationId,
           envelopeId: envelope.id,
+        });
+
+        // Solid Ten Sign (N-6): not silent: one audit entry on the document.
+        await recordEmailStoppedByLimit({
+          envelopeId: envelope.id,
+          recipient: { email: recipientEmail, name: recipientName ?? '', role: 'REMOVED' },
+          emailType: 'RECIPIENT_REMOVED',
         });
 
         isWithinEmailLimits = false;

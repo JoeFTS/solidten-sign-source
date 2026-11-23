@@ -14,6 +14,7 @@ import { mapEnvelopeToWebhookDocumentPayload, ZWebhookDocumentSchema } from '../
 import { createDocumentAuthOptions, extractDocumentAuthMethods } from '../../utils/document-auth';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { buildTeamWhereQuery, canAccessTeamDocument } from '../../utils/teams';
+import { assertPasswordActionAuthAllowed } from '../auth/assert-password-action-auth';
 import { recomputeNextReminderForEnvelope } from '../recipient/update-recipient-next-reminder';
 import { assertCompatibleDictateNextSigner } from '../signature-level/assert-compatible-dictate-next-signer';
 import { assertCompatibleSigningOrder } from '../signature-level/assert-compatible-signing-order';
@@ -132,6 +133,9 @@ export const updateEnvelope = async ({
       message: 'You do not have permission to set the action auth',
     });
   }
+
+  // Solid Ten Sign (N-5): a stored "Require password" may stay; a new one is refused.
+  assertPasswordActionAuthAllowed(newGlobalActionAuth, documentGlobalActionAuth);
 
   const authOptions = createDocumentAuthOptions({
     globalAccessAuth: newGlobalAccessAuth,

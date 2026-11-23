@@ -1,8 +1,8 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import type { EnvelopeContentType, TEnvelopeContentMetaInput } from '@documenso/lib/types/envelope-content-meta';
 import { CONTENT_TYPE_DATA_CONTENT_TYPE, ZEnvelopeContentMetaSchema } from '@documenso/lib/types/envelope-content-meta';
 import { prisma } from '@documenso/prisma';
 import { type DataContent, EnvelopeType } from '@prisma/client';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '../../types/document-audit-logs';
 import type { ApiRequestMetadata } from '../../universal/extract-request-metadata';
@@ -123,8 +123,8 @@ export const setEnvelopeContents = async ({
     const foundEnvelopeItem = envelope.envelopeItems.find((envelopeItem) => envelopeItem.id === content.envelopeItemId);
 
     if (!foundEnvelopeItem) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Envelope item ${content.envelopeItemId} not found`,
+      throw plainRefusal(AppErrorCode.INVALID_REQUEST, 'A file of this document was not found. Reload the page.', {
+        envelopeItemId: content.envelopeItemId,
       });
     }
 
@@ -137,9 +137,11 @@ export const setEnvelopeContents = async ({
     // would let a move slip through without an audit log since the diff only
     // covers the content meta and attached image.
     if (persisted && persisted.envelopeItemId !== content.envelopeItemId) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Content ${persisted.id} cannot be moved to a different envelope item`,
-      });
+      throw plainRefusal(
+        AppErrorCode.INVALID_REQUEST,
+        'A content block cannot be moved to another file of the document.',
+        { contentId: persisted.id },
+      );
     }
 
     return {
@@ -318,17 +320,17 @@ const resolveDataContentId = (
   const dataContent = attachedDataContents.get(dataContentId);
 
   if (!dataContent) {
-    throw new AppError(AppErrorCode.NOT_FOUND, {
-      message: `Data content ${dataContentId} not found`,
-    });
+    throw plainRefusal(AppErrorCode.NOT_FOUND, 'An image or data block used here was not found.', { dataContentId });
   }
 
   const expectedDataContentType = CONTENT_TYPE_DATA_CONTENT_TYPE[contentType];
 
   if (!expectedDataContentType || dataContent.metadata.type !== expectedDataContentType) {
-    throw new AppError(AppErrorCode.INVALID_REQUEST, {
-      message: `Data content ${dataContent.id} (${dataContent.metadata.type}) cannot be used by a ${contentType} content`,
-    });
+    throw plainRefusal(
+      AppErrorCode.INVALID_REQUEST,
+      `This ${dataContent.metadata.type} block cannot be used in a ${contentType} block.`,
+      { dataContentId: dataContent.id },
+    );
   }
 
   return dataContent.id;

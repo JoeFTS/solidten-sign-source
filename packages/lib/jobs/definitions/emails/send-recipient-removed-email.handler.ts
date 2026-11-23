@@ -11,6 +11,7 @@ import { extractDerivedDocumentEmailSettings } from '../../../types/document-ema
 import { isRecipientEmailValidForSending } from '../../../utils/recipients';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import type { JobRunIO } from '../../client/_internal/job';
+import { recordEmailStoppedByLimit } from '../solidten/email-limit-drop';
 import type { TSendRecipientRemovedEmailJobDefinition } from './send-recipient-removed-email';
 
 export const run = async ({ payload, io }: { payload: TSendRecipientRemovedEmailJobDefinition; io: JobRunIO }) => {
@@ -69,6 +70,13 @@ export const run = async ({ payload, io }: { payload: TSendRecipientRemovedEmail
       msg: 'Recipient removed email dropped: org email limit exceeded',
       organisationId,
       envelopeId: envelope.id,
+    });
+
+    // Solid Ten Sign (N-6): not silent: one audit entry on the document.
+    await recordEmailStoppedByLimit({
+      envelopeId: envelope.id,
+      recipient: { email: recipientEmail, name: recipientName, role: 'REMOVED' },
+      emailType: 'RECIPIENT_REMOVED',
     });
 
     return;

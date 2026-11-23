@@ -114,7 +114,7 @@ test.describe('Solid Ten calculated fields', () => {
     const forged = await signField(page, token, shareField.id, { type: FieldType.NUMBER, value: '1000000' });
 
     expect(forged.ok()).toBe(false);
-    expect(await forged.text()).toContain('calculated by the server');
+    expect(await forged.text()).toContain('is calculated for you and cannot be filled in.');
 
     await expectOk(signField(page, token, netField.id, { type: FieldType.NUMBER, value: '10' }));
 

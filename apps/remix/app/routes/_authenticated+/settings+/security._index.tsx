@@ -1,8 +1,8 @@
 import { getSession } from '@documenso/auth/server/lib/utils/get-session';
 import { useSession } from '@documenso/lib/client-only/providers/session';
-import { isSigninEnabledForProvider } from '@documenso/lib/constants/auth';
 import { getUserAuthMethods } from '@documenso/lib/server-only/user/get-user-auth-methods';
 import { UserAuthMethod } from '@documenso/lib/types/user-auth-method';
+import { isPasswordSigninAvailable } from '@documenso/lib/utils/password-signin-availability';
 import { Alert, AlertDescription, AlertTitle } from '@documenso/ui/primitives/alert';
 import { Button } from '@documenso/ui/primitives/button';
 import { msg } from '@lingui/core/macro';
@@ -40,16 +40,27 @@ export default function SettingsSecurity({ loaderData }: Route.ComponentProps) {
   const { _ } = useLingui();
   const { user } = useSession();
 
-  const isEmailPasswordSigninEnabled = isSigninEnabledForProvider('email');
+  const isEmailPasswordSigninEnabled = isPasswordSigninAvailable();
 
   return (
     <div>
       <SettingsHeader
         title={_(msg`Security`)}
-        subtitle={_(msg`Here you can manage your password and security settings.`)}
+        subtitle={
+          isEmailPasswordSigninEnabled
+            ? _(msg`Here you can manage your password and security settings.`)
+            : _(msg`Here you can manage your security settings.`)
+        }
       />
 
-      {hasEmailPasswordAccount && <PasswordForm user={user} />}
+      {hasEmailPasswordAccount && isEmailPasswordSigninEnabled && <PasswordForm user={user} />}
+
+      {/* Solid Ten Sign (M): with password sign-in off there is no password to set or change. */}
+      {!isEmailPasswordSigninEnabled && (
+        <div className="text-muted-foreground text-sm" data-testid="password-signin-off-note">
+          <Trans>This server signs you in with a link we email you. There is no password to set or change.</Trans>
+        </div>
+      )}
 
       {!hasEmailPasswordAccount && isEmailPasswordSigninEnabled && (
         <Alert className="flex flex-col justify-between p-6 sm:flex-row sm:items-center" variant="neutral">

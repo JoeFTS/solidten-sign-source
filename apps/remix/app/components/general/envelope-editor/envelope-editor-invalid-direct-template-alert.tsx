@@ -1,4 +1,5 @@
 import { useCurrentEnvelopeEditor } from '@documenso/lib/client-only/providers/envelope-editor-provider';
+import { DIRECT_TEMPLATE_RECIPIENT_EMAIL } from '@documenso/lib/constants/direct-templates';
 import { getRecipientsWithMissingFields } from '@documenso/lib/utils/recipients';
 import { cn } from '@documenso/ui/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@documenso/ui/primitives/alert';
@@ -41,12 +42,19 @@ export const EnvelopeEditorInvalidDirectTemplateAlert = ({
 
       <AlertDescription>
         <Trans>
-          Recipients cannot use this direct link template because the following signers are missing a signature field
+          Recipients cannot use this direct link template because the following signers are missing a signature field (a
+          signature field with a condition does not count)
         </Trans>
 
         <ul className="list-disc pl-5">
           {signersMissingSignatureFields.map((recipient, i) => (
-            <li key={recipient.id}>{recipient.email || recipient.name || `Recipient ${i + 1}`}</li>
+            <li key={recipient.id}>
+              {recipient.email.toLowerCase() === DIRECT_TEMPLATE_RECIPIENT_EMAIL ? (
+                <Trans>The direct link signer</Trans>
+              ) : (
+                recipient.email || recipient.name || `Recipient ${i + 1}`
+              )}
+            </li>
           ))}
         </ul>
       </AlertDescription>

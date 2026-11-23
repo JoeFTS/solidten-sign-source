@@ -1,6 +1,6 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { prisma } from '@documenso/prisma';
 import type { DocumentData, Prisma } from '@prisma/client';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { ContentImageMap } from '../../universal/content-renderer/content-renderer';
 import { getFileServerSide } from '../../universal/upload/get-file.server';
@@ -80,8 +80,8 @@ export const renderContentsIntoEnvelopeItem = async ({
   });
 
   if (!envelopeItem) {
-    throw new AppError(AppErrorCode.NOT_FOUND, {
-      message: `Envelope item ${envelopeItemId} not found`,
+    throw plainRefusal(AppErrorCode.NOT_FOUND, 'A file of this document was not found. Reload the page.', {
+      envelopeItemId,
     });
   }
 
@@ -148,9 +148,11 @@ export const commitRenderedEnvelopeItems = async (
     });
 
     if (count !== 1) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Envelope item ${envelopeItemId} was modified while its contents were being inserted`,
-      });
+      throw plainRefusal(
+        AppErrorCode.INVALID_REQUEST,
+        'This document changed while you were editing it. Reload the page and try again.',
+        { envelopeItemId },
+      );
     }
   }
 };

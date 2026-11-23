@@ -1,4 +1,5 @@
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embedding-presign/verify-embedding-presign-token';
 import { getEnvelopeWhereInput } from '@documenso/lib/server-only/envelope/get-envelope-by-id';
 import { updateEnvelope } from '@documenso/lib/server-only/envelope/update-envelope';
@@ -24,7 +25,6 @@ import { prisma } from '@documenso/prisma';
 import { DocumentStatus, type EnvelopeContent, EnvelopeType, type OrganisationClaim } from '@prisma/client';
 import pMap from 'p-map';
 import { match } from 'ts-pattern';
-
 import { procedure } from '../trpc';
 import {
   type TUpdateEmbeddingEnvelopePayload,
@@ -600,9 +600,11 @@ const assertEmbeddedContentsCanBeSet = ({
       }
 
       if (existingContent.envelopeItemId !== content.envelopeItemId) {
-        throw new AppError(AppErrorCode.INVALID_REQUEST, {
-          message: `Content ${content.id} cannot be moved to a different envelope item`,
-        });
+        throw plainRefusal(
+          AppErrorCode.INVALID_REQUEST,
+          'A content block cannot be moved to another file of the document.',
+          { contentId: content.id },
+        );
       }
     }
 
@@ -617,8 +619,8 @@ const assertEmbeddedContentsCanBeSet = ({
     }
 
     if (!attachedImageIds.has(content.dataContentId)) {
-      throw new AppError(AppErrorCode.NOT_FOUND, {
-        message: `Data content ${content.dataContentId} not found`,
+      throw plainRefusal(AppErrorCode.NOT_FOUND, 'An image or data block used here was not found.', {
+        dataContentId: content.dataContentId,
       });
     }
   }

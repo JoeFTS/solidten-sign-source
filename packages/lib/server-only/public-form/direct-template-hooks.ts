@@ -1,8 +1,8 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
+import { describeFieldForUserAtStart } from '@documenso/lib/utils/describe-field';
 import type { TSignFieldWithTokenMutationSchema } from '@documenso/trpc/server/field-router/schema';
 import { type Field, FieldType, type Prisma, type Recipient } from '@prisma/client';
-
 import { validateNumberField } from '../../advanced-fields-validation/validate-number';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { ZNumberFieldMeta } from '../../types/field-meta';
 import { applyDirectTemplateFieldLogic, isDirectTemplateReadOnlyField } from '../../utils/direct-template-field-logic';
@@ -66,7 +66,7 @@ export const applyDirectTemplateSubmissionRules = ({
           : null;
 
       throw new AppError(AppErrorCode.INVALID_BODY, {
-        message: `${label ? `"${label}"` : `Field ${field.id}`}: ${errors[0]}`,
+        message: `${label ? `"${label}"` : describeFieldForUserAtStart(field)}: ${errors[0]}`,
       });
     }
   }
@@ -89,9 +89,19 @@ export const applyDirectTemplateSubmissionRules = ({
   });
 
   if (!result.success) {
-    throw new AppError(AppErrorCode.INVALID_BODY, {
-      message: `Invalid, missing or changed fields (${result.reason} on field ${result.fieldId})`,
-    });
+    // Solid Ten Sign (N-3): the reason in plain words, the field by its label or type and page;
+    // the internal reason code and field id go to the server log only.
+    const failedField = directTemplateRecipient.fields.find((field) => field.id === result.fieldId);
+    const name = describeFieldForUserAtStart(failedField);
+    const plainReason =
+      {
+        HIDDEN_FIELD_HAS_VALUE: `${name} is hidden by another answer, so it must stay empty.`,
+        CALCULATED_VALUE_CHANGED: `${name} is calculated for you and cannot be changed.`,
+        READ_ONLY_VALUE_CHANGED: `${name} is read-only and cannot be changed.`,
+        CONDITIONAL_FIELD_EMPTY: `${name} must be filled in.`,
+      }[result.reason] ?? `${name} cannot be accepted as it is.`;
+
+    throw plainRefusal(AppErrorCode.INVALID_BODY, plainReason, { reason: result.reason, fieldId: result.fieldId });
   }
 
   return result;

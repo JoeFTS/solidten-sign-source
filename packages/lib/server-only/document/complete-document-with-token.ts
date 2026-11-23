@@ -1,5 +1,6 @@
 import { DEFAULT_DOCUMENT_DATE_FORMAT } from '@documenso/lib/constants/date-formats';
 import { DEFAULT_DOCUMENT_TIME_ZONE } from '@documenso/lib/constants/time-zones';
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { DOCUMENT_AUDIT_LOG_TYPE, RECIPIENT_DIFF_TYPE } from '@documenso/lib/types/document-audit-logs';
 import type { RequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
@@ -16,7 +17,6 @@ import {
   WebhookTriggerEvents,
 } from '@prisma/client';
 import { DateTime } from 'luxon';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { jobs } from '../../jobs/client';
 import type { TRecipientAccessAuth } from '../../types/document-auth';
@@ -115,10 +115,12 @@ export const completeDocumentWithToken = async ({
   const legacyDocumentId = mapSecondaryIdToDocumentId(envelope.secondaryId);
 
   if (envelope.recipients.length === 0) {
-    throw new AppError(AppErrorCode.NOT_FOUND, {
-      message: `Document ${envelope.id} has no recipient with the provided token`,
-      statusCode: 404,
-    });
+    throw plainRefusal(
+      AppErrorCode.NOT_FOUND,
+      'This signing link is not valid.',
+      { envelopeId: envelope.id },
+      { statusCode: 404 },
+    );
   }
 
   const [recipient] = envelope.recipients;
@@ -128,10 +130,12 @@ export const completeDocumentWithToken = async ({
   // checked before the envelope status guard since the envelope may have
   // been completed and sealed by the recipient's original request.
   if (recipient.signingStatus === SigningStatus.SIGNED) {
-    throw new AppError(AppErrorCode.RECIPIENT_ALREADY_SIGNED, {
-      message: `Recipient ${recipient.id} has already signed`,
-      statusCode: 400,
-    });
+    throw plainRefusal(
+      AppErrorCode.RECIPIENT_ALREADY_SIGNED,
+      'You have already signed this document.',
+      { recipientId: recipient.id },
+      { statusCode: 400 },
+    );
   }
 
   if (envelope.status !== DocumentStatus.PENDING) {
@@ -144,10 +148,12 @@ export const completeDocumentWithToken = async ({
       [DocumentStatus.PENDING]: AppErrorCode.INVALID_REQUEST,
     };
 
-    throw new AppError(envelopeStatusErrorCode[envelope.status], {
-      message: `Document ${envelope.id} must be pending to be completed, found ${envelope.status}`,
-      statusCode: 400,
-    });
+    throw plainRefusal(
+      envelopeStatusErrorCode[envelope.status],
+      'This document can no longer be signed.',
+      { envelopeId: envelope.id, status: envelope.status },
+      { statusCode: 400 },
+    );
   }
 
   assertRecipientNotExpired(recipient);
@@ -176,10 +182,12 @@ export const completeDocumentWithToken = async ({
     });
 
     if (!isRecipientsTurn) {
-      throw new AppError(AppErrorCode.RECIPIENT_OUT_OF_TURN, {
-        message: `Recipient ${recipient.id} attempted to complete the document before it was their turn`,
-        statusCode: 400,
-      });
+      throw plainRefusal(
+        AppErrorCode.RECIPIENT_OUT_OF_TURN,
+        'It is not your turn to sign yet. You get an email when it is.',
+        { recipientId: recipient.id },
+        { statusCode: 400 },
+      );
     }
   }
 
@@ -200,9 +208,11 @@ export const completeDocumentWithToken = async ({
     }
 
     if (!recipient.email.trim()) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Recipient ${recipient.id} requires an email because they have auth requirements.`,
-      });
+      throw plainRefusal(
+        AppErrorCode.INVALID_REQUEST,
+        'An email address is needed to finish, because this document asks the signer to confirm who they are.',
+        { recipientId: recipient.id },
+      );
     }
 
     const isValid = await isRecipientAuthorized({
@@ -362,10 +372,12 @@ export const completeDocumentWithToken = async ({
   fields = fields.map((field) => changedFields.find((changedField) => changedField.id === field.id) ?? field);
 
   if (fieldsContainUnsignedRequiredVisibleField(fields)) {
-    throw new AppError(AppErrorCode.RECIPIENT_HAS_UNSIGNED_FIELDS, {
-      message: `Recipient ${recipient.id} has unsigned fields`,
-      statusCode: 400,
-    });
+    throw plainRefusal(
+      AppErrorCode.RECIPIENT_HAS_UNSIGNED_FIELDS,
+      'Fill in every required field before you finish.',
+      { recipientId: recipient.id },
+      { statusCode: 400 },
+    );
   }
 
   await prisma.$transaction(async (tx) => {
@@ -439,10 +451,12 @@ export const completeDocumentWithToken = async ({
         });
       }
 
-      throw new AppError(AppErrorCode.RECIPIENT_ALREADY_SIGNED, {
-        message: `Recipient ${recipient.id} has already signed`,
-        statusCode: 400,
-      });
+      throw plainRefusal(
+        AppErrorCode.RECIPIENT_ALREADY_SIGNED,
+        'You have already signed this document.',
+        { recipientId: recipient.id },
+        { statusCode: 400 },
+      );
     }
 
     if (recipientEmail !== recipient.email || recipientName !== recipient.name) {

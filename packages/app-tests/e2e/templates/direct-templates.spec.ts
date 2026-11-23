@@ -589,7 +589,8 @@ test('[DIRECT_TEMPLATES]: V1 direct template without signature fields shows inva
   await page.goto(formatDirectTemplatePath(template.directLink?.token || ''));
 
   await expect(page.getByRole('heading', { name: 'Invalid direct link template' })).toBeVisible();
-  await expect(page.getByText('This direct link template cannot be used because one or more signers')).toBeVisible();
+  // Solid Ten Sign (N-1): the visitor reads one plain line.
+  await expect(page.getByText('This form is not set up correctly. Contact the sender.')).toBeVisible();
 
   // The signing flow must not render.
   await expect(page.getByRole('heading', { name: 'General' })).not.toBeVisible();
@@ -612,7 +613,8 @@ test('[DIRECT_TEMPLATES]: V2 direct template without signature fields shows inva
   await page.goto(formatDirectTemplatePath(template.directLink?.token || ''));
 
   await expect(page.getByRole('heading', { name: 'Invalid direct link template' })).toBeVisible();
-  await expect(page.getByText('This direct link template cannot be used because one or more signers')).toBeVisible();
+  // Solid Ten Sign (N-1): the visitor reads one plain line.
+  await expect(page.getByText('This form is not set up correctly. Contact the sender.')).toBeVisible();
 
   // The signing flow (PDF canvas) must not render.
   await expect(page.locator('.konva-container canvas')).toHaveCount(0);

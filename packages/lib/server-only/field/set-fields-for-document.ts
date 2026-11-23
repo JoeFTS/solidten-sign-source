@@ -3,6 +3,7 @@ import { validateDropdownField } from '@documenso/lib/advanced-fields-validation
 import { validateNumberField } from '@documenso/lib/advanced-fields-validation/validate-number';
 import { validateRadioField } from '@documenso/lib/advanced-fields-validation/validate-radio';
 import { validateTextField } from '@documenso/lib/advanced-fields-validation/validate-text';
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import {
   FIELD_META_DEFAULT_VALUES,
@@ -19,7 +20,6 @@ import { createDocumentAuditLogData, diffFieldChanges } from '@documenso/lib/uti
 import { prisma } from '@documenso/prisma';
 import { EnvelopeType, type Field, FieldType } from '@prisma/client';
 import { isDeepEqual } from 'remeda';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapFieldToLegacyField } from '../../utils/fields';
@@ -93,16 +93,20 @@ export const setFieldsForDocument = async ({
     const foundEnvelopeItem = envelope.envelopeItems.find((envelopeItem) => envelopeItem.id === field.envelopeItemId);
 
     if (!foundEnvelopeItem) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Envelope item ${field.envelopeItemId} not found`,
-      });
+      throw plainRefusal(
+        AppErrorCode.INVALID_REQUEST,
+        'This document changed while you were editing it. Reload the page and try again.',
+        { envelopeItemId: field.envelopeItemId },
+      );
     }
 
     // Each field MUST have a recipient associated with it.
     if (!recipient) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Recipient not found for field ${field.id}`,
-      });
+      throw plainRefusal(
+        AppErrorCode.INVALID_REQUEST,
+        'This document changed while you were editing it. Reload the page and try again.',
+        { fieldId: field.id },
+      );
     }
 
     // Check whether the existing field can be modified.

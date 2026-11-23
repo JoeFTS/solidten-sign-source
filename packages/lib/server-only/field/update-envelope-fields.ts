@@ -1,3 +1,4 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import type { TFieldMetaSchema } from '@documenso/lib/types/field-meta';
 import { FIELD_META_DEFAULT_VALUES } from '@documenso/lib/types/field-meta';
@@ -5,7 +6,6 @@ import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-reques
 import { createDocumentAuditLogData, diffFieldChanges } from '@documenso/lib/utils/document-audit-logs';
 import { prisma } from '@documenso/prisma';
 import { EnvelopeType, type FieldType } from '@prisma/client';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapFieldToLegacyField } from '../../utils/fields';
@@ -75,18 +75,22 @@ export const updateEnvelopeFields = async ({
     const originalField = envelope.fields.find((existingField) => existingField.id === field.id);
 
     if (!originalField) {
-      throw new AppError(AppErrorCode.NOT_FOUND, {
-        message: `Field with id ${field.id} not found`,
-      });
+      throw plainRefusal(
+        AppErrorCode.NOT_FOUND,
+        'This document changed while you were editing it. Reload the page and try again.',
+        { fieldId: field.id },
+      );
     }
 
     const recipient = envelope.recipients.find((recipient) => recipient.id === originalField.recipientId);
 
     // Each field MUST have a recipient associated with it.
     if (!recipient) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Recipient attached to field ${field.id} not found`,
-      });
+      throw plainRefusal(
+        AppErrorCode.INVALID_REQUEST,
+        'This document changed while you were editing it. Reload the page and try again.',
+        { fieldId: field.id },
+      );
     }
 
     // Check whether the recipient associated with the field can be modified.

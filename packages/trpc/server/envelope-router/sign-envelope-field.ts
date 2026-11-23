@@ -1,6 +1,7 @@
 import { checkFieldValue } from '@documenso/lib/advanced-fields-validation/field-value-rules';
 import { isBase64Image } from '@documenso/lib/constants/signatures';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { assertActionAuthActorIsRecipient } from '@documenso/lib/server-only/document/assert-completion-actor';
 import { validateFieldAuth } from '@documenso/lib/server-only/document/validate-field-auth';
 import { lockEnvelopeForFieldWrite } from '@documenso/lib/server-only/field/lock-field-write';
@@ -10,6 +11,7 @@ import { findInPersonHostForRequest } from '@documenso/lib/server-only/in-person
 import { assertSenderNotDisabled } from '@documenso/lib/server-only/user/assert-user-not-disabled';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import { isRequiredField } from '@documenso/lib/utils/advanced-fields-helpers';
+import { describeFieldForUserAtStart } from '@documenso/lib/utils/describe-field';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
 import { extractFieldInsertionValues } from '@documenso/lib/utils/envelope-signing';
 import { getRecipientFieldsWhereInput } from '@documenso/lib/utils/recipient-queries';
@@ -17,7 +19,6 @@ import { assertRecipientNotExpired } from '@documenso/lib/utils/recipients';
 import { prisma } from '@documenso/prisma';
 import { DocumentStatus, FieldType, RecipientRole, SigningStatus } from '@prisma/client';
 import { match } from 'ts-pattern';
-
 import { procedure } from '../trpc';
 import {
   type TSignEnvelopeFieldValue,
@@ -69,8 +70,8 @@ export const signEnvelopeFieldRoute = procedure
     });
 
     if (!field) {
-      throw new AppError(AppErrorCode.NOT_FOUND, {
-        message: `Field ${fieldId} not found`,
+      throw plainRefusal(AppErrorCode.NOT_FOUND, 'This field is not part of this document any more. Reload the page.', {
+        fieldId,
       });
     }
 
@@ -80,9 +81,11 @@ export const signEnvelopeFieldRoute = procedure
     await assertSenderNotDisabled({ userId: envelope.userId });
 
     if (envelope.internalVersion !== 2) {
-      throw new AppError(AppErrorCode.NOT_FOUND, {
-        message: `Envelope ${envelope.id} is not a version 2 envelope`,
-      });
+      throw plainRefusal(
+        AppErrorCode.NOT_FOUND,
+        'This document cannot be signed on this page. Open the link from your email again.',
+        { envelopeId: envelope.id },
+      );
     }
 
     if (
@@ -102,14 +105,13 @@ export const signEnvelopeFieldRoute = procedure
     }
 
     if (envelope.deletedAt) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Document ${envelope.id} has been deleted`,
-      });
+      throw plainRefusal(AppErrorCode.INVALID_REQUEST, 'This document was deleted.', { envelopeId: envelope.id });
     }
 
     if (envelope.status !== DocumentStatus.PENDING) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Document ${envelope.id} must be pending for signing`,
+      throw plainRefusal(AppErrorCode.INVALID_REQUEST, 'This document can no longer be signed.', {
+        envelopeId: envelope.id,
+        status: envelope.status,
       });
     }
 
@@ -120,20 +122,20 @@ export const signEnvelopeFieldRoute = procedure
     assertRecipientNotExpired(field.recipient);
 
     if (recipient.signingStatus === SigningStatus.SIGNED || field.recipient.signingStatus === SigningStatus.SIGNED) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Recipient ${recipient.id} has already signed`,
+      throw plainRefusal(AppErrorCode.INVALID_REQUEST, 'You have already signed this document.', {
+        recipientId: recipient.id,
       });
     }
 
     if (field.fieldMeta?.readOnly) {
-      throw new AppError(AppErrorCode.INVALID_REQUEST, {
-        message: `Field ${fieldId} is read only`,
+      throw plainRefusal(AppErrorCode.INVALID_REQUEST, `${describeFieldForUserAtStart(field)} is read-only.`, {
+        fieldId,
       });
     }
 
     // Unreachable code based on the above query but we need to satisfy TypeScript
     if (field.recipientId === null) {
-      throw new Error(`Field ${fieldId} has no recipientId`);
+      throw new Error(`Field ${fieldId} has no recipientId`); // internal, never a user-facing refusal
     }
 
     const fieldRecipientId = field.recipientId;
@@ -253,8 +255,8 @@ export const signEnvelopeFieldRoute = procedure
 
     if (field.type === FieldType.SIGNATURE) {
       if (fieldValue.type !== FieldType.SIGNATURE) {
-        throw new AppError(AppErrorCode.INVALID_REQUEST, {
-          message: `Field ${fieldId} is not a signature field`,
+        throw plainRefusal(AppErrorCode.INVALID_REQUEST, `${describeFieldForUserAtStart(field)} takes a signature.`, {
+          fieldId,
         });
       }
 

@@ -1,6 +1,7 @@
 import MailChecker from 'mailchecker';
 
 import { env } from '../utils/env';
+import { isPasswordSignupAvailable } from '../utils/password-signin-availability';
 import { NEXT_PUBLIC_WEBAPP_URL } from './app';
 
 export const SALT_ROUNDS = 12;
@@ -172,6 +173,11 @@ export const isDisposableEmail = (email: string, additionalBlockedDomains: strin
 export const isSignupEnabledForProvider = (provider: 'email' | 'google' | 'microsoft' | 'oidc'): boolean => {
   if (env('NEXT_PUBLIC_DISABLE_SIGNUP') === 'true') {
     return false;
+  }
+
+  // Solid Ten Sign (M): e-mail sign-up sets a password, which is useless when password sign-in is off.
+  if (provider === 'email') {
+    return isPasswordSignupAvailable();
   }
 
   const flagMap = {

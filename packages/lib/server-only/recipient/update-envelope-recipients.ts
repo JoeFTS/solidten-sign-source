@@ -1,3 +1,4 @@
+import { plainRefusal } from '@documenso/lib/errors/plain-refusal';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import type { TRecipientAccessAuthTypes } from '@documenso/lib/types/document-auth';
 import { type TRecipientActionAuthTypes, ZRecipientAuthOptionsSchema } from '@documenso/lib/types/document-auth';
@@ -6,12 +7,12 @@ import { createDocumentAuditLogData, diffRecipientChanges } from '@documenso/lib
 import { createRecipientAuthOptions } from '@documenso/lib/utils/document-auth';
 import { prisma } from '@documenso/prisma';
 import { EnvelopeType, RecipientRole, SendStatus, SigningStatus } from '@prisma/client';
-
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { extractLegacyIds } from '../../universal/id';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapFieldToLegacyField } from '../../utils/fields';
 import { canRecipientBeModified } from '../../utils/recipients';
+import { assertPasswordActionAuthAllowed } from '../auth/assert-password-action-auth';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
 import { lockEnvelopeForRecipientChange } from '../envelope/envelope-transition-lock';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
@@ -131,9 +132,11 @@ export const updateEnvelopeRecipients = async ({
     const originalRecipient = envelope.recipients.find((existingRecipient) => existingRecipient.id === recipient.id);
 
     if (!originalRecipient) {
-      throw new AppError(AppErrorCode.NOT_FOUND, {
-        message: `Recipient with id ${recipient.id} not found`,
-      });
+      throw plainRefusal(
+        AppErrorCode.NOT_FOUND,
+        'This document changed while you were editing it. Reload the page and try again.',
+        { recipientId: recipient.id },
+      );
     }
 
     if (!canRecipientBeModified(originalRecipient, envelope.fields)) {
@@ -176,6 +179,9 @@ export const updateEnvelopeRecipients = async ({
         let authOptions = ZRecipientAuthOptionsSchema.parse(originalRecipient.authOptions);
 
         if (updateData.actionAuth !== undefined || updateData.accessAuth !== undefined) {
+          // Solid Ten Sign (N-5): a stored "Require password" may stay; a new one is refused.
+          assertPasswordActionAuthAllowed(updateData.actionAuth, authOptions.actionAuth);
+
           authOptions = createRecipientAuthOptions({
             accessAuth: updateData.accessAuth || authOptions.accessAuth,
             actionAuth: updateData.actionAuth || authOptions.actionAuth,

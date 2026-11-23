@@ -31,6 +31,7 @@ import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import { shouldShowNewAccountWarning } from '../../../utils/sender-trust';
 import type { JobRunIO } from '../../client/_internal/job';
 import { runTaskAtMostOnce } from '../../client/at-most-once-task';
+import { recordEmailStoppedByLimit } from '../solidten/email-limit-drop';
 import type { TProcessSigningReminderJobDefinition } from './process-signing-reminder';
 import { countReminder, createCutOffReminderRecorder, readReminderCount } from './reminder-count';
 import { getReminderLeaseUntil, stopReminders } from './reminder-lease';
@@ -235,13 +236,16 @@ export const run = async ({ payload, io }: { payload: TProcessSigningReminderJob
         count: 1,
       })
         .then(() => false)
-        .catch((_err) => {
+        .catch(async (_err) => {
           io.logger.warn({
             msg: 'Signing reminder dropped: org email limit exceeded',
             organisationId,
             recipientId: recipient.id,
             envelopeId: envelope.id,
           });
+
+          // Solid Ten Sign (N-6): not silent: one audit entry per reminder not sent.
+          await recordEmailStoppedByLimit({ envelopeId: envelope.id, recipient, emailType: 'REMINDER' });
 
           return true;
         }));

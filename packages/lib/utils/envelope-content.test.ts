@@ -260,7 +260,8 @@ describe('buildEnvelopeContentCopyData', () => {
       });
 
     expect(build).toThrow(AppError);
-    expect(build).toThrow('item_orphan');
+    // Solid Ten Sign (N-3): the message is plain; the item id goes to the server log.
+    expect(build).toThrow('A content block could not be copied because its file was not copied.');
   });
 });
 

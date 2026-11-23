@@ -4,6 +4,7 @@ import { EnvelopeType } from '@prisma/client';
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { mapSecondaryIdToTemplateId } from '../../utils/envelope';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
+import { assertFieldLogicReadyToSend } from '../field-logic/assert-field-logic';
 
 export type ToggleTemplateDirectLinkOptions = {
   templateId: number;
@@ -47,6 +48,15 @@ export const toggleTemplateDirectLink = async ({
   if (!directLink) {
     throw new AppError(AppErrorCode.NOT_FOUND, {
       message: 'Direct template link not found',
+    });
+  }
+
+  // Solid Ten Sign (N-1): a link is only turned on when a visitor can submit it.
+  if (enabled && !directLink.enabled) {
+    assertFieldLogicReadyToSend({
+      envelope,
+      fields: await prisma.field.findMany({ where: { envelopeId: envelope.id } }),
+      recipients: envelope.recipients,
     });
   }
 

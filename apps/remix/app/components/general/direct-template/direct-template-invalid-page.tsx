@@ -25,10 +25,7 @@ export const DirectTemplateInvalidPageView = ({ reason }: DirectTemplateInvalidP
         <p className="mt-2 text-muted-foreground text-sm">
           {match(reason)
             .with('MISSING_SIGNATURE_FIELD', () => (
-              <Trans>
-                This direct link template cannot be used because one or more signers do not have a signature field
-                assigned. Please contact the sender to update the template.
-              </Trans>
+              <Trans>This form is not set up correctly. Contact the sender.</Trans>
             ))
             .with('MISSING_CONTENT_IMAGE', () => (
               <Trans>

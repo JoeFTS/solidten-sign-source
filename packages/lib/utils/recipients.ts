@@ -7,6 +7,7 @@ import { AppError, AppErrorCode } from '../errors/app-error';
 import type { TEditorEnvelope } from '../types/envelope-editor';
 import type { TRecipientLite } from '../types/recipient';
 import { extractLegacyIds } from '../universal/id';
+import { readFieldLogicMeta } from './field-conditions';
 import { zEmail } from './zod';
 
 /**
@@ -162,12 +163,17 @@ export const normalizeRecipientSigningOrders = <T extends RecipientWithSigningOr
  */
 export const getRecipientsWithMissingFields = <T extends Pick<TRecipientLite, 'id' | 'role'>>(
   recipients: T[],
-  fields: Pick<Field, 'type' | 'recipientId'>[],
+  fields: (Pick<Field, 'type' | 'recipientId'> & { fieldMeta?: unknown })[],
 ): T[] => {
   return recipients.filter((recipient) => {
     if (recipient.role === RecipientRole.SIGNER) {
+      // Solid Ten Sign (N-1): a signature field with a condition may be hidden, so it does not
+      // count. The same rule as assertFieldLogicReadyToSend.
       const hasSignatureField = fields.some(
-        (field) => field.recipientId === recipient.id && isSignatureFieldType(field.type),
+        (field) =>
+          field.recipientId === recipient.id &&
+          isSignatureFieldType(field.type) &&
+          !readFieldLogicMeta(field.fieldMeta).condition,
       );
 
       return !hasSignatureField;
