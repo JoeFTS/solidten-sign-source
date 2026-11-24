@@ -20,6 +20,7 @@ import { prepareRecipientEmailChanges } from '../recipient-reassign/recipient-em
 import { assertCompatibleRecipientGrouping } from '../signature-level/assert-compatible-recipient-grouping';
 import { assertCompatibleRecipientRole } from '../signature-level/assert-compatible-recipient-role';
 import { assertAssistantRolesAllowedOnEnvelope } from './assert-assistant-signing-order';
+import { assertRecipientChangeAllowed, keepsRecipientStatus } from './assert-recipient-change-allowed';
 
 export interface UpdateEnvelopeRecipientsOptions {
   userId: number;
@@ -120,6 +121,11 @@ export const updateEnvelopeRecipients = async ({
   const recipientsToUpdate = recipients.map((recipient) => {
     const originalRecipient = envelope.recipients.find((existingRecipient) => existingRecipient.id === recipient.id);
 
+    // Solid Ten Sign (R-1): the one recipient-change check (email and role of a completed recipient).
+    if (originalRecipient) {
+      assertRecipientChangeAllowed(originalRecipient, { email: recipient.email, role: recipient.role });
+    }
+
     if (!originalRecipient) {
       throw plainRefusal(
         AppErrorCode.NOT_FOUND,
@@ -197,10 +203,9 @@ export const updateEnvelopeRecipients = async ({
             role: mergedRecipient.role,
             signingOrder: mergedRecipient.signingOrder,
             envelopeId: envelope.id,
-            // Solid Ten Sign (Q-4): a recipient whose role does not change keeps its send and
-            // signing status (a name or auth edit on a sent document is not a new send).
-            ...(originalRecipient.role === mergedRecipient.role &&
-            originalRecipient.email.toLowerCase() === mergedRecipient.email.toLowerCase()
+            // Solid Ten Sign (Q-4, R-3): keep the send and signing status unless the email changes or
+            // the role moves to or from CC (keepsRecipientStatus).
+            ...(keepsRecipientStatus(originalRecipient, mergedRecipient)
               ? {}
               : {
                   sendStatus: mergedRecipient.role === RecipientRole.CC ? SendStatus.SENT : SendStatus.NOT_SENT,

@@ -380,6 +380,9 @@ test.describe('[LOAD] LD-M4 signing calls have their own limit', () => {
     page,
     request,
   }) => {
+    // Test set-up (R): it needs real limits, like the 429 test above.
+    test.skip(process.env.DANGEROUS_BYPASS_RATE_LIMITS === 'true', 'Rate limits are bypassed');
+
     const owner = await createOwner();
     const { envelope } = await createAndSend(request, owner, uniqueEmail('page'), {
       fieldCount: 2,

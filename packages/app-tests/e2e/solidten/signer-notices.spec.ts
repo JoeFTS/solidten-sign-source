@@ -86,7 +86,7 @@ test('[SIGNER_NOTICES]: a cancelled document shows a cancelled page instead of t
   await page.goto(`/sign/${recipient.token}`);
 
   await expect(page).toHaveURL(new RegExp(`/sign/${recipient.token}/cancelled$`));
-  await expect(page.getByRole('heading', { name: 'This document was cancelled' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'This document was canceled' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reject Document' })).toHaveCount(0);
 
   // Opening a cancelled document is not recorded as the signer opening it.
@@ -107,7 +107,7 @@ test('[SIGNER_NOTICES]: the cancelled page also covers version-1 documents and i
 
   await page.goto(`/sign/${recipient.token}`);
   await expect(page).toHaveURL(new RegExp(`/sign/${recipient.token}/cancelled$`));
-  await expect(page.getByRole('heading', { name: 'This document was cancelled' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'This document was canceled' })).toBeVisible();
 });
 
 /**
@@ -210,5 +210,5 @@ test('[SIGNER_NOTICES]: a signing page left open when the document is cancelled 
   }
 
   await expect(page).toHaveURL(new RegExp(`/sign/${recipient.token}/cancelled$`), { timeout: 30_000 });
-  await expect(page.getByRole('heading', { name: 'This document was cancelled' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'This document was canceled' })).toBeVisible();
 });

@@ -1175,11 +1175,20 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
       };
     }
 
+    // Solid Ten Sign (R): each closed state gives its own reason (before: "Document is already
+    // completed" also for a declined or cancelled document).
     if (isDocumentCompleted(envelope.status)) {
+      const closedMessage =
+        envelope.status === DocumentStatus.REJECTED
+          ? 'This document was declined, so recipients can no longer be added.'
+          : envelope.status === DocumentStatus.CANCELLED
+            ? 'This document was cancelled, so recipients can no longer be added.'
+            : 'Document is already completed';
+
       return {
         status: 400,
         body: {
-          message: 'Document is already completed',
+          message: closedMessage,
         },
       };
     }
@@ -1374,11 +1383,13 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
     // was not used: a recipient of any envelope of the team, a template's too, could be removed).
     const owner = await findV1DocumentOwning(user.id, team.id, documentId, { recipientId: Number(recipientId) });
 
+    // A document that is not this team's keeps the old answer (401); a recipient not on it is 404.
+    if (owner === 'no-document') {
+      return { status: 401, body: { message: 'Document not found' } };
+    }
+
     if (owner !== 'ok') {
-      return {
-        status: 404,
-        body: { message: owner === 'no-document' ? 'Document not found' : 'Recipient not found' },
-      };
+      return { status: 404, body: { message: 'Recipient not found' } };
     }
 
     const deletedRecipient = await deleteEnvelopeRecipient({
@@ -1495,7 +1506,7 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
             const { recipientId, type, pageNumber, pageWidth, pageHeight, pageX, pageY, fieldMeta } = fieldData;
 
             if (pageNumber <= 0) {
-              throw new Error('Invalid page number');
+              throw new AppError(AppErrorCode.INVALID_BODY, { message: 'Invalid page number' });
             }
 
             const recipient = await tx.recipient.findFirst({
@@ -1506,23 +1517,27 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
             });
 
             if (!recipient) {
-              throw new Error('Recipient not found');
+              // Solid Ten Sign (R-2b): a recipient of another envelope is a 404, not a 500.
+              throw new AppError(AppErrorCode.NOT_FOUND, { message: 'Recipient not found' });
             }
 
             if (recipient.signingStatus === SigningStatus.SIGNED) {
-              throw new Error('Recipient has already signed the document');
+              throw new AppError(AppErrorCode.INVALID_BODY, { message: 'Recipient has already signed the document' });
             }
 
             const advancedField = ['NUMBER', 'RADIO', 'CHECKBOX', 'DROPDOWN', 'TEXT'].includes(type);
 
             if (advancedField && !fieldMeta) {
-              throw new Error(
-                'Field meta is required for this type of field. Please provide the appropriate field meta object.',
-              );
+              throw new AppError(AppErrorCode.INVALID_BODY, {
+                message:
+                  'Field meta is required for this type of field. Please provide the appropriate field meta object.',
+              });
             }
 
             if (fieldMeta && fieldMeta.type.toLowerCase() !== String(type).toLowerCase()) {
-              throw new Error('Field meta type does not match the field type');
+              throw new AppError(AppErrorCode.INVALID_BODY, {
+                message: 'Field meta type does not match the field type',
+              });
             }
 
             const result = match(type)
@@ -1543,7 +1558,7 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
               .exhaustive();
 
             if (!result.success) {
-              throw new Error('Field meta parsing failed');
+              throw new AppError(AppErrorCode.INVALID_BODY, { message: 'Field meta parsing failed' });
             }
 
             const field = await tx.field.create({
@@ -1770,8 +1785,14 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
     // both; a v1 document route only ever looks up "document_<n>".
     const owner = await findV1DocumentOwning(user.id, team.id, unverifiedDocumentId, { fieldId: Number(fieldId) });
 
+    // A document that is not this team's keeps the old answer (401), which callers rely on so as
+    // not to learn whether it exists; a field that is not on the document is a 404.
+    if (owner === 'no-document') {
+      return { status: 401, body: { message: 'Document not found' } };
+    }
+
     if (owner !== 'ok') {
-      return { status: 404, body: { message: owner === 'no-document' ? 'Document not found' : 'Field not found' } };
+      return { status: 404, body: { message: 'Field not found' } };
     }
 
     const deletedField = await deleteDocumentField({

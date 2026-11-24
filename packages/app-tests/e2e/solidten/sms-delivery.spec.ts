@@ -544,7 +544,8 @@ test('[SMS][S-M4]: only allowed countries, only admins set the sender name, a te
 
   const turnOn = await trpcPost('sms.updateTeamSettings', { teamId: team.id, enabled: true });
   expect(turnOn.ok()).toBe(false);
-  expect(await turnOn.text()).toContain('off for your organisation');
+  // A-5: US spelling.
+  expect(await turnOn.text()).toContain('off for your organization');
 
   const label = await trpcPost('sms.updateTeamSettings', {
     teamId: team.id,
@@ -552,7 +553,7 @@ test('[SMS][S-M4]: only allowed countries, only admins set the sender name, a te
     senderLabel: 'Chase Bank',
   });
   expect(label.ok()).toBe(false);
-  expect(await label.text()).toContain('Only an organisation admin');
+  expect(await label.text()).toContain('Only an organization admin');
 
   // Turning texts off for the team is fine.
   const turnOff = await trpcPost('sms.updateTeamSettings', { teamId: team.id, enabled: false });
@@ -578,7 +579,7 @@ test('[SMS][S-M4]: only allowed countries, only admins set the sender name, a te
     senderLabel: 'Chase Bank',
   });
   expect(orgLabel.ok()).toBe(false);
-  expect(await orgLabel.text()).toContain('Only an organisation admin');
+  expect(await orgLabel.text()).toContain('Only an organization admin');
   expect(
     (await prisma.organisationSmsSettings.findUnique({ where: { organisationId: organisation.id } }))?.senderLabel,
   ).toBe('Acme Sign');

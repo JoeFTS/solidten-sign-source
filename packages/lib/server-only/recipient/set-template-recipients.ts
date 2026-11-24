@@ -16,6 +16,7 @@ import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { assertCompatibleRecipientGrouping } from '../signature-level/assert-compatible-recipient-grouping';
 import { assertCompatibleRecipientRole } from '../signature-level/assert-compatible-recipient-role';
 import { assertAssistantRolesAllowedOnEnvelope } from './assert-assistant-signing-order';
+import { assertRecipientChangeAllowed } from './assert-recipient-change-allowed';
 import { resolveReplacedRecipientSigningOrders } from './assign-omitted-recipient-signing-orders';
 
 export type SetTemplateRecipientsOptions = {
@@ -97,6 +98,20 @@ export const setTemplateRecipients = async ({ userId, teamId, id, recipients }: 
   const removedRecipients = existingRecipients.filter(
     (existingRecipient) => !normalizedRecipients.find((recipient) => recipient.id === existingRecipient.id),
   );
+
+  // Solid Ten Sign (R-1): the one recipient-change check. A recipient who completed their part is
+  // not removed, and keeps their email and role.
+  for (const removed of removedRecipients) {
+    assertRecipientChangeAllowed(removed, 'remove');
+  }
+
+  for (const recipient of normalizedRecipients) {
+    const existing = existingRecipients.find((existingRecipient) => existingRecipient.id === recipient.id);
+
+    if (existing) {
+      assertRecipientChangeAllowed(existing, { email: recipient.email, role: recipient.role });
+    }
+  }
 
   if (envelope.directLink !== null) {
     const updatedDirectRecipient = recipients.find(

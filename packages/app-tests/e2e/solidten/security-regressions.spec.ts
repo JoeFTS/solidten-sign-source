@@ -26,6 +26,7 @@ import { generateHOTP } from 'oslo/otp';
 import { apiSeedPendingDocument } from '../fixtures/api-seeds';
 import { apiSignin, WEBAPP_ORIGIN_HEADERS } from '../fixtures/authentication';
 import { getCanvasBox, getPageCanvas } from '../fixtures/contents';
+import { healthHeaders } from '../fixtures/health';
 import { waitForHydration } from '../fixtures/hydration';
 
 const WEBAPP_BASE_URL = NEXT_PUBLIC_WEBAPP_URL();
@@ -702,7 +703,7 @@ test('[CAPS]: a reached server-wide cap is recorded once a day and shown in /api
 
   expect(await prisma.rateLimit.count({ where: { action: 'st.server-cap-reached', key: 'cap:SMS', bucket } })).toBe(1);
 
-  const health = await request.get(`${WEBAPP_BASE_URL}/api/health`);
+  const health = await request.get(`${WEBAPP_BASE_URL}/api/health`, { headers: healthHeaders() });
   expect((await health.json()).capsReachedToday).toContain('SMS');
 
   await prisma.rateLimit.deleteMany({ where: { action: 'st.server-cap-reached', key: 'cap:SMS', bucket } });
@@ -741,7 +742,7 @@ test('[HEALTH]: /api/health shows its detail only to monitoring, not to outside 
   expect(outsideBody).not.toHaveProperty('pdfQueue');
 
   // A direct local call (no proxy header) still gets the detail when no token is configured.
-  const local = await (await request.get(`${WEBAPP_BASE_URL}/api/health`)).json();
+  const local = await (await request.get(`${WEBAPP_BASE_URL}/api/health`, { headers: healthHeaders() })).json();
   expect(local).toHaveProperty('jobs');
   expect(local).toHaveProperty('pdfQueue');
 });

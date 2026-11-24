@@ -13,6 +13,7 @@ import { buildTeamWhereQuery } from '../../utils/teams';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
 import { lockEnvelopeForRecipientChange } from '../envelope/envelope-transition-lock';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
+import { assertRecipientChangeAllowed } from './assert-recipient-change-allowed';
 
 export interface DeleteEnvelopeRecipientOptions {
   userId: number;
@@ -88,6 +89,9 @@ export const deleteEnvelopeRecipient = async ({
       message: 'Recipient not found',
     });
   }
+
+  // Solid Ten Sign (R-1): the one recipient-change check, with a message that names the person.
+  assertRecipientChangeAllowed(recipientToDelete, 'remove');
 
   if (!canRecipientBeModified(recipientToDelete, recipientToDelete.fields)) {
     throw new AppError(AppErrorCode.INVALID_REQUEST, {

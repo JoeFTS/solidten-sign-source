@@ -17,6 +17,7 @@ import { createDocumentAuditLogData } from '../../utils/document-audit-logs';
 import { mapSecondaryIdToDocumentId } from '../../utils/envelope';
 import { getRecipientsInActiveSigningStep, isRecipientTurnBySigningOrder } from '../../utils/recipient-groups';
 import { assertEnvelopeMutable } from '../envelope/assert-envelope-mutable';
+import { assertRecipientChangeAllowed } from '../recipient/assert-recipient-change-allowed';
 
 export type AdminDeleteRecipientOptions = {
   recipientId: number;
@@ -73,6 +74,9 @@ export const adminDeleteRecipient = async ({ recipientId, reason, requestMetadat
       message: 'Document already complete',
     });
   }
+
+  // Solid Ten Sign (R-1): the one recipient-change check.
+  assertRecipientChangeAllowed(recipient, 'remove');
 
   if (recipient.signingStatus === SigningStatus.SIGNED) {
     throw new AppError(AppErrorCode.INVALID_REQUEST, {

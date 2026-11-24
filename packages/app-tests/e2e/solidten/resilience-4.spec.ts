@@ -16,6 +16,7 @@ import type { APIRequestContext } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { apiSignin, WEBAPP_ORIGIN_HEADERS } from '../fixtures/authentication';
+import { healthHeaders } from '../fixtures/health';
 
 /**
  * Solid Ten: database outages and full disks (DISK-L1, DISK-L2, DISK-I1), round 5 additions.
@@ -305,7 +306,7 @@ test.describe('[RESILIENCE-4] DISK-L2 health while writes fail', () => {
     const owner = await createOwner();
 
     const health = async () => {
-      const res = await request.get(`${WEBAPP_BASE_URL}/api/health`);
+      const res = await request.get(`${WEBAPP_BASE_URL}/api/health`, { headers: healthHeaders() });
 
       return { status: res.status(), body: await res.json() };
     };

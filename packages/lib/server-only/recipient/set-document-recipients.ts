@@ -25,6 +25,7 @@ import { assertCompatibleRecipientGrouping } from '../signature-level/assert-com
 import { assertCompatibleRecipientRole } from '../signature-level/assert-compatible-recipient-role';
 import { assertAssistantRolesAllowedOnEnvelope } from './assert-assistant-signing-order';
 import { assertNewRecipientEmailsAvailable } from './assert-new-recipient-emails';
+import { assertRecipientChangeAllowed, keepsRecipientStatus } from './assert-recipient-change-allowed';
 import { resolveReplacedRecipientSigningOrders } from './assign-omitted-recipient-signing-orders';
 
 export interface SetDocumentRecipientsOptions {
@@ -128,6 +129,20 @@ export const setDocumentRecipients = async ({
     (existingRecipient) => !normalizedRecipients.find((recipient) => recipient.id === existingRecipient.id),
   );
 
+  // Solid Ten Sign (R-1): the one recipient-change check. A recipient who completed their part is
+  // not removed, and keeps their email and role.
+  for (const removed of removedRecipients) {
+    assertRecipientChangeAllowed(removed, 'remove');
+  }
+
+  for (const recipient of normalizedRecipients) {
+    const existing = existingRecipients.find((existingRecipient) => existingRecipient.id === recipient.id);
+
+    if (existing) {
+      assertRecipientChangeAllowed(existing, { email: recipient.email, role: recipient.role });
+    }
+  }
+
   const linkedRecipients = normalizedRecipients.map((recipient) => {
     const existing = existingRecipients.find((existingRecipient) => existingRecipient.id === recipient.id);
 
@@ -211,12 +226,10 @@ export const setDocumentRecipients = async ({
             role: recipient.role,
             signingOrder: recipient.signingOrder,
             envelopeId: envelope.id,
-            // Solid Ten Sign (Q-4): an existing recipient whose role does not change keeps its send
-            // and signing status (before: a save of a sent document marked every unchanged
-            // recipient NOT_SENT). A new email resets it below (resetDataFor).
-            ...(recipient._persisted &&
-            recipient._persisted.role === recipient.role &&
-            recipient._persisted.email.toLowerCase() === recipient.email.toLowerCase()
+            // Solid Ten Sign (Q-4, R-3): an existing recipient keeps its send and signing status
+            // unless the email changes or the role moves to or from CC (keepsRecipientStatus).
+            // Before: a save of a sent document marked every kept recipient NOT_SENT.
+            ...(recipient._persisted && keepsRecipientStatus(recipient._persisted, recipient)
               ? {}
               : {
                   sendStatus: recipient.role === RecipientRole.CC ? SendStatus.SENT : SendStatus.NOT_SENT,

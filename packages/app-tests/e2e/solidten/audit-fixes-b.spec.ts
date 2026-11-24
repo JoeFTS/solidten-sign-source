@@ -25,6 +25,7 @@ import type { APIRequestContext } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { apiSignin, apiSignout, WEBAPP_ORIGIN_HEADERS } from '../fixtures/authentication';
+import { healthHeaders } from '../fixtures/health';
 
 /**
  * Solid Ten: regression tests for the audit fixes of 11/21 (builder B). Each test names its finding.
@@ -107,7 +108,7 @@ const createEnvelopeWithPdf = async (
 
 /** The app still answers: the health route and a small ordinary upload. */
 const expectAppAlive = async (request: APIRequestContext, owner: Owner) => {
-  const health = await request.get(`${WEBAPP_BASE_URL}/api/health`, { timeout: 30_000 });
+  const health = await request.get(`${WEBAPP_BASE_URL}/api/health`, { timeout: 30_000, headers: healthHeaders() });
   expect(health.status()).toBe(200);
 
   const control = await createEnvelopeWithPdf(request, owner, buildPdf(0));
@@ -122,7 +123,7 @@ const expectTooComplex = async (res: Awaited<ReturnType<APIRequestContext['post'
 
 /** Uploads that ran in a PDF child, from the /api/health detail (a local call sees it). */
 const getPdfChildRuns = async (request: APIRequestContext) => {
-  const res = await request.get(`${WEBAPP_BASE_URL}/api/health`, { timeout: 30_000 });
+  const res = await request.get(`${WEBAPP_BASE_URL}/api/health`, { timeout: 30_000, headers: healthHeaders() });
   const body = (await res.json()) as { pdfChild?: { runs: number } };
 
   return body.pdfChild?.runs ?? 0;

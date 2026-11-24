@@ -406,12 +406,18 @@ test('Q-4: adding a recipient through API v1 on a sent document leaves the first
   expect(sign.ok(), await sign.text()).toBe(true);
 
   // A completed or cancelled document: a plain 400.
-  for (const status of ['COMPLETED', 'REJECTED'] as const) {
+  // R: each closed state gives its true reason.
+  for (const [status, reason] of [
+    ['COMPLETED', 'Document is already completed'],
+    ['REJECTED', 'This document was declined, so recipients can no longer be added.'],
+    ['CANCELLED', 'This document was cancelled, so recipients can no longer be added.'],
+  ] as const) {
     await prisma.envelope.update({ where: { id: envelope.id }, data: { status } });
     const refused = await request.post(`${BASE}/api/v1/documents/${documentId}/recipients`, {
       headers: { Authorization: `Bearer ${context.token}` },
       data: { name: 'Late', email: `q4-late-${Date.now()}@example.com`, role: 'SIGNER' },
     });
     expect(refused.status(), status).toBe(400);
+    expect(await messageOf(refused), status).toBe(reason);
   }
 });

@@ -265,7 +265,8 @@ test('[AUD-C2]: an uninsert that is writing when the signer completes wins, and 
 
   expect(after.field.inserted).toBe(false);
   expect(after.recipient.signingStatus).toBe(SigningStatus.NOT_SIGNED);
-  expect(String(completion)).toContain('unsigned fields');
+  // N-3: the plain text (was "Recipient <id> has unsigned fields").
+  expect(String(completion)).toContain('Fill in every required field before you finish.');
 });
 
 test('[AUD-C2]: a field write that arrives while the signer completes is refused under the lock', async ({

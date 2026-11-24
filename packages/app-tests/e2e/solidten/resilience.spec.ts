@@ -225,7 +225,7 @@ test.describe('[RESILIENCE] R-C1 cancel against the last signature', () => {
 
     const cancelRes = await cancelViaApi(request, owner, envelopeId);
     expect(cancelRes.status()).toBe(400);
-    expect(await cancelRes.text()).toContain('being finalised');
+    expect(await cancelRes.text()).toContain('being finalized');
 
     const deleteRes = await request.post(`${apiUrl}/envelope/delete`, {
       headers: owner.authHeaders,

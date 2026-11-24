@@ -31,9 +31,41 @@ tsRestHonoApp
 // its ORIGINAL url. It must be rebuilt, not passed through: under @hono/node-server 2.x the original
 // is that library's own lightweight request object, and ts-rest's `new Request(request)` then throws
 // ("Cannot read private member #state"), which answered 500 on every v1 route.
+/**
+ * Solid Ten Sign (R-2a): a request that says "content-type: application/json" but whose body is
+ * empty or not valid JSON made ts-rest fail to parse it and answer 500 "Server Error" on any v1
+ * route. It is answered here, in one place, with a plain 400.
+ */
+export const INVALID_JSON_BODY_MESSAGE =
+  'The request body is not valid JSON. Send a JSON body, or leave out the "content-type: application/json" header when there is no body.';
+
+const refuseInvalidJsonBody = async (request: Request): Promise<Response | null> => {
+  const contentType = request.headers.get('content-type') ?? '';
+
+  if (!/application\/json/i.test(contentType) || request.method === 'GET' || request.method === 'HEAD') {
+    return null;
+  }
+
+  const body = await request.clone().text();
+
+  try {
+    JSON.parse(body);
+
+    return null;
+  } catch {
+    return Response.json({ message: INVALID_JSON_BODY_MESSAGE }, { status: 400 });
+  }
+};
+
 tsRestHonoApp.mount(
   '/',
   async (request) => {
+    const invalidBody = await refuseInvalidJsonBody(request);
+
+    if (invalidBody) {
+      return invalidBody;
+    }
+
     return fetchRequestHandler({
       request,
       contract: ApiContractV1,

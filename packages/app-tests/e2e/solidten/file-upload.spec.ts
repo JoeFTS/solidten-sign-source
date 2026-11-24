@@ -691,7 +691,8 @@ test.describe('Solid Ten signer file upload', () => {
     const hidden = await uploadFile(request, { token, fieldId: proof.id, file: pdfFile() });
 
     expect(hidden.ok()).toBe(false);
-    expect(await hidden.text()).toContain('condition');
+    // N-3: the plain text names the field (was "... hidden because its condition is not met").
+    expect(await hidden.text()).toContain('is hidden by an answer you gave, so it cannot be filled in.');
 
     await expectOk(signFieldWithRequest(request, token, checkbox.id, { type: FieldType.CHECKBOX, value: [0] }));
     await expectOk(uploadFile(request, { token, fieldId: proof.id, file: pdfFile() }));

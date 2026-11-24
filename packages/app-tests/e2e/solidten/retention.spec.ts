@@ -457,7 +457,7 @@ test('[RETENTION][S-M3]: purge rules need an admin, 30 days, a recorded change a
     team.id,
   );
   expect(byManager.ok()).toBe(false);
-  expect(await byManager.text()).toContain('Only a team or organisation admin');
+  expect(await byManager.text()).toContain('Only a team or organization admin');
 
   // A soft-delete rule is still a manager's choice, and it is recorded.
   const softByManager = await trpcRequest(
@@ -736,7 +736,7 @@ test('[RETENTION][RT2-M1]: going back to "inherit" a purge rule needs an admin a
     team.id,
   );
   expect(byManager.ok()).toBe(false);
-  expect(await byManager.text()).toContain('Only a team or organisation admin');
+  expect(await byManager.text()).toContain('Only a team or organization admin');
 
   // An admin can, and the purge then waits 7 days from this change.
   await page.context().clearCookies();
