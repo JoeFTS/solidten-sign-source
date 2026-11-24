@@ -8,6 +8,16 @@
  */
 const MARKER = /ST_DIRECT_LINK_FIXED_SIGNATURE:([^\n"]*)/;
 const SIGNER_MARKER = /ST_DIRECT_LINK_SIGNER:(removed|role)/;
+const ENABLE_MARKER = /ST_DIRECT_LINK_ENABLE:(missing|role|signature)/;
+
+/** Solid Ten Sign (Q-1): a link can only be turned on when a visitor can use it. */
+export const DIRECT_LINK_ENABLE_MESSAGES = {
+  missing:
+    'The direct link cannot be turned on: its signer no longer exists. Choose a signer for the direct link first.',
+  role: 'The direct link cannot be turned on: the direct link signer must be a signer. Change their role back to signer first.',
+  signature:
+    'The direct link cannot be turned on: the direct link signer needs at least one signature field without a condition.',
+} as const;
 
 /** Solid Ten Sign (P-2): the direct signer must stay a signer while the link is on. */
 export const DIRECT_LINK_SIGNER_REMOVED_MESSAGE =
@@ -40,6 +50,11 @@ export const readDirectLinkSignatureRefusal = (error: unknown): string | null =>
     const match = typeof message === 'string' ? MARKER.exec(message) : null;
 
     const signerMatch = typeof message === 'string' ? SIGNER_MARKER.exec(message) : null;
+    const enableMatch = typeof message === 'string' ? ENABLE_MARKER.exec(message) : null;
+
+    if (enableMatch) {
+      return DIRECT_LINK_ENABLE_MESSAGES[enableMatch[1] as keyof typeof DIRECT_LINK_ENABLE_MESSAGES];
+    }
 
     if (signerMatch) {
       return signerMatch[1] === 'removed' ? DIRECT_LINK_SIGNER_REMOVED_MESSAGE : DIRECT_LINK_SIGNER_ROLE_MESSAGE;

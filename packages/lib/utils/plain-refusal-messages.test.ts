@@ -152,3 +152,17 @@ describe('O-F3: signers in sender messages', () => {
     expect(readDirectLinkSignatureRefusal(new Error('something else'))).toBeNull();
   });
 });
+
+describe('Q-1: the database refusals of turning a link on are plain', () => {
+  it.each([
+    ['missing', 'its signer no longer exists'],
+    ['role', 'must be a signer'],
+    ['signature', 'signature field without a condition'],
+  ])('%s', (kind, text) => {
+    const message = readDirectLinkSignatureRefusal(new Error(`ERROR: ST_DIRECT_LINK_ENABLE:${kind}`));
+
+    expect(message).toContain('The direct link cannot be turned on');
+    expect(message).toContain(text);
+    expect(message).not.toMatch(/ST_DIRECT_LINK|P0001/);
+  });
+});

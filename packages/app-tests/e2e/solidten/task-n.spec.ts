@@ -13,6 +13,7 @@ import { expect, test } from '@playwright/test';
 import { FieldType, Prisma } from '@prisma/client';
 import { apiCreateTestContext, apiSeedDraftDocument, apiSeedPendingDocument } from '../fixtures/api-seeds';
 import { WEBAPP_ORIGIN_HEADERS } from '../fixtures/authentication';
+import { runWithoutDbChecks } from '../fixtures/without-db-checks';
 
 /**
  * Solid Ten Sign, task N.
@@ -183,7 +184,8 @@ test.describe('N-1: a direct link whose signer has only conditional signature fi
       where: { id: signature.id },
       data: { fieldMeta: { type: 'signature', ...CONDITION } },
     });
-    await prisma.templateDirectLink.update({ where: { id: directLink.id }, data: { enabled: true } });
+    // Q-1 refuses turning a faulty link on, so it is turned on with the checks off.
+    await runWithoutDbChecks('UPDATE "TemplateDirectLink" SET "enabled" = true WHERE "id" = $1', [directLink.id]);
 
     // The visitor opens the link: a plain page up front, not "0 Fields Remaining".
     const visitor = await browser.newContext();

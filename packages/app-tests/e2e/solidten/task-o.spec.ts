@@ -19,6 +19,7 @@ import {
   apiSeedTemplate,
 } from '../fixtures/api-seeds';
 import { WEBAPP_ORIGIN_HEADERS } from '../fixtures/authentication';
+import { runWithoutDbChecks } from '../fixtures/without-db-checks';
 
 /**
  * Solid Ten Sign, task O.
@@ -242,7 +243,8 @@ test.describe('F1: every field mutation path keeps the direct link usable', () =
     // ...so the fault is made the old way: link off, condition on, link on again.
     await prisma.templateDirectLink.update({ where: { id: directLink.id }, data: { enabled: false } });
     await prisma.field.update({ where: { id: signature.id }, data: hide });
-    await prisma.templateDirectLink.update({ where: { id: directLink.id }, data: { enabled: true } });
+    // Q-1 refuses turning a faulty link on, so it is turned on with the checks off.
+    await runWithoutDbChecks('UPDATE "TemplateDirectLink" SET "enabled" = true WHERE "id" = $1', [directLink.id]);
 
     const response = await request.post(`${V2}/envelope/field/delete`, {
       headers: { Authorization: `Bearer ${token}` },

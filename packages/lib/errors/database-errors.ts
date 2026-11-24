@@ -1,7 +1,13 @@
 import { recordDatabaseWriteFailure } from '../server-only/health/database-write-health';
 import { AppError, AppErrorCode } from './app-error';
-import { isDatabaseUnavailableError, isMissingRecordError, isRawDatabaseError } from './database-error-kind';
+import {
+  isDatabaseUnavailableError,
+  isMissingRecordError,
+  isRawDatabaseError,
+  isTransactionConflictError,
+} from './database-error-kind';
 import { readDirectLinkSignatureRefusal } from './direct-link-signature-error';
+import { createServerBusyError } from './server-busy';
 
 export { isDatabaseUnavailableError, isMissingRecordError, isRawDatabaseError };
 
@@ -64,6 +70,15 @@ export const toPublicDatabaseError = (error: unknown, where = 'request'): AppErr
     recordDatabaseWriteFailure();
 
     return createDatabaseUnavailableError();
+  }
+
+  // Solid Ten Sign (Q-2): a deadlock or serialisation failure (40P01, 40001): nothing was saved,
+  // and trying again usually works. A 503 "The server is busy, try again." with Retry-After, not
+  // a 500 "Something went wrong".
+  if (isTransactionConflictError(error)) {
+    console.warn(`[DATABASE]: transaction conflict during ${where}; answered 503 (try again)`);
+
+    return createServerBusyError(2);
   }
 
   // Solid Ten Sign (L-3): a missing row is a 404, not a 500 (a deleted draft, a deleted field).

@@ -84,3 +84,41 @@ describe('a missing row (L-3)', () => {
     expect(toPublicDatabaseError(known('P2002', 'Unique constraint failed'))).toMatchObject({ statusCode: 500 });
   });
 });
+
+describe('Q-2: deadlocks and serialisation failures are a retryable answer', () => {
+  const prismaLike = (message: string, code?: string) =>
+    Object.assign(new Error(message), { name: 'PrismaClientUnknownRequestError', ...(code ? { code } : {}) });
+
+  it.each([
+    [
+      '40P01 in the text',
+      prismaLike(
+        'Error occurred during query execution: ConnectorError(... code: "40P01", message: "deadlock detected" ...)',
+      ),
+    ],
+    ['40001 in the text', prismaLike('ERROR: could not serialize access due to concurrent update (SQLSTATE 40001)')],
+    [
+      'Prisma P2034',
+      prismaLike('Transaction failed due to a write conflict or a deadlock. Please retry your transaction', 'P2034'),
+    ],
+    ['wrapped by tRPC', { name: 'TRPCError', message: 'x', cause: prismaLike('deadlock detected') }],
+  ])('%s: 503 "try again", no database text', (_name, error) => {
+    const answer = toPublicDatabaseError(error, 'a test');
+
+    expect(answer).toMatchObject({ statusCode: 503, message: 'The server is busy, try again.' });
+    expect(answer?.message).not.toMatch(/deadlock|40P01|serialize|Prisma/i);
+  });
+
+  it('other database errors keep their answers', () => {
+    expect(toPublicDatabaseError(prismaLike('unique constraint failed', 'P2002'), 'a test')).toMatchObject({
+      statusCode: 500,
+    });
+  });
+
+  it('API v1 answers 503 too', () => {
+    expect(AppError.toRestAPIError(prismaLike('deadlock detected'))).toEqual({
+      status: 503,
+      body: { message: 'The server is busy, try again.' },
+    });
+  });
+});

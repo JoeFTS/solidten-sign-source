@@ -337,9 +337,12 @@ test('P-2: the direct signer stays a signer while the link is on; a broken link 
   expect((await prisma.recipient.findUniqueOrThrow({ where: { id: recipientId } })).role).toBe(RecipientRole.SIGNER);
 
   // A template already in that state (made before this check): link off, role changed, link on.
-  await prisma.templateDirectLink.update({ where: { id: directLink.id }, data: { enabled: false } });
-  await prisma.recipient.update({ where: { id: recipientId }, data: { role: RecipientRole.VIEWER } });
-  await prisma.templateDirectLink.update({ where: { id: directLink.id }, data: { enabled: true } });
+  // Q-1 now refuses turning the link on in that state, so the checks are off for this one session.
+  const admin = new pg.Client({ connectionString: process.env.NEXT_PRIVATE_DATABASE_URL });
+  await admin.connect();
+  await admin.query("SET session_replication_role = 'replica'");
+  await admin.query(`UPDATE "Recipient" SET "role" = 'VIEWER' WHERE "id" = $1`, [recipientId]);
+  await admin.end();
 
   const visitor = await browser.newContext();
   const visitorPage = await visitor.newPage();
@@ -386,10 +389,10 @@ test('P-3: embedding template update and API v1 field delete answer the plain 40
   expect(embedding.status()).toBe(400);
   expect(await messageOf(embedding)).toContain(PLAIN_F1);
 
-  const v1 = await request.delete(
-    `${BASE}/api/v1/documents/${templateId}/fields/${first.id}`,
-    { headers: { Authorization: `Bearer ${token}` }, data: {} },
-  );
+  const v1 = await request.delete(`${BASE}/api/v1/documents/${templateId}/fields/${first.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {},
+  });
   console.log(`P-3 API v1 field delete: ${v1.status()} ${await messageOf(v1)}`);
   expect(v1.status()).not.toBe(500);
   expect(await prisma.field.count({ where: { id: first.id } })).toBe(1);

@@ -197,8 +197,16 @@ export const updateEnvelopeRecipients = async ({
             role: mergedRecipient.role,
             signingOrder: mergedRecipient.signingOrder,
             envelopeId: envelope.id,
-            sendStatus: mergedRecipient.role === RecipientRole.CC ? SendStatus.SENT : SendStatus.NOT_SENT,
-            signingStatus: mergedRecipient.role === RecipientRole.CC ? SigningStatus.SIGNED : SigningStatus.NOT_SIGNED,
+            // Solid Ten Sign (Q-4): a recipient whose role does not change keeps its send and
+            // signing status (a name or auth edit on a sent document is not a new send).
+            ...(originalRecipient.role === mergedRecipient.role &&
+            originalRecipient.email.toLowerCase() === mergedRecipient.email.toLowerCase()
+              ? {}
+              : {
+                  sendStatus: mergedRecipient.role === RecipientRole.CC ? SendStatus.SENT : SendStatus.NOT_SENT,
+                  signingStatus:
+                    mergedRecipient.role === RecipientRole.CC ? SigningStatus.SIGNED : SigningStatus.NOT_SIGNED,
+                }),
             authOptions,
             ...emailChanges.resetDataFor(originalRecipient.id),
           },

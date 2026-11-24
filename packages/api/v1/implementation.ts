@@ -23,6 +23,7 @@ import {
   assertFieldLogicAllowed,
   toFieldLogicDefinitions,
 } from '@documenso/lib/server-only/field-logic/assert-field-logic';
+import { createEnvelopeRecipients } from '@documenso/lib/server-only/recipient/create-envelope-recipients';
 import { deleteEnvelopeRecipient } from '@documenso/lib/server-only/recipient/delete-envelope-recipient';
 import { getRecipientsForDocument } from '@documenso/lib/server-only/recipient/get-recipients-for-document';
 import { setDocumentRecipients } from '@documenso/lib/server-only/recipient/set-document-recipients';
@@ -31,7 +32,6 @@ import { createDocumentFromTemplate } from '@documenso/lib/server-only/template/
 import { deleteTemplate } from '@documenso/lib/server-only/template/delete-template';
 import { findTemplates } from '@documenso/lib/server-only/template/find-templates';
 import { getTemplateById } from '@documenso/lib/server-only/template/get-template-by-id';
-import { ZRecipientAuthOptionsSchema } from '@documenso/lib/types/document-auth';
 import { extractDerivedDocumentEmailSettings } from '@documenso/lib/types/document-email';
 import {
   ZCheckboxFieldMeta,
@@ -70,6 +70,41 @@ const assertV1AuthOptionsAllowed = async (
   });
 
   assertActionAuthAllowed({ next: authOptions.globalActionAuth, organisationClaim: organisation.organisationClaim });
+};
+
+/**
+ * Solid Ten Sign (Q-3): whether a field or recipient is on the DOCUMENT with this legacy id, in
+ * this team. Never a template: "documentId" only matches "document_<n>".
+ */
+const findV1DocumentOwning = async (
+  userId: number,
+  teamId: number,
+  legacyDocumentId: string,
+  item: { fieldId: number } | { recipientId: number },
+): Promise<'ok' | 'no-document' | 'not-on-document'> => {
+  const id = Number(legacyDocumentId);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return 'no-document';
+  }
+
+  const envelope = await getEnvelopeById({
+    id: { type: 'documentId', id },
+    type: EnvelopeType.DOCUMENT,
+    userId,
+    teamId,
+  }).catch(() => null);
+
+  if (!envelope) {
+    return 'no-document';
+  }
+
+  const count =
+    'fieldId' in item
+      ? await prisma.field.count({ where: { id: item.fieldId, envelopeId: envelope.id } })
+      : await prisma.recipient.count({ where: { id: item.recipientId, envelopeId: envelope.id } });
+
+  return count > 0 ? 'ok' : 'not-on-document';
 };
 
 export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
@@ -1149,6 +1184,17 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
       };
     }
 
+    // Solid Ten Sign (Q-4): a recipient can only be added while the document is a draft or waiting
+    // for signatures.
+    if (envelope.status !== DocumentStatus.DRAFT && envelope.status !== DocumentStatus.PENDING) {
+      return {
+        status: 400,
+        body: {
+          message: 'Recipients can only be added to a draft or to a document that is waiting for signatures.',
+        },
+      };
+    }
+
     const recipients = await getRecipientsForDocument({
       documentId: Number(documentId),
       userId: user.id,
@@ -1167,21 +1213,15 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
     }
 
     try {
-      const { recipients: newRecipients } = await setDocumentRecipients({
-        id: {
-          type: 'documentId',
-          id: Number(documentId),
-        },
+      // Solid Ten Sign (Q-4): add only the new recipient. Before, the existing recipients were
+      // passed to setDocumentRecipients WITHOUT their ids, so each was deleted and re-created: on a
+      // sent document the signer got a new id and token, lost their fields and became NOT_SENT,
+      // and their emailed link answered 404 (upstream, v2.22.0).
+      const { recipients: newRecipients } = await createEnvelopeRecipients({
+        id: { type: 'envelopeId', id: envelope.id },
         userId: user.id,
         teamId: team.id,
         recipients: [
-          ...recipients.map((recipient) => ({
-            email: recipient.email,
-            name: recipient.name,
-            role: recipient.role,
-            signingOrder: recipient.signingOrder,
-            actionAuth: ZRecipientAuthOptionsSchema.parse(recipient.authOptions)?.actionAuth ?? [],
-          })),
           {
             email,
             name,
@@ -1329,6 +1369,17 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
         recipientId,
       },
     });
+
+    // Solid Ten Sign (Q-3): the recipient must be on the document the URL names (the document id
+    // was not used: a recipient of any envelope of the team, a template's too, could be removed).
+    const owner = await findV1DocumentOwning(user.id, team.id, documentId, { recipientId: Number(recipientId) });
+
+    if (owner !== 'ok') {
+      return {
+        status: 404,
+        body: { message: owner === 'no-document' ? 'Document not found' : 'Recipient not found' },
+      };
+    }
 
     const deletedRecipient = await deleteEnvelopeRecipient({
       userId: user.id,
@@ -1594,6 +1645,16 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
       };
     }
 
+    // Solid Ten Sign (Q-3): a field that is not on this document is a 404, not the editor's text.
+    if ((await prisma.field.count({ where: { id: Number(fieldId), envelopeId: envelope.id } })) === 0) {
+      return {
+        status: 404,
+        body: {
+          message: 'Field not found',
+        },
+      };
+    }
+
     const legacyDocumentId = mapSecondaryIdToDocumentId(envelope.secondaryId);
 
     const firstEnvelopeItemId = envelope.envelopeItems[0].id;
@@ -1701,6 +1762,17 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
         fieldId,
       },
     });
+
+    // Solid Ten Sign (Q-3): the field must be on the document the URL names. Before, the document
+    // id was not used: a field of any envelope of the team was taken (a template's field, when a
+    // document and a template share the legacy number), and a field not on the document answered
+    // 500. Template and document legacy numbers are separate counters, so the same number can name
+    // both; a v1 document route only ever looks up "document_<n>".
+    const owner = await findV1DocumentOwning(user.id, team.id, unverifiedDocumentId, { fieldId: Number(fieldId) });
+
+    if (owner !== 'ok') {
+      return { status: 404, body: { message: owner === 'no-document' ? 'Document not found' : 'Field not found' } };
+    }
 
     const deletedField = await deleteDocumentField({
       fieldId: Number(fieldId),

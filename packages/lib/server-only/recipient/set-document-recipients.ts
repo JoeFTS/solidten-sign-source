@@ -211,8 +211,17 @@ export const setDocumentRecipients = async ({
             role: recipient.role,
             signingOrder: recipient.signingOrder,
             envelopeId: envelope.id,
-            sendStatus: recipient.role === RecipientRole.CC ? SendStatus.SENT : SendStatus.NOT_SENT,
-            signingStatus: recipient.role === RecipientRole.CC ? SigningStatus.SIGNED : SigningStatus.NOT_SIGNED,
+            // Solid Ten Sign (Q-4): an existing recipient whose role does not change keeps its send
+            // and signing status (before: a save of a sent document marked every unchanged
+            // recipient NOT_SENT). A new email resets it below (resetDataFor).
+            ...(recipient._persisted &&
+            recipient._persisted.role === recipient.role &&
+            recipient._persisted.email.toLowerCase() === recipient.email.toLowerCase()
+              ? {}
+              : {
+                  sendStatus: recipient.role === RecipientRole.CC ? SendStatus.SENT : SendStatus.NOT_SENT,
+                  signingStatus: recipient.role === RecipientRole.CC ? SigningStatus.SIGNED : SigningStatus.NOT_SIGNED,
+                }),
             authOptions,
             ...emailChanges.resetDataFor(recipient._persisted?.id),
           },

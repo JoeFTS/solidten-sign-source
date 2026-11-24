@@ -70,3 +70,21 @@ const MISSING_RECORD_PRISMA_CODES = new Set(['P2025', 'P2015', 'P2018']);
 
 export const isMissingRecordError = (error: unknown): boolean =>
   chain(error).some((entry) => typeof entry.code === 'string' && MISSING_RECORD_PRISMA_CODES.has(entry.code));
+
+/**
+ * Solid Ten Sign (Q-2): Postgres gave up one of two transactions that waited on each other
+ * (40P01 deadlock detected) or could not serialise them (40001); Prisma P2034 is the same. Nothing
+ * was saved, and the same request usually works a moment later.
+ */
+const CONFLICT_SQLSTATE = /\b(40P01|40001)\b/;
+const CONFLICT_TEXT = /deadlock detected|could not serialize access|write conflict or a deadlock/i;
+
+export const isTransactionConflictError = (error: unknown): boolean =>
+  chain(error).some(
+    (entry) =>
+      entry.code === 'P2034' ||
+      entry.code === '40P01' ||
+      entry.code === '40001' ||
+      CONFLICT_SQLSTATE.test(textOf(entry)) ||
+      CONFLICT_TEXT.test(textOf(entry)),
+  );

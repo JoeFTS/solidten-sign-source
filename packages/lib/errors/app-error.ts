@@ -1,7 +1,7 @@
 import { match } from 'ts-pattern';
 import { z } from 'zod';
 
-import { isDatabaseUnavailableError } from './database-error-kind';
+import { isDatabaseUnavailableError, isTransactionConflictError } from './database-error-kind';
 import { readDirectLinkSignatureRefusal } from './direct-link-signature-error';
 
 /**
@@ -348,6 +348,11 @@ export class AppError extends Error {
       globalThis.__solidten_database_write_health__.lastFailureAt = Date.now();
 
       return { status: 503, body: { message: 'Temporarily unable to save. Try again in a few minutes.' } };
+    }
+
+    // Solid Ten Sign (Q-2): a deadlock or serialisation failure: nothing saved, try again.
+    if (isTransactionConflictError(err)) {
+      return { status: 503, body: { message: 'The server is busy, try again.' } };
     }
 
     const error = AppError.parseError(err);
